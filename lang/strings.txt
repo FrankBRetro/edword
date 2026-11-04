@@ -1,0 +1,3128 @@
+# EdWord user interface strings: English, German, Spanish, Italian, French.
+# tools/mklang.py turns this file into lang.h and lang.c.
+# Alerts (AL_): lines split with |, at most 5 lines of 32 characters.
+# Alert buttons (AB_): at most 3 buttons of 10 characters.
+
+# ---- menu titles -----------------------------------------------------------
+@MT_DESK
+en: EdWord
+de: EdWord
+es: EdWord
+it: EdWord
+fr: EdWord
+@MT_FILE
+en: File
+de: Datei
+es: Archivo
+it: File
+fr: Fichier
+@MT_EDIT
+en: Edit
+de: Bearbeiten
+es: Edición
+it: Modifica
+fr: Édition
+@MT_INSERT
+en: Insert
+de: Einfügen
+es: Insertar
+it: Inserisci
+fr: Insérer
+@MT_FONT
+en: Font
+de: Schrift
+es: Fuente
+it: Font
+fr: Police
+@MT_STYLE
+en: Style
+de: Stil
+es: Estilo
+it: Stile
+fr: Style
+@MT_PARA
+en: Paragraph
+de: Absatz
+es: Párrafo
+it: Paragrafo
+fr: Format
+@MT_TOOLS
+en: Tools
+de: Extras
+es: Utiles
+it: Utilità
+fr: Outils
+@MT_WINDOW
+en: Window
+de: Fenster
+es: Ventana
+it: Finestra
+fr: Fenêtre
+
+# ---- Desk menu ---------------------------------------------------------------
+@M_ABOUT
+en: About EdWord...
+de: Über EdWord...
+es: Acerca de EdWord...
+it: Informazioni su EdWord...
+fr: A propos d'EdWord...
+@M_ACC
+en: Desk Accessory
+de: Accessory
+es: Accesorio
+it: Accessorio
+fr: Accessoire
+
+# ---- File menu ---------------------------------------------------------------
+@M_NEW
+en: New
+de: Neu
+es: Nuevo
+it: Nuovo
+fr: Nouveau
+@M_OPEN
+en: Open...
+de: Öffnen...
+es: Abrir...
+it: Apri...
+fr: Ouvrir...
+@M_IMPORT
+en: Import...
+de: Importieren...
+es: Importar...
+it: Importa...
+fr: Importer...
+@M_SAVEDOC
+en: Save
+de: Speichern
+es: Guardar
+it: Salva
+fr: Enregistrer
+@M_SAVEAS
+en: Save As...
+de: Speichern unter...
+es: Guardar como...
+it: Salva con nome...
+fr: Enregistrer sous...
+@M_EXPTXT
+en: Export Text...
+de: Text exportieren...
+es: Exportar texto...
+it: Esporta testo...
+fr: Exporter le texte...
+@M_PAGE
+en: Page Layout...
+de: Seitenlayout...
+es: Diseño de página...
+it: Layout di pagina...
+fr: Mise en page...
+@M_HEADFOOT
+en: Header and Footer...
+de: Kopf- und Fußzeile...
+es: Encabezado y pie...
+it: Intestazione e piè...
+fr: En-tête et pied...
+@M_PREVIEW
+en: Print Preview
+de: Seitenansicht
+es: Vista preliminar
+it: Anteprima di stampa
+fr: Aperçu avant impression
+@M_PDF
+en: Export PDF...
+de: PDF exportieren...
+es: Exportar PDF...
+it: Esporta PDF...
+fr: Exporter en PDF...
+@M_CLOSE
+en: Close
+de: Schließen
+es: Cerrar
+it: Chiudi
+fr: Fermer
+@M_QUIT
+en: Quit
+de: Beenden
+es: Salir
+it: Esci
+fr: Quitter
+
+# ---- Edit menu ---------------------------------------------------------------
+@M_UNDO
+en: Undo
+de: Rückgängig
+es: Deshacer
+it: Annulla
+fr: Annuler
+@M_REDO
+en: Redo
+de: Wiederholen
+es: Rehacer
+it: Ripeti
+fr: Rétablir
+@M_CUT
+en: Cut
+de: Ausschneiden
+es: Cortar
+it: Taglia
+fr: Couper
+@M_COPY
+en: Copy
+de: Kopieren
+es: Copiar
+it: Copia
+fr: Copier
+@M_PASTE
+en: Paste
+de: Einfügen
+es: Pegar
+it: Incolla
+fr: Coller
+@M_SELALL
+en: Select All
+de: Alles auswählen
+es: Seleccionar todo
+it: Seleziona tutto
+fr: Tout sélectionner
+@M_FIND
+en: Find and Replace...
+de: Suchen und Ersetzen...
+es: Buscar y reemplazar...
+it: Trova e sostituisci...
+fr: Rechercher/Remplacer...
+@M_FINDNEXT
+en: Find Next
+de: Weitersuchen
+es: Buscar siguiente
+it: Trova successivo
+fr: Suivant
+
+# ---- Insert menu -------------------------------------------------------------
+@M_DATE
+en: Date
+de: Datum
+es: Fecha
+it: Data
+fr: Date
+@M_TIME
+en: Time
+de: Uhrzeit
+es: Hora
+it: Ora
+fr: Heure
+@M_PGBRK
+en: Page Break
+de: Seitenumbruch
+es: Salto de página
+it: Interruzione pagina
+fr: Saut de page
+@M_COLBRK
+en: Column Break
+de: Spaltenumbruch
+es: Salto de columna
+it: Interruzione colonna
+fr: Saut de colonne
+@M_TBLINS
+en: Table...
+de: Tabelle...
+es: Tabla...
+it: Tabella...
+fr: Tableau...
+@M_TBLPROP
+en: Table Settings...
+de: Tabelleneinstellungen...
+es: Propiedades de tabla...
+it: Proprietà tabella...
+fr: Propriétés du tableau...
+@M_ROWINS
+en: Insert Row
+de: Zeile einfügen
+es: Insertar fila
+it: Inserisci riga
+fr: Insérer une ligne
+@M_ROWDEL
+en: Delete Row
+de: Zeile löschen
+es: Eliminar fila
+it: Elimina riga
+fr: Supprimer la ligne
+@M_COLINS
+en: Insert Column
+de: Spalte einfügen
+es: Insertar columna
+it: Inserisci colonna
+fr: Insérer une colonne
+@M_COLDEL
+en: Delete Column
+de: Spalte löschen
+es: Eliminar columna
+it: Elimina colonna
+fr: Supprimer la colonne
+@M_TBLDEL
+en: Delete Table
+de: Tabelle löschen
+es: Eliminar tabla
+it: Elimina tabella
+fr: Supprimer le tableau
+@M_PICTURE
+en: Picture...
+de: Bild...
+es: Imagen...
+it: Immagine...
+fr: Image...
+@M_DRAWING
+en: Drawing...
+de: Zeichnung...
+es: Dibujo...
+it: Disegno...
+fr: Dessin...
+@M_TOC
+en: Table of Contents
+de: Inhaltsverzeichnis
+es: Índice de contenido
+it: Indice
+fr: Table des matières
+@M_INSFILE
+en: File...
+de: Datei...
+es: Archivo...
+it: File...
+fr: Fichier...
+
+# ---- Font menu ---------------------------------------------------------------
+@M_FONTSEL
+en: Font Selector...
+de: Schriftauswahl...
+es: Selector de fuentes...
+it: Selettore font...
+fr: Choix de police...
+@M_SIZEOTHER
+en: Other Size...
+de: Andere Größe...
+es: Otro tamaño...
+it: Altra dimensione...
+fr: Autre taille...
+@M_MOREFONTS
+en: More Fonts...
+de: Weitere Schriften...
+es: Más fuentes...
+it: Altri font...
+fr: Autres polices...
+
+# ---- Style menu --------------------------------------------------------------
+@M_PLAIN
+en: Plain Text
+de: Normal
+es: Normal
+it: Normale
+fr: Normal
+@M_BOLD
+en: Bold
+de: Fett
+es: Negrita
+it: Grassetto
+fr: Gras
+@M_ITALIC
+en: Italic
+de: Kursiv
+es: Cursiva
+it: Corsivo
+fr: Italique
+@M_UNDER
+en: Underline
+de: Unterstrichen
+es: Subrayado
+it: Sottolineato
+fr: Souligné
+
+# ---- Paragraph menu ----------------------------------------------------------
+@M_JLEFT
+en: Align Left
+de: Linksbündig
+es: Alinear a la izquierda
+it: Allinea a sinistra
+fr: Aligner à gauche
+@M_JCENTRE
+en: Centre
+de: Zentriert
+es: Centrar
+it: Centra
+fr: Centrer
+@M_JRIGHT
+en: Align Right
+de: Rechtsbündig
+es: Alinear a la derecha
+it: Allinea a destra
+fr: Aligner à droite
+@M_JFULL
+en: Justify
+de: Blocksatz
+es: Justificar
+it: Giustifica
+fr: Justifier
+@M_SP1
+en: Single Spacing
+de: Einfacher Abstand
+es: Interlineado sencillo
+it: Interlinea singola
+fr: Interligne simple
+@M_SP15
+en: 1.5 Line Spacing
+de: 1,5-facher Abstand
+es: Interlineado 1,5
+it: Interlinea 1,5
+fr: Interligne 1,5
+@M_SP2
+en: Double Spacing
+de: Doppelter Abstand
+es: Interlineado doble
+it: Interlinea doppia
+fr: Interligne double
+@M_INDENTS
+en: Indents...
+de: Einzüge...
+es: Sangrías...
+it: Rientri...
+fr: Retraits...
+@M_HANGING
+en: Hanging Indent
+de: Hängender Einzug
+es: Sangría francesa
+it: Rientro sporgente
+fr: Retrait négatif
+@M_BULLETS
+en: Bullet List
+de: Aufzählung
+es: Viñetas
+it: Elenco puntato
+fr: Liste à puces
+@M_NUMBERS
+en: Numbered List
+de: Nummerierung
+es: Lista numerada
+it: Elenco numerato
+fr: Liste numérotée
+@M_HEAD1
+en: Heading 1 (Contents)
+de: Überschrift 1 (Inhalt)
+es: Título 1 (índice)
+it: Titolo 1 (indice)
+fr: Titre 1 (sommaire)
+@M_HEAD2
+en: Heading 2 (Contents)
+de: Überschrift 2 (Inhalt)
+es: Título 2 (índice)
+it: Titolo 2 (indice)
+fr: Titre 2 (sommaire)
+@M_HEAD3
+en: Heading 3 (Contents)
+de: Überschrift 3 (Inhalt)
+es: Título 3 (índice)
+it: Titolo 3 (indice)
+fr: Titre 3 (sommaire)
+@M_BODY
+en: Body Text
+de: Fließtext
+es: Texto normal
+it: Testo normale
+fr: Corps de texte
+@M_WRAPCOL
+en: Wrap Column...
+de: Umbruchspalte...
+es: Columna de ajuste...
+it: Colonna a capo...
+fr: Colonne de coupure...
+
+# ---- Tools menu --------------------------------------------------------------
+@M_SPELL
+en: Check Spelling...
+de: Rechtschreibung...
+es: Ortografía...
+it: Controllo ortografico...
+fr: Orthographe...
+@M_LIVESPELL
+en: Spell As You Type
+de: Prüfung beim Tippen
+es: Revisar al escribir
+it: Controllo durante digitazione
+fr: Vérifier en tapant
+@M_THES
+en: Thesaurus...
+de: Thesaurus...
+es: Sinónimos...
+it: Sinonimi...
+fr: Synonymes...
+@M_SUMMARY
+en: Document Summary...
+de: Dokumentstatistik...
+es: Resumen del documento...
+it: Riepilogo documento...
+fr: Statistiques...
+@M_UDLOAD
+en: Load User Dictionary...
+de: Benutzerwörterbuch laden...
+es: Cargar diccionario...
+it: Carica dizionario...
+fr: Charger un dictionnaire...
+@M_UDNEW
+en: New User Dictionary...
+de: Neues Benutzerwörterbuch...
+es: Nuevo diccionario...
+it: Nuovo dizionario...
+fr: Nouveau dictionnaire...
+@M_PREFS
+en: Preferences...
+de: Einstellungen...
+es: Preferencias...
+it: Preferenze...
+fr: Préférences...
+
+# ---- Window menu -------------------------------------------------------------
+@M_VDOC
+en: Page View
+de: Seitenansicht
+es: Vista de página
+it: Vista pagina
+fr: Vue page
+@M_SPLIT
+en: Split View (Codes)
+de: Geteilt (Codes)
+es: Vista dividida (códigos)
+it: Vista divisa (codici)
+fr: Vue partagée (codes)
+@M_VCODES
+en: Quick Edit
+de: Schnellbearbeitung
+es: Edición rápida
+it: Modifica rapida
+fr: Édition rapide
+@M_ZOOMIN
+en: Zoom In
+de: Vergrößern
+es: Ampliar
+it: Ingrandisci
+fr: Zoom avant
+@M_ZOOMOUT
+en: Zoom Out
+de: Verkleinern
+es: Reducir
+it: Riduci
+fr: Zoom arrière
+@M_TOOLBAR
+en: Toolbar
+de: Symbolleiste
+es: Barra de herramientas
+it: Barra strumenti
+fr: Barre d'outils
+@M_TILEV
+en: Tile Side by Side
+de: Nebeneinander
+es: En mosaico vertical
+it: Affianca verticalmente
+fr: Mosaïque verticale
+@M_TILEH
+en: Tile Stacked
+de: Untereinander
+es: En mosaico horizontal
+it: Affianca orizzontalmente
+fr: Mosaïque horizontale
+@M_CASCADE
+en: Cascade
+de: Überlappend
+es: En cascada
+it: A cascata
+fr: En cascade
+@M_ICONIFY
+en: Iconify
+de: Ikonifizieren
+es: Iconizar
+it: Riduci a icona
+fr: Iconifier
+@M_ICONALL
+en: Iconify All
+de: Alle ikonifizieren
+es: Iconizar todas
+it: Riduci tutte a icona
+fr: Tout iconifier
+@M_BOTTOM
+en: Send to Back
+de: Nach hinten
+es: Enviar al fondo
+it: Porta sotto
+fr: Mettre derrière
+@M_CYCLE
+en: Next Window
+de: Nächstes Fenster
+es: Ventana siguiente
+it: Finestra successiva
+fr: Fenêtre suivante
+
+# ---- alert buttons -----------------------------------------------------------
+@AB_OK
+en: OK
+de: OK
+es: Aceptar
+it: OK
+fr: OK
+@AB_QUIT
+en: Quit
+de: Beenden
+es: Salir
+it: Esci
+fr: Quitter
+@AB_CONT_STOP
+en: Continue|Stop
+de: Weiter|Stopp
+es: Seguir|Parar
+it: Continua|Ferma
+fr: Continuer|Arrêter
+@AB_SAVE_DISCARD
+en: Save|Discard|Cancel
+de: Sichern|Verwerfen|Abbruch
+es: Guardar|Descartar|Cancelar
+it: Salva|Scarta|Annulla
+fr: Enreg.|Abandon|Annuler
+
+# ---- alerts --------------------------------------------------------------------
+@AL_CANT_PDF
+en: Could not write the PDF file.|The disk may be full or|write protected.
+de: Die PDF-Datei konnte nicht|geschrieben werden. Ist der|Datenträger voll oder|schreibgeschützt?
+es: No se pudo escribir el PDF.|El disco puede estar lleno|o protegido.
+it: Impossibile scrivere il PDF.|Il disco potrebbe essere|pieno o protetto.
+fr: Impossible d'écrire le PDF.|Le disque est peut-être|plein ou protégé.
+@AL_CANT_READ
+en: Could not read that file.
+de: Die Datei konnte nicht|gelesen werden.
+es: No se pudo leer el archivo.
+it: Impossibile leggere il file.
+fr: Impossible de lire|ce fichier.
+@AL_CANT_READ_IMG
+en: Could not read that picture.|EdWord reads GEM IMG (also|true colour), PNG and IFF.
+de: Das Bild konnte nicht|gelesen werden. EdWord liest|GEM IMG, PNG und IFF.
+es: No se pudo leer la imagen.|EdWord lee GEM IMG, PNG|e IFF.
+it: Impossibile leggere|l'immagine. EdWord legge|GEM IMG, PNG e IFF.
+fr: Impossible de lire l'image.|EdWord lit les images|GEM IMG, PNG et IFF.
+@AL_CANT_SAVE
+en: Could not save the document.|The disk may be full or|write protected.
+de: Das Dokument konnte nicht|gespeichert werden. Ist der|Datenträger voll oder|schreibgeschützt?
+es: No se pudo guardar el|documento. El disco puede|estar lleno o protegido.
+it: Impossibile salvare il|documento. Il disco potrebbe|essere pieno o protetto.
+fr: Impossible d'enregistrer le|document. Le disque est|peut-être plein ou protégé.
+@AL_CANT_WRITE
+en: Could not write the file.
+de: Die Datei konnte nicht|geschrieben werden.
+es: No se pudo escribir|el archivo.
+it: Impossibile scrivere il file.
+fr: Impossible d'écrire|le fichier.
+@AL_COLOUR_OFF
+en: Text colours are switched|off. Turn on "Show colours"|in Tools > Preferences.
+de: Textfarben sind aus.|"Farben zeigen" unter|Extras > Einstellungen|einschalten.
+es: Los colores están|desactivados. Active "Ver|colores" en Preferencias.
+it: I colori sono disattivati.|Attivare "Mostra colori"|in Preferenze.
+fr: Les couleurs sont|désactivées. Activez|"Couleurs" dans Préférences.
+@AL_FOUR_DOCS
+en: EdWord can have %d|documents open at once.|Please close one first.
+de: EdWord kann %d Dokumente|zugleich öffnen. Bitte|zuerst eines schließen.
+es: EdWord puede tener %d|documentos abiertos.|Cierre uno primero.
+it: EdWord può tenere aperti|%d documenti.|Chiuderne prima uno.
+fr: EdWord peut ouvrir %d|documents à la fois.|Fermez-en un d'abord.
+@AL_MAX_COLS
+en: A table can have at most|12 columns.
+de: Eine Tabelle kann höchstens|12 Spalten haben.
+es: Una tabla puede tener|12 columnas como máximo.
+it: Una tabella può avere al|massimo 12 colonne.
+fr: Un tableau peut avoir au|plus 12 colonnes.
+@AL_NEED_RES
+en: EdWord needs a screen at|least 640 pixels wide.|Please change to ST medium|or high resolution.
+de: EdWord braucht einen|Bildschirm mit mindestens|640 Pixeln Breite (mittlere|oder hohe Auflösung).
+es: EdWord necesita una|pantalla de 640 puntos de|ancho como mínimo (media|o alta resolución).
+it: EdWord richiede uno|schermo largo almeno 640|pixel (media o alta|risoluzione).
+fr: EdWord a besoin d'un écran|d'au moins 640 points de|large (moyenne ou haute|résolution).
+@AL_NOT_IN_TABLE
+en: Put the cursor in a table|first.
+de: Bitte zuerst den Cursor in|eine Tabelle setzen.
+es: Coloque primero el cursor|en una tabla.
+it: Posizionare prima il|cursore in una tabella.
+fr: Placez d'abord le curseur|dans un tableau.
+@AL_NOT_IN_TABLE_BRK
+en: Breaks cannot go inside|a table.
+de: Umbrüche sind in einer|Tabelle nicht möglich.
+es: No se pueden insertar|saltos en una tabla.
+it: Non si possono inserire|interruzioni in una tabella.
+fr: Impossible d'insérer un|saut dans un tableau.
+@AL_NO_DIC
+en: The dictionary EDWORD.DIC|was not found in the EdWord|folder.
+de: Das Wörterbuch EDWORD.DIC|wurde im EdWord-Ordner|nicht gefunden.
+es: No se encontró el|diccionario EDWORD.DIC en|la carpeta de EdWord.
+it: Il dizionario EDWORD.DIC|non è nella cartella|di EdWord.
+fr: Le dictionnaire EDWORD.DIC|est introuvable dans le|dossier d'EdWord.
+@AL_NO_GDOS
+en: GDOS is not loaded, so only|the system font is|available. Install a GDOS|for more fonts.
+de: GDOS ist nicht geladen,|nur die Systemschrift ist|verfügbar. Für mehr|Schriften GDOS installieren.
+es: GDOS no está cargado; solo|hay la fuente del sistema.|Instale un GDOS para tener|más fuentes.
+it: GDOS non è caricato: c'è|solo il font di sistema.|Installare un GDOS per|altri font.
+fr: GDOS n'est pas chargé: seule|la police système est|disponible. Installez un|GDOS pour d'autres polices.
+@AL_NO_INF
+en: Could not save the|preferences.
+de: Die Einstellungen konnten|nicht gespeichert werden.
+es: No se pudieron guardar|las preferencias.
+it: Impossibile salvare le|preferenze.
+fr: Impossible d'enregistrer|les préférences.
+@AL_WRONG_CPU
+en: This EdWord is made for|%s processors.|Use EDWORD.PRG instead.
+de: Dieses EdWord ist für|%s-Prozessoren.|Nehmen Sie EDWORD.PRG.
+es: Este EdWord es para|procesadores %s.|Use EDWORD.PRG.
+it: Questo EdWord è per|processori %s.|Usate EDWORD.PRG.
+fr: Cet EdWord est fait pour|processeurs %s.|Prenez EDWORD.PRG.
+@AL_NO_MEMORY
+en: Not enough memory.
+de: Nicht genug Speicher.
+es: No hay memoria suficiente.
+it: Memoria insufficiente.
+fr: Mémoire insuffisante.
+@AL_NO_THS
+en: The thesaurus EDWORD.THS|was not found in the EdWord|folder.
+de: Der Thesaurus EDWORD.THS|wurde im EdWord-Ordner|nicht gefunden.
+es: No se encontró el archivo|de sinónimos EDWORD.THS en|la carpeta de EdWord.
+it: Il file dei sinonimi|EDWORD.THS non è nella|cartella di EdWord.
+fr: Le fichier des synonymes|EDWORD.THS est introuvable|dans le dossier d'EdWord.
+@AL_NO_TOC_HERE
+en: No table of contents was|made: mark headings with|Paragraph > Heading first.
+de: Kein Inhaltsverzeichnis|erstellt: zuerst Absätze als|Überschrift markieren.
+es: No se creó el índice:|marque antes los títulos|en el menú Párrafo.
+it: Indice non creato:|segnare prima i titoli dal|menu Paragrafo.
+fr: Aucune table créée:|marquez d'abord les titres|dans le menu Paragraphe.
+@AL_NO_VDI
+en: Could not open a VDI|workstation.
+de: Keine VDI-Workstation|verfügbar.
+es: No se pudo abrir una|estación de trabajo VDI.
+it: Impossibile aprire una|workstation VDI.
+fr: Impossible d'ouvrir une|station de travail VDI.
+@AL_NO_WINDOWS
+en: No more windows are|available. Please close one.
+de: Keine Fenster mehr frei.|Bitte eines schließen.
+es: No quedan ventanas libres.|Cierre una.
+it: Non ci sono altre finestre|libere. Chiuderne una.
+fr: Plus de fenêtre libre.|Fermez-en une.
+@AL_SAFE_MODE
+en: Safe mode (Control held):|GDOS fonts are not loaded.
+de: Sicherer Modus (Control|gedrückt): keine GDOS-|Schriften geladen.
+es: Modo seguro (Control|pulsado): no se cargan|fuentes GDOS.
+it: Modalità sicura (Control|premuto): font GDOS non|caricati.
+fr: Mode sans échec (Control|enfoncé): les polices GDOS|ne sont pas chargées.
+@AL_SAVE_CHANGES
+en: Save the changes to|"%s"?
+de: Änderungen an "%s"|speichern?
+es: ¿Guardar los cambios|de "%s"?
+it: Salvare le modifiche|a "%s"?
+fr: Enregistrer les|modifications de "%s"?
+@AL_SPELL_DONE
+en: The spelling check is|finished.
+de: Die Rechtschreibprüfung|ist beendet.
+es: La revisión ortográfica|ha terminado.
+it: Il controllo ortografico|è terminato.
+fr: La vérification|orthographique est terminée.
+@AL_SPELL_WRAP
+en: The end of the document was|reached. Continue from the|start?
+de: Das Ende des Dokuments ist|erreicht. Am Anfang|weitermachen?
+es: Se llegó al final del|documento. ¿Seguir desde|el principio?
+it: Raggiunta la fine del|documento. Continuare|dall'inizio?
+fr: La fin du document est|atteinte. Continuer depuis|le début?
+@AL_TOO_MANY_OBJS
+en: A document can hold at most|32 pictures and drawings.
+de: Ein Dokument kann höchstens|32 Bilder und Zeichnungen|enthalten.
+es: Un documento admite como|máximo 32 imágenes y|dibujos.
+it: Un documento può contenere|al massimo 32 immagini e|disegni.
+fr: Un document peut contenir|au plus 32 images et|dessins.
+@AL_TOO_MANY_SHAPES
+en: A drawing can hold at most|16 shapes.
+de: Eine Zeichnung kann|höchstens 16 Formen haben.
+es: Un dibujo admite como|máximo 16 formas.
+it: Un disegno può contenere al|massimo 16 forme.
+fr: Un dessin peut contenir au|plus 16 formes.
+@AL_UD_LOAD
+en: Could not load that user|dictionary (at most four|can be loaded).
+de: Das Benutzerwörterbuch|konnte nicht geladen werden|(höchstens vier).
+es: No se pudo cargar el|diccionario (cuatro como|máximo).
+it: Impossibile caricare il|dizionario (al massimo|quattro).
+fr: Impossible de charger le|dictionnaire (quatre au|maximum).
+@AL_UD_NEW
+en: Could not create that user|dictionary.
+de: Das Benutzerwörterbuch|konnte nicht angelegt|werden.
+es: No se pudo crear el|diccionario.
+it: Impossibile creare il|dizionario.
+fr: Impossible de créer le|dictionnaire.
+
+# ---- common words and buttons -----------------------------------------------------
+@S_BTN_OK
+en: OK
+de: OK
+es: Aceptar
+it: OK
+fr: OK
+@S_CANCEL
+en: Cancel
+de: Abbruch
+es: Cancelar
+it: Annulla
+fr: Annuler
+@S_CLOSE
+en: Close
+de: Schließen
+es: Cerrar
+it: Chiudi
+fr: Fermer
+@S_APPLY
+en: Apply
+de: Anwenden
+es: Aplicar
+it: Applica
+fr: Appliquer
+@S_DELETE
+en: Delete
+de: Löschen
+es: Eliminar
+it: Elimina
+fr: Supprimer
+@S_INSERT
+en: Insert
+de: Einfügen
+es: Insertar
+it: Inserisci
+fr: Insérer
+@S_ON
+en: On
+de: Ein
+es: Activado
+it: Attivo
+fr: Activé
+@S_BLANK
+en: 
+@S_UNTITLED
+en: Untitled
+de: Unbenannt
+es: Sin título
+it: Senza nome
+fr: Sans titre
+@S_POINT
+en: point
+de: Punkt
+es: puntos
+it: punti
+fr: points
+@S_MM
+en: mm
+@S_PAGE
+en: Page:
+de: Seite:
+es: Página:
+it: Pagina:
+fr: Page:
+@S_FONT
+en: Font
+de: Schrift
+es: Fuente
+it: Font
+fr: Police
+@S_SIZE
+en: Size
+de: Größe
+es: Tamaño
+it: Dimensione
+fr: Taille
+@S_STYLE
+en: Style
+de: Stil
+es: Estilo
+it: Stile
+fr: Style
+@S_BOLD
+en: Bold
+de: Fett
+es: Negrita
+it: Grassetto
+fr: Gras
+@S_ITALIC
+en: Italic
+de: Kursiv
+es: Cursiva
+it: Corsivo
+fr: Italique
+@S_UNDERLINE
+en: Underline
+de: Unterstrichen
+es: Subrayado
+it: Sottolineato
+fr: Souligné
+@S_FONT_SAMPLE
+en: AaBbCc 0123  The quick brown fox
+de: AaBbCc 0123  Zwölf Boxkämpfer jagen Viktor
+es: AaBbCc 0123  El veloz murciélago hindú
+it: AaBbCc 0123  Quel vituperabile xenofobo
+fr: AaBbCc 0123  Portez ce vieux whisky
+@S_VERSION
+en: Version
+de: Version
+es: Versión
+it: Versione
+fr: Version
+@S_ABOUT_LINE1
+en: A word processor for the Atari ST.
+de: Eine Textverarbeitung für den Atari ST.
+es: Un procesador de textos para el Atari ST.
+it: Un elaboratore di testi per l'Atari ST.
+fr: Un traitement de texte pour l'Atari ST.
+@S_ABOUT_LINE2
+en: Documents are saved as RTF and exported as PDF.
+de: Dokumente werden als RTF gespeichert, Export als PDF.
+es: Los documentos se guardan en RTF y se exportan a PDF.
+it: I documenti si salvano in RTF e si esportano in PDF.
+fr: Les documents sont en RTF et s'exportent en PDF.
+@S_ABOUT_LINE3
+en: The spelling dictionary is British English.
+de: Das Wörterbuch ist britisches Englisch.
+es: El diccionario es de inglés británico.
+it: Il dizionario è in inglese britannico.
+fr: Le dictionnaire est en anglais britannique.
+@S_ABOUT_THES
+en: Thesaurus: Open English WordNet (CC BY 4.0).
+de: Thesaurus: Open English WordNet (CC BY 4.0).
+es: Sinónimos: Open English WordNet (CC BY 4.0).
+it: Sinonimi: Open English WordNet (CC BY 4.0).
+fr: Synonymes: Open English WordNet (CC BY 4.0).
+
+# ---- colours, in the order of color_name[] --------------------------------------
+@S_COL_BLACK
+en: Black
+de: Schwarz
+es: Negro
+it: Nero
+fr: Noir
+@S_COL_RED
+en: Red
+de: Rot
+es: Rojo
+it: Rosso
+fr: Rouge
+@S_COL_GREEN
+en: Green
+de: Grün
+es: Verde
+it: Verde
+fr: Vert
+@S_COL_BLUE
+en: Blue
+de: Blau
+es: Azul
+it: Blu
+fr: Bleu
+@S_COL_CYAN
+en: Cyan
+de: Cyan
+es: Cian
+it: Ciano
+fr: Cyan
+@S_COL_MAGENTA
+en: Magenta
+de: Magenta
+es: Magenta
+it: Magenta
+fr: Magenta
+@S_COL_YELLOW
+en: Yellow
+de: Gelb
+es: Amarillo
+it: Giallo
+fr: Jaune
+@S_COL_GREY
+en: Grey
+de: Grau
+es: Gris
+it: Grigio
+fr: Gris
+
+# ---- month and day names (January first, Sunday first) ------------------------------
+@S_MONTH1
+en: January
+de: Januar
+es: enero
+it: gennaio
+fr: janvier
+@S_MONTH2
+en: February
+de: Februar
+es: febrero
+it: febbraio
+fr: février
+@S_MONTH3
+en: March
+de: März
+es: marzo
+it: marzo
+fr: mars
+@S_MONTH4
+en: April
+de: April
+es: abril
+it: aprile
+fr: avril
+@S_MONTH5
+en: May
+de: Mai
+es: mayo
+it: maggio
+fr: mai
+@S_MONTH6
+en: June
+de: Juni
+es: junio
+it: giugno
+fr: juin
+@S_MONTH7
+en: July
+de: Juli
+es: julio
+it: luglio
+fr: juillet
+@S_MONTH8
+en: August
+de: August
+es: agosto
+it: agosto
+fr: août
+@S_MONTH9
+en: September
+de: September
+es: septiembre
+it: settembre
+fr: septembre
+@S_MONTH10
+en: October
+de: Oktober
+es: octubre
+it: ottobre
+fr: octobre
+@S_MONTH11
+en: November
+de: November
+es: noviembre
+it: novembre
+fr: novembre
+@S_MONTH12
+en: December
+de: Dezember
+es: diciembre
+it: dicembre
+fr: décembre
+@S_DAY0
+en: Sunday
+de: Sonntag
+es: domingo
+it: domenica
+fr: dimanche
+@S_DAY1
+en: Monday
+de: Montag
+es: lunes
+it: lunedì
+fr: lundi
+@S_DAY2
+en: Tuesday
+de: Dienstag
+es: martes
+it: martedì
+fr: mardi
+@S_DAY3
+en: Wednesday
+de: Mittwoch
+es: miércoles
+it: mercoledì
+fr: mercredi
+@S_DAY4
+en: Thursday
+de: Donnerstag
+es: jueves
+it: giovedì
+fr: jeudi
+@S_DAY5
+en: Friday
+de: Freitag
+es: viernes
+it: venerdì
+fr: vendredi
+@S_DAY6
+en: Saturday
+de: Samstag
+es: sábado
+it: sabato
+fr: samedi
+
+# ---- window information line --------------------------------------------------------
+@S_I_PAGE
+en: Page
+de: Seite
+es: Pág.
+it: Pag.
+fr: Page
+@S_I_BULLET
+en: Bullets
+de: Aufzählung
+es: Viñetas
+it: Punti
+fr: Puces
+@S_I_NUMBER
+en: Numbered
+de: Nummeriert
+es: Numerada
+it: Numerato
+fr: Numérotée
+@S_I_TABLE
+en: Table
+de: Tabelle
+es: Tabla
+it: Tabella
+fr: Tableau
+@S_I_QUICK
+en:  [Quick edit]
+de:  [Schnell]
+es:  [Rápida]
+it:  [Rapida]
+fr:  [Rapide]
+@S_I_CODES
+en:  [Codes]
+de:  [Codes]
+es:  [Códigos]
+it:  [Codici]
+fr:  [Codes]
+@S_I_TEXT
+en:  [Text]
+de:  [Text]
+es:  [Texto]
+it:  [Testo]
+fr:  [Texte]
+@S_J_LEFT
+en: Left
+de: Links
+es: Izquierda
+it: Sinistra
+fr: Gauche
+@S_J_CENTRE
+en: Centre
+de: Mitte
+es: Centro
+it: Centro
+fr: Centré
+@S_J_RIGHT
+en: Right
+de: Rechts
+es: Derecha
+it: Destra
+fr: Droite
+@S_J_FULL
+en: Justified
+de: Block
+es: Justificado
+it: Giustificato
+fr: Justifié
+
+# ---- file selector titles -----------------------------------------------------------
+@S_FS_OPEN
+en: Open a document
+de: Dokument öffnen
+es: Abrir un documento
+it: Apri un documento
+fr: Ouvrir un document
+@S_FS_IMPORT
+en: Import a document
+de: Dokument importieren
+es: Importar un documento
+it: Importa un documento
+fr: Importer un document
+@S_FS_SAVE
+en: Save the document as
+de: Dokument speichern als
+es: Guardar el documento como
+it: Salva il documento come
+fr: Enregistrer le document sous
+@S_FS_EXPORT
+en: Export as text
+de: Als Text exportieren
+es: Exportar como texto
+it: Esporta come testo
+fr: Exporter en texte
+@S_FS_PDF
+en: Export as PDF
+de: Als PDF exportieren
+es: Exportar como PDF
+it: Esporta come PDF
+fr: Exporter en PDF
+@S_FS_INSERT
+en: Insert a file
+de: Datei einfügen
+es: Insertar un archivo
+it: Inserisci un file
+fr: Insérer un fichier
+@S_FS_PICTURE
+en: Insert a picture (IMG, PNG, IFF)
+de: Bild einfügen (IMG, PNG, IFF)
+es: Insertar una imagen (IMG, PNG, IFF)
+it: Inserisci un'immagine (IMG, PNG, IFF)
+fr: Insérer une image (IMG, PNG, IFF)
+@S_FS_UDLOAD
+en: Load a user dictionary
+de: Benutzerwörterbuch laden
+es: Cargar un diccionario
+it: Carica un dizionario
+fr: Charger un dictionnaire
+@S_FS_UDNEW
+en: Create a user dictionary
+de: Benutzerwörterbuch anlegen
+es: Crear un diccionario
+it: Crea un dizionario
+fr: Créer un dictionnaire
+
+# ---- page layout -------------------------------------------------------------------
+@S_PAGE_TITLE
+en: Page Layout
+de: Seitenlayout
+es: Diseño de página
+it: Layout di pagina
+fr: Mise en page
+@S_PAPER
+en: Paper:
+de: Papier:
+es: Papel:
+it: Carta:
+fr: Papier:
+@S_ORIENT
+en: Orientation:
+de: Ausrichtung:
+es: Orientación:
+it: Orientamento:
+fr: Orientation:
+@S_PORTRAIT
+en: Portrait
+de: Hochformat
+es: Vertical
+it: Verticale
+fr: Portrait
+@S_LANDSCAPE
+en: Landscape
+de: Querformat
+es: Horizontal
+it: Orizzontale
+fr: Paysage
+@S_MARGINS_MM
+en: Margins (mm):
+de: Ränder (mm):
+es: Márgenes (mm):
+it: Margini (mm):
+fr: Marges (mm):
+@S_TOP
+en: Top
+de: Oben
+es: Arriba
+it: Sopra
+fr: Haut
+@S_BOTTOM
+en: Bottom
+de: Unten
+es: Abajo
+it: Sotto
+fr: Bas
+@S_LEFT_M
+en: Left
+de: Links
+es: Izq.
+it: Sin.
+fr: Gauche
+@S_RIGHT_M
+en: Right
+de: Rechts
+es: Der.
+it: Des.
+fr: Droite
+@S_COLUMNS
+en: Columns:
+de: Spalten:
+es: Columnas:
+it: Colonne:
+fr: Colonnes:
+@S_GAP
+en: gap
+de: Abstand
+es: separación
+it: spazio
+fr: espace
+@S_WRAPCOL
+en: Wrap column:
+de: Umbruchspalte:
+es: Columna de ajuste:
+it: Colonna a capo:
+fr: Colonne de coupure:
+@S_ZERO_OFF
+en: characters (0: off)
+de: Zeichen (0: aus)
+es: caracteres (0: no)
+it: caratteri (0: no)
+fr: caractères (0: non)
+@S_APPLY_TO
+en: Apply to:
+de: Gilt für:
+es: Aplicar a:
+it: Applica a:
+fr: Appliquer à:
+@S_WHOLE_DOC
+en: Whole document
+de: Ganzes Dokument
+es: Todo el documento
+it: Tutto il documento
+fr: Tout le document
+@S_THIS_PAGE
+en: This page
+de: Diese Seite
+es: Esta página
+it: Questa pagina
+fr: Cette page
+@S_THIS_PAGE_ON
+en: This page onwards
+de: Ab dieser Seite
+es: Desde esta página
+it: Da questa pagina
+fr: Depuis cette page
+@S_WRAP_TITLE
+en: Wrap Column
+de: Umbruchspalte
+es: Columna de ajuste
+it: Colonna a capo
+fr: Colonne de coupure
+@S_WRAP_HINT
+en: Lines also break after this many characters (0: off).
+de: Zeilen brechen auch nach so vielen Zeichen um (0: aus).
+es: Las líneas también se cortan tras estos caracteres (0: no).
+it: Le righe vanno a capo anche dopo questi caratteri (0: no).
+fr: Les lignes sont aussi coupées après ce nombre (0: non).
+
+# ---- point size, header and footer, indents ------------------------------------------
+@S_SIZE_TITLE
+en: Point Size
+de: Schriftgröße
+es: Tamaño de letra
+it: Dimensione carattere
+fr: Taille de police
+@S_POINT_SIZE
+en: Size in points:
+de: Größe in Punkt:
+es: Tamaño en puntos:
+it: Dimensione in punti:
+fr: Taille en points:
+@S_HF_TITLE
+en: Header and Footer
+de: Kopf- und Fußzeile
+es: Encabezado y pie de página
+it: Intestazione e piè di pagina
+fr: En-tête et pied de page
+@S_HEADER
+en: Header:
+de: Kopfzeile:
+es: Encabezado:
+it: Intestazione:
+fr: En-tête:
+@S_FOOTER
+en: Footer:
+de: Fußzeile:
+es: Pie:
+it: Piè di pagina:
+fr: Pied de page:
+@S_FIRST_PAGE_TOO
+en: Also on the first page
+de: Auch auf der ersten Seite
+es: También en la primera página
+it: Anche sulla prima pagina
+fr: Aussi sur la première page
+@S_FIELDS
+en: Fields:
+de: Felder:
+es: Campos:
+it: Campi:
+fr: Champs:
+@S_INDENTS_TITLE
+en: Indents
+de: Einzüge
+es: Sangrías
+it: Rientri
+fr: Retraits
+@S_LEFT_INDENT
+en: Left indent (mm):
+de: Linker Einzug (mm):
+es: Sangría izquierda (mm):
+it: Rientro sinistro (mm):
+fr: Retrait gauche (mm):
+@S_FIRST_LINE
+en: First line (mm):
+de: Erste Zeile (mm):
+es: Primera línea (mm):
+it: Prima riga (mm):
+fr: Première ligne (mm):
+@S_HANG_HINT
+en: A negative first line makes a hanging indent.
+de: Eine negative erste Zeile ergibt einen hängenden Einzug.
+es: Una primera línea negativa crea una sangría francesa.
+it: Una prima riga negativa crea un rientro sporgente.
+fr: Une première ligne négative crée un retrait négatif.
+
+# ---- tables -----------------------------------------------------------------------
+@S_TBL_INS_TITLE
+en: Insert Table
+de: Tabelle einfügen
+es: Insertar tabla
+it: Inserisci tabella
+fr: Insérer un tableau
+@S_TBL_PROP_TITLE
+en: Table Settings
+de: Tabelleneinstellungen
+es: Propiedades de tabla
+it: Proprietà tabella
+fr: Propriétés du tableau
+@S_ROWS
+en: Rows:
+de: Zeilen:
+es: Filas:
+it: Righe:
+fr: Lignes:
+@S_COL_WIDTHS
+en: Column widths (mm):
+de: Spaltenbreiten (mm):
+es: Ancho de columnas (mm):
+it: Larghezza colonne (mm):
+fr: Largeur des colonnes (mm):
+@S_GRID_LINES
+en: Grid lines
+de: Gitterlinien
+es: Líneas de cuadrícula
+it: Griglia
+fr: Quadrillage
+
+# ---- pictures and drawings ----------------------------------------------------------
+@S_PIC_TITLE
+en: Picture
+de: Bild
+es: Imagen
+it: Immagine
+fr: Image
+@S_DRAW_TITLE
+en: Drawing
+de: Zeichnung
+es: Dibujo
+it: Disegno
+fr: Dessin
+@S_POSITION_MM
+en: Position (mm):
+de: Position (mm):
+es: Posición (mm):
+it: Posizione (mm):
+fr: Position (mm):
+@S_FROM_LEFT
+en: from left
+de: von links
+es: desde izq.
+it: da sinistra
+fr: depuis gauche
+@S_FROM_TOP
+en: from top
+de: von oben
+es: desde arriba
+it: dall'alto
+fr: depuis haut
+@S_SIZE_MM
+en: Size (mm):
+de: Größe (mm):
+es: Tamaño (mm):
+it: Dimensioni (mm):
+fr: Taille (mm):
+@S_WIDTH
+en: width
+de: Breite
+es: ancho
+it: larghezza
+fr: largeur
+@S_HEIGHT
+en: height
+de: Höhe
+es: alto
+it: altezza
+fr: hauteur
+@S_TEXT_WRAP
+en: Text flow:
+de: Textumfluss:
+es: Ajuste del texto:
+it: Testo intorno:
+fr: Habillage:
+@S_WRAP_NONE
+en: None
+de: Keiner
+es: Ninguno
+it: Nessuno
+fr: Aucun
+@S_WRAP_BOX
+en: Around the box
+de: Um den Rahmen
+es: Alrededor del cuadro
+it: Intorno al riquadro
+fr: Autour du cadre
+@S_WRAP_SHAPE
+en: Around the shapes
+de: Um die Formen
+es: Alrededor de las formas
+it: Intorno alle forme
+fr: Autour des formes
+@S_FRAME
+en: Frame
+de: Rahmen
+es: Marco
+it: Cornice
+fr: Cadre
+@S_EDIT_DRAWING
+en: Edit Drawing
+de: Zeichnung bearbeiten
+es: Editar dibujo
+it: Modifica disegno
+fr: Modifier le dessin
+@S_DT_SELECT
+en: Select
+de: Auswahl
+es: Elegir
+it: Seleziona
+fr: Choisir
+@S_DT_RECT
+en: Box
+de: Rechteck
+es: Rectángulo
+it: Rettangolo
+fr: Rectangle
+@S_DT_RRECT
+en: Rounded
+de: Abgerundet
+es: Redondeado
+it: Arrotondato
+fr: Arrondi
+@S_DT_ELLIPSE
+en: Ellipse
+de: Ellipse
+es: Elipse
+it: Ellisse
+fr: Ellipse
+@S_DT_LINE
+en: Line
+de: Linie
+es: Línea
+it: Linea
+fr: Ligne
+@S_DT_TRI
+en: Triangle
+de: Dreieck
+es: Triángulo
+it: Triangolo
+fr: Triangle
+@S_DT_FILL
+en: Fill
+de: Füllung
+es: Relleno
+it: Riempimento
+fr: Remplissage
+@S_DT_WIDTH
+en: Line
+de: Linie
+es: Línea
+it: Linea
+fr: Trait
+@S_DT_COLOUR
+en: Colour...
+de: Farbe...
+es: Color...
+it: Colore...
+fr: Couleur...
+@S_DT_FRONT
+en: To Front
+de: Nach vorn
+es: Al frente
+it: In primo piano
+fr: Devant
+@S_DT_DONE
+en: Done
+de: Fertig
+es: Hecho
+it: Fatto
+fr: Terminé
+@S_FILL_NONE
+en: none
+de: keine
+es: ninguno
+it: nessuno
+fr: aucun
+@S_FILL_WHITE
+en: white
+de: weiß
+es: blanco
+it: bianco
+fr: blanc
+@S_FILL_GREY
+en: grey
+de: grau
+es: gris
+it: grigio
+fr: gris
+@S_FILL_SOLID
+en: solid
+de: voll
+es: sólido
+it: pieno
+fr: plein
+
+# ---- preferences ---------------------------------------------------------------------
+@S_PREFS_TITLE
+en: Preferences
+de: Einstellungen
+es: Preferencias
+it: Preferenze
+fr: Préférences
+@S_LANGUAGE
+en: Language:
+de: Sprache:
+es: Idioma:
+it: Lingua:
+fr: Langue:
+@S_DATE_FORMAT
+en: Date:
+de: Datum:
+es: Fecha:
+it: Data:
+fr: Date:
+@S_NEW_PAGES
+en: New documents:
+de: Neue Dokumente:
+es: Documentos nuevos:
+it: Nuovi documenti:
+fr: Nouveaux documents:
+@S_NEW_WINDOWS
+en: New windows:
+de: Neue Fenster:
+es: Ventanas nuevas:
+it: Nuove finestre:
+fr: Nouvelles fenêtres:
+@S_SHOW_TOOLBAR
+en: Show the toolbar
+de: Symbolleiste zeigen
+es: Mostrar la barra
+it: Mostra la barra strumenti
+fr: Afficher la barre d'outils
+@S_SPELLING
+en: Spelling:
+de: Rechtschreibung:
+es: Ortografía:
+it: Ortografia:
+fr: Orthographe:
+@S_LIVE_SPELL
+en: Underline misspelt words as you type
+de: Fehler beim Tippen unterstreichen
+es: Subrayar errores al escribir
+it: Sottolinea gli errori mentre scrivi
+fr: Souligner les fautes en tapant
+@S_TEXT_COLOUR
+en: Text colours:
+de: Textfarben:
+es: Colores:
+it: Colori:
+fr: Couleurs:
+@S_SHOW_COLOURS
+en: Show colours
+de: Farben zeigen
+es: Ver colores
+it: Mostra colori
+fr: Afficher les couleurs
+@S_PDF_PICTURES
+en: PDF resolution:
+de: PDF-Auflösung:
+es: Resolución PDF:
+it: Risoluzione PDF:
+fr: Résolution PDF:
+@S_SCREEN
+en: Screen
+de: Bildschirm
+es: Pantalla
+it: Schermo
+fr: Écran
+@S_EDITING
+en: Display:
+de: Anzeige:
+es: Pantalla:
+it: Schermo:
+fr: Affichage:
+@S_D_NORMAL
+en: Paper
+de: Papier
+es: Papel
+it: Carta
+fr: Papier
+@S_D_DARK
+en: Dark
+de: Dunkel
+es: Oscuro
+it: Scuro
+fr: Sombre
+@S_D_GREEN
+en: Green
+de: Grün
+es: Verde
+it: Verde
+fr: Vert
+@S_D_AMBER
+en: Amber
+de: Bernstein
+es: Ámbar
+it: Ambra
+fr: Ambre
+@S_AUTOSAVE
+en: Auto-save:
+de: Autom. sichern:
+es: Autoguardado:
+it: Salvataggio auto:
+fr: Sauvegarde auto:
+@S_EVERY
+en: every
+de: alle
+es: cada
+it: ogni
+fr: toutes les
+@S_MINUTES
+en: minutes
+de: Minuten
+es: minutos
+it: minuti
+fr: minutes
+@S_BACKUP_COPY
+en: to a backup copy
+de: als Sicherungskopie
+es: en una copia
+it: in una copia
+fr: dans une copie
+@S_SAVE_DOC
+en: to the document
+de: ins Dokument
+es: en el documento
+it: nel documento
+fr: dans le document
+@S_SAVE_BTN
+en: Save
+de: Sichern
+es: Guardar
+it: Salva
+fr: Enregistrer
+
+# ---- text import and export ----------------------------------------------------------
+@S_IMPORT_TITLE
+en: Import Text
+de: Text importieren
+es: Importar texto
+it: Importa testo
+fr: Importer du texte
+@S_EXPORT_TITLE
+en: Export Text
+de: Text exportieren
+es: Exportar texto
+it: Esporta testo
+fr: Exporter le texte
+@S_FOUND
+en: Found: %s line ends, %s characters.
+de: Gefunden: Zeilenenden %s, Zeichen %s.
+es: Encontrado: finales de línea %s, caracteres %s.
+it: Trovato: fine riga %s, caratteri %s.
+fr: Trouvé: fins de ligne %s, caractères %s.
+@S_EOL_NONE
+en: no
+de: keine
+es: ninguno
+it: nessuno
+fr: aucune
+@S_EOL_LF
+en: LF (Unix)
+@S_EOL_CRLF
+en: CR LF (Atari/DOS)
+@S_EOL_CR
+en: CR (Mac)
+@S_EOL_MIXED
+en: mixed
+de: gemischt
+es: mezclados
+it: misti
+fr: mélangées
+@S_CHARACTERS
+en: Characters:
+de: Zeichensatz:
+es: Caracteres:
+it: Caratteri:
+fr: Caractères:
+@S_AUTO
+en: Automatic
+de: Automatisch
+es: Automático
+it: Automatico
+fr: Automatique
+@S_LINES
+en: Each line:
+de: Jede Zeile:
+es: Cada línea:
+it: Ogni riga:
+fr: Chaque ligne:
+@S_ONE_PARA
+en: is a paragraph
+de: ist ein Absatz
+es: es un párrafo
+it: è un paragrafo
+fr: est un paragraphe
+@S_JOIN_LINES
+en: joins up to a blank line
+de: wird bis zur Leerzeile verbunden
+es: se une hasta una línea vacía
+it: si unisce fino a una riga vuota
+fr: est jointe jusqu'à une ligne vide
+@S_IMPORT
+en: Import
+de: Importieren
+es: Importar
+it: Importa
+fr: Importer
+@S_LINE_ENDINGS
+en: Line ends:
+de: Zeilenenden:
+es: Fin de línea:
+it: Fine riga:
+fr: Fins de ligne:
+@S_EXPORT_HINT
+en: Text export keeps no styles; save as RTF to keep them.
+de: Text enthält keine Formate; als RTF sichern, um sie zu behalten.
+es: El texto no guarda estilos; guarde en RTF para conservarlos.
+it: Il testo non conserva gli stili; salvare in RTF per tenerli.
+fr: Le texte perd les styles; enregistrez en RTF pour les garder.
+@S_EXPORT
+en: Export
+de: Exportieren
+es: Exportar
+it: Esporta
+fr: Exporter
+@S_OPENING
+en: Opening
+de: Öffnen
+es: Abriendo
+it: Apertura
+fr: Ouverture
+@S_IMPORTING
+en: Importing
+de: Importieren
+es: Importando
+it: Importazione
+fr: Importation
+@S_SAVING
+en: Saving
+de: Speichern
+es: Guardando
+it: Salvataggio
+fr: Enregistrement
+@S_EXPORTING
+en: Exporting
+de: Exportieren
+es: Exportando
+it: Esportazione
+fr: Exportation
+@S_LOADING_DIC
+en: Loading the dictionary
+de: Wörterbuch wird geladen
+es: Cargando el diccionario
+it: Caricamento del dizionario
+fr: Chargement du dictionnaire
+@S_LOADING_PIC
+en: Loading the picture
+de: Bild wird geladen
+es: Cargando la imagen
+it: Caricamento dell'immagine
+fr: Chargement de l'image
+@S_EXPORTING_PDF
+en: Exporting PDF...
+de: PDF wird exportiert...
+es: Exportando PDF...
+it: Esportazione PDF...
+fr: Export PDF en cours...
+
+# ---- summary ------------------------------------------------------------------------
+@S_SUMMARY_TITLE
+en: Document Summary
+de: Dokumentstatistik
+es: Resumen del documento
+it: Riepilogo documento
+fr: Statistiques du document
+@S_ST_PAGES
+en: Pages:
+de: Seiten:
+es: Páginas:
+it: Pagine:
+fr: Pages:
+@S_ST_WORDS
+en: Words:
+de: Wörter:
+es: Palabras:
+it: Parole:
+fr: Mots:
+@S_ST_CHARS
+en: Characters:
+de: Zeichen:
+es: Caracteres:
+it: Caratteri:
+fr: Caractères:
+@S_ST_CHARS_NS
+en: Characters (no spaces):
+de: Zeichen ohne Leerzeichen:
+es: Caracteres sin espacios:
+it: Caratteri senza spazi:
+fr: Caractères sans espaces:
+@S_ST_PARAS
+en: Paragraphs:
+de: Absätze:
+es: Párrafos:
+it: Paragrafi:
+fr: Paragraphes:
+@S_ST_LINES
+en: Lines:
+de: Zeilen:
+es: Líneas:
+it: Righe:
+fr: Lignes:
+@S_ST_TABLES
+en: Tables:
+de: Tabellen:
+es: Tablas:
+it: Tabelle:
+fr: Tableaux:
+@S_ST_OBJECTS
+en: Pictures and drawings:
+de: Bilder und Zeichnungen:
+es: Imágenes y dibujos:
+it: Immagini e disegni:
+fr: Images et dessins:
+
+# ---- find and replace ---------------------------------------------------------------
+@S_FIND_TITLE
+en: Find and Replace
+de: Suchen und Ersetzen
+es: Buscar y reemplazar
+it: Trova e sostituisci
+fr: Rechercher et remplacer
+@S_FIND_WHAT
+en: Find:
+de: Suchen:
+es: Buscar:
+it: Trova:
+fr: Chercher:
+@S_REPLACE_WITH
+en: Replace with:
+de: Ersetzen durch:
+es: Reemplazar por:
+it: Sostituisci con:
+fr: Remplacer par:
+@S_MATCH_CASE
+en: Match case
+de: Groß/klein
+es: Mayúsculas
+it: Maiuscole
+fr: Respecter la casse
+@S_WHOLE_WORDS
+en: Whole words
+de: Ganze Wörter
+es: Palabras enteras
+it: Parole intere
+fr: Mots entiers
+@S_BACKWARDS
+en: Backwards
+de: Rückwärts
+es: Hacia atrás
+it: All'indietro
+fr: En arrière
+@S_FIND_NEXT
+en: Find Next
+de: Weiter
+es: Siguiente
+it: Successivo
+fr: Suivant
+@S_REPLACE
+en: Replace
+de: Ersetzen
+es: Reemplazar
+it: Sostituisci
+fr: Remplacer
+@S_REPLACE_ALL
+en: Replace All
+de: Alle ersetzen
+es: Reemplazar todo
+it: Sostituisci tutto
+fr: Tout remplacer
+@S_NOT_FOUND
+en: Not found.
+de: Nicht gefunden.
+es: No encontrado.
+it: Non trovato.
+fr: Introuvable.
+@S_N_REPLACED
+en: %ld replaced.
+de: %ld ersetzt.
+es: %ld reemplazados.
+it: %ld sostituiti.
+fr: %ld remplacés.
+
+# ---- spelling -------------------------------------------------------------------------
+@S_SPELL_TITLE
+en: Spelling
+de: Rechtschreibung
+es: Ortografía
+it: Ortografia
+fr: Orthographe
+@S_NOT_IN_DIC
+en: Not in the dictionary:
+de: Nicht im Wörterbuch:
+es: No está en el diccionario:
+it: Non nel dizionario:
+fr: Absent du dictionnaire:
+@S_CHANGE_TO
+en: Change to:
+de: Ändern in:
+es: Cambiar por:
+it: Cambia in:
+fr: Remplacer par:
+@S_SUGGESTIONS
+en: Suggestions:
+de: Vorschläge:
+es: Sugerencias:
+it: Suggerimenti:
+fr: Suggestions:
+@S_IGNORE
+en: Ignore
+de: Ignorieren
+es: Omitir
+it: Ignora
+fr: Ignorer
+@S_IGNORE_ALL
+en: Ignore All
+de: Alle ignorieren
+es: Omitir todo
+it: Ignora tutto
+fr: Tout ignorer
+@S_ADD
+en: Add
+de: Hinzufügen
+es: Añadir
+it: Aggiungi
+fr: Ajouter
+@S_STOP
+en: Stop
+de: Stopp
+es: Parar
+it: Ferma
+fr: Arrêter
+@S_NO_SUGGESTIONS
+en: (no suggestions)
+de: (keine Vorschläge)
+es: (sin sugerencias)
+it: (nessun suggerimento)
+fr: (aucune suggestion)
+@S_ADD_TO_DIC
+en: Add to dictionary
+de: Ins Wörterbuch
+es: Añadir al diccionario
+it: Aggiungi al dizionario
+fr: Ajouter au dictionnaire
+@S_NO_UDICT
+en: (no user dictionary)
+de: (kein Benutzerwörterbuch)
+es: (sin diccionario propio)
+it: (nessun dizionario utente)
+fr: (aucun dictionnaire perso)
+
+# ---- thesaurus ------------------------------------------------------------------------
+@S_THES_TITLE
+en: Thesaurus
+de: Thesaurus
+es: Sinónimos
+it: Sinonimi
+fr: Synonymes
+@S_TH_WORD
+en: Word:
+de: Wort:
+es: Palabra:
+it: Parola:
+fr: Mot:
+@S_LOOK_UP
+en: Look Up
+de: Suchen
+es: Buscar
+it: Cerca
+fr: Chercher
+@S_MEANINGS
+en: Meanings:
+de: Bedeutungen:
+es: Sentidos:
+it: Significati:
+fr: Sens:
+@S_SYNONYMS
+en: Synonyms:
+de: Synonyme:
+es: Sinónimos:
+it: Sinonimi:
+fr: Synonymes:
+@S_TH_BASE
+en: Showing "%s".
+de: Gezeigt wird "%s".
+es: Se muestra "%s".
+it: Si mostra "%s".
+fr: Affiché: "%s".
+@S_TH_NONE
+en: "%s" is not in the thesaurus.
+de: "%s" ist nicht im Thesaurus.
+es: "%s" no está en el diccionario.
+it: "%s" non è nel dizionario.
+fr: "%s" est absent du dictionnaire.
+@S_POS_N
+en: (n.)
+de: (Subst.)
+es: (s.)
+it: (s.)
+fr: (n.)
+@S_POS_V
+en: (v.)
+de: (Verb)
+es: (v.)
+it: (v.)
+fr: (v.)
+@S_POS_A
+en: (adj.)
+de: (Adj.)
+es: (adj.)
+it: (agg.)
+fr: (adj.)
+@S_POS_R
+en: (adv.)
+de: (Adv.)
+es: (adv.)
+it: (avv.)
+fr: (adv.)
+
+# ---- font selector and preview -------------------------------------------------------
+@S_PREVIEW
+en: Preview
+de: Vorschau
+es: Vista previa
+it: Anteprima
+fr: Aperçu
+@S_PAGE_N_OF
+en: Page %d of %d
+de: Seite %d von %d
+es: Página %d de %d
+it: Pagina %d di %d
+fr: Page %d sur %d
+@S_WHOLE_PAGE
+en: Whole
+de: Ganz
+es: Entera
+it: Intera
+fr: Entière
+@S_EXPORT_PDF
+en: Export PDF...
+de: PDF exportieren...
+es: Exportar PDF...
+it: Esporta PDF...
+fr: Exporter PDF...
+@S_CONTENTS
+en: Contents
+de: Inhalt
+es: Índice
+it: Indice
+fr: Sommaire
+
+# ---- macOS only --------------------------------------------------------------------
+@S_MAC_SERVICES
+en: Services
+de: Dienste
+es: Servicios
+it: Servizi
+fr: Services
+@S_MAC_HIDE
+en: Hide
+de: Ausblenden
+es: Ocultar
+it: Nascondi
+fr: Masquer
+@S_MAC_HIDEOTHERS
+en: Hide Others
+de: Andere ausblenden
+es: Ocultar otros
+it: Nascondi altre
+fr: Masquer les autres
+@S_MAC_SHOWALL
+en: Show All
+de: Alle einblenden
+es: Mostrar todo
+it: Mostra tutte
+fr: Tout afficher
+@S_MAC_RECENT
+en: Open Recent
+de: Benutzte Dokumente
+es: Abrir recientes
+it: Apri recenti
+fr: Ouvrir l'élément récent
+@S_MAC_CLEAR
+en: Clear Menu
+de: Einträge löschen
+es: Borrar menú
+it: Cancella menu
+fr: Effacer le menu
+@S_MAC_REVERT
+en: Revert to Saved
+de: Zurück zur gesicherten Version
+es: Volver a la versión guardada
+it: Ripristina versione salvata
+fr: Revenir à la version enregistrée
+@S_MAC_PRINT
+en: Print...
+de: Drucken...
+es: Imprimir...
+it: Stampa...
+fr: Imprimer...
+@S_MAC_PICTURE
+en: Picture (IMG, PNG, JPEG, TIFF)...
+de: Bild (IMG, PNG, JPEG, TIFF)...
+es: Imagen (IMG, PNG, JPEG, TIFF)...
+it: Immagine (IMG, PNG, JPEG, TIFF)...
+fr: Image (IMG, PNG, JPEG, TIFF)...
+@S_MAC_MINIMIZE
+en: Minimise
+de: Im Dock ablegen
+es: Minimizar
+it: Contrai
+fr: Placer dans le Dock
+@S_MAC_ZOOMWIN
+en: Zoom Window
+de: Zoomen
+es: Zoom
+it: Ridimensiona
+fr: Réduire/agrandir
+@S_MAC_FRONT
+en: Bring All to Front
+de: Alle nach vorne bringen
+es: Traer todo al frente
+it: Porta tutto in primo piano
+fr: Tout ramener au premier plan
+
+# ---- Amiga only ----------------------------------------------------------------
+@S_MAC_VIEW
+en: View
+de: Darstellung
+es: Visualización
+it: Vista
+fr: Présentation
+@S_MAC_FORMAT
+en: Format
+de: Format
+es: Formato
+it: Formato
+fr: Format
+@S_MAC_HELP
+en: Help
+de: Hilfe
+es: Ayuda
+it: Aiuto
+fr: Aide
+@S_MAC_MANUAL
+en: EdWord Manual
+de: EdWord-Handbuch
+es: Manual de EdWord
+it: Manuale di EdWord
+fr: Manuel d'EdWord
+@S_MAC_EXPORT
+en: Export
+de: Exportieren
+es: Exportar
+it: Esporta
+fr: Exporter
+@S_MAC_TEXT
+en: Text
+de: Text
+es: Texto
+it: Testo
+fr: Texte
+@S_MAC_SHOWFONTS
+en: Show Fonts
+de: Schriften einblenden
+es: Mostrar tipos de letra
+it: Mostra font
+fr: Afficher les polices
+@S_MAC_COLOUR
+en: Colour
+de: Farbe
+es: Color
+it: Colore
+fr: Couleur
+@S_MAC_EXPTXT
+en: Text...
+de: Text...
+es: Texto...
+it: Testo...
+fr: Texte...
+@S_MAC_EXPMD
+en: Markdown...
+de: Markdown...
+es: Markdown...
+it: Markdown...
+fr: Markdown...
+@S_MAC_EXPFWP
+en: 1st Word Plus...
+de: 1st Word Plus...
+es: 1st Word Plus...
+it: 1st Word Plus...
+fr: 1st Word Plus...
+@S_MAC_EXPPDF
+en: PDF...
+de: PDF...
+es: PDF...
+it: PDF...
+fr: PDF...
+@S_MAC_ACTUAL
+en: Actual Size
+de: Originalgröße
+es: Tamaño real
+it: Dimensioni reali
+fr: Taille réelle
+@S_AMI_PICTURE
+en: Picture...
+de: Bild...
+es: Imagen...
+it: Immagine...
+fr: Image...
+@S_AMI_FS_PICTURE
+en: Insert a picture (IFF, PNG, IMG)
+de: Bild einfügen (IFF, PNG, IMG)
+es: Insertar una imagen (IFF, PNG, IMG)
+it: Inserisci un'immagine (IFF, PNG, IMG)
+fr: Insérer une image (IFF, PNG, IMG)
+@AL_AMI_CANT_READ_PIC
+en: Could not read that picture.|EdWord reads IFF ILBM, PNG|and GEM IMG pictures.
+de: Das Bild ist nicht lesbar.|EdWord liest IFF-ILBM-, PNG-|und GEM-IMG-Bilder.
+es: No se pudo leer la imagen.|EdWord lee IFF ILBM, PNG|y GEM IMG.
+it: Impossibile leggere|l'immagine. EdWord legge|IFF ILBM, PNG e GEM IMG.
+fr: Impossible de lire l'image.|EdWord lit IFF ILBM, PNG|et GEM IMG.
+@S_AMI_ABOUT
+en: A word processor for the Amiga.
+de: Eine Textverarbeitung für den Amiga.
+es: Un procesador de textos para el Amiga.
+it: Un elaboratore di testi per l'Amiga.
+fr: Un traitement de texte pour l'Amiga.
+@AL_AMI_NO_SCREEN
+en: EdWord could not open its|screen. Close some windows|or free some memory.
+de: EdWord konnte seinen|Bildschirm nicht öffnen.|Bitte Speicher freigeben.
+es: EdWord no pudo abrir su|pantalla. Cierre ventanas o|libere memoria.
+it: EdWord non può aprire il|suo schermo. Chiudere delle|finestre o liberare memoria.
+fr: EdWord n'a pas pu ouvrir|son écran. Fermez des|fenêtres ou libérez de la|mémoire.
+@AL_AMI_NEED_LIB
+en: EdWord needs %s|version %ld or newer.
+de: EdWord braucht %s|ab Version %ld.
+es: EdWord necesita %s|versión %ld o posterior.
+it: EdWord richiede %s|versione %ld o successiva.
+fr: EdWord a besoin de %s|version %ld ou plus récente.
+@S_AMI_FILE
+en: File:
+de: Datei:
+es: Archivo:
+it: File:
+fr: Fichier:
+@S_AMI_OPEN_ON_WB
+en: Open on the Workbench screen
+de: Auf dem Workbench-Bildschirm öffnen
+es: Abrir en la pantalla del Workbench
+it: Apri sullo schermo del Workbench
+fr: Ouvrir sur l'écran du Workbench
+@S_AMI_SCREEN
+en: Screen:
+de: Bildschirm:
+es: Pantalla:
+it: Schermo:
+fr: Écran:
+@S_AMI_RESTART
+en: (after a restart)
+de: (nach Neustart)
+es: (al reiniciar)
+it: (al riavvio)
+fr: (au redémarrage)
+@S_FR_DRAWER
+en: Drawer
+de: Schublade
+es: Cajón
+it: Cassetto
+fr: Tiroir
+@S_FR_PATTERN
+en: Pattern
+de: Muster
+es: Patrón
+it: Modello
+fr: Motif
+@S_FR_VOLUMES
+en: Volumes
+de: Laufwerke
+es: Volúmenes
+it: Volumi
+fr: Volumes
+@S_FR_PARENT
+en: Parent
+de: Zurück
+es: Superior
+it: Superiore
+fr: Parent
+@S_SCR_HIRES
+en: High res
+de: Hohe Auflösung
+es: Alta resolución
+it: Alta risoluzione
+fr: Haute résolution
+@S_SCR_LACE
+en: High res interlaced
+de: Hohe Auflösung, Interlace
+es: Alta resolución entrelazada
+it: Alta risoluzione interlacciata
+fr: Haute résolution entrelacée
+@S_SCR_LIKEWB
+en: Like the Workbench
+de: Wie die Workbench
+es: Como el Workbench
+it: Come il Workbench
+fr: Comme le Workbench
+@S_SCR_OTHER
+en: Other mode...
+de: Anderer Modus...
+es: Otro modo...
+it: Altra modalità...
+fr: Autre mode...
+@S_SCR_WB
+en: Workbench screen
+de: Workbench-Bildschirm
+es: Pantalla del Workbench
+it: Schermo del Workbench
+fr: Écran du Workbench
+@S_SCR_PICK
+en: EdWord's screen mode
+de: Bildschirmmodus für EdWord
+es: Modo de pantalla de EdWord
+it: Modalità schermo di EdWord
+fr: Mode d'écran d'EdWord
+
+# ---- EdWord 3.1 ------------------------------------------------------------
+@M_EXPMD
+en: Export Markdown...
+de: Markdown exportieren...
+es: Exportar Markdown...
+it: Esporta Markdown...
+fr: Exporter en Markdown...
+@M_EXPFWP
+en: Export 1st Word Plus...
+de: 1st Word Plus exportieren...
+es: Exportar 1st Word Plus...
+it: Esporta 1st Word Plus...
+fr: Exporter en 1st Word Plus...
+@M_PRINT
+en: Print...
+de: Drucken...
+es: Imprimir...
+it: Stampa...
+fr: Imprimer...
+@M_PREVPAGE
+en: Previous Page
+de: Vorige Seite
+es: Página anterior
+it: Pagina precedente
+fr: Page précédente
+@M_NEXTPAGE
+en: Next Page
+de: Nächste Seite
+es: Página siguiente
+it: Pagina successiva
+fr: Page suivante
+@M_GOTOPAGE
+en: Go to Page...
+de: Gehe zu Seite...
+es: Ir a la página...
+it: Vai alla pagina...
+fr: Aller à la page...
+@M_RULERS
+en: Rulers
+de: Lineale
+es: Reglas
+it: Righelli
+fr: Règles
+@M_GUIDES
+en: Guides
+de: Hilfslinien
+es: Guías
+it: Guide
+fr: Repères
+@M_WINMORE
+en: More Windows...
+de: Weitere Fenster...
+es: Más ventanas...
+it: Altre finestre...
+fr: Autres fenêtres...
+@S_FS_EXPMD
+en: Export as Markdown
+de: Als Markdown exportieren
+es: Exportar como Markdown
+it: Esporta come Markdown
+fr: Exporter en Markdown
+@S_FS_EXPFWP
+en: Export as 1st Word Plus
+de: Als 1st Word Plus exportieren
+es: Exportar como 1st Word Plus
+it: Esporta come 1st Word Plus
+fr: Exporter en 1st Word Plus
+@S_OF_N
+en: of %d
+de: von %d
+es: de %d
+it: di %d
+fr: sur %d
+@S_GOTO_TITLE
+en: Go to Page
+de: Gehe zu Seite
+es: Ir a la página
+it: Vai alla pagina
+fr: Aller à la page
+@S_GOTO_PAGE
+en: Page:
+de: Seite:
+es: Página:
+it: Pagina:
+fr: Page :
+@S_GO
+en: Go
+de: Gehe
+es: Ir
+it: Vai
+fr: Aller
+@S_PRINT_TITLE
+en: Print
+de: Drucken
+es: Imprimir
+it: Stampa
+fr: Imprimer
+@S_PRINTER
+en: Printer:
+de: Drucker:
+es: Impresora:
+it: Stampante:
+fr: Imprimante :
+@S_PAGES
+en: Pages:
+de: Seiten:
+es: Páginas:
+it: Pagine:
+fr: Pages :
+@S_ALL_PAGES
+en: All
+de: Alle
+es: Todas
+it: Tutte
+fr: Toutes
+@S_PAGES_FROM
+en: From
+de: Von
+es: Desde
+it: Da
+fr: De
+@S_PAGES_TO
+en: to
+de: bis
+es: a
+it: a
+fr: à
+@S_COPIES
+en: Copies:
+de: Kopien:
+es: Copias:
+it: Copie:
+fr: Copies :
+@S_PRINT_BTN
+en: Print
+de: Drucken
+es: Imprimir
+it: Stampa
+fr: Imprimer
+@S_PRINTING
+en: Printing
+de: Drucken
+es: Imprimiendo
+it: Stampa in corso
+fr: Impression
+@AL_NO_PRINTER
+en: Printing needs GDOS with|a printer driver (device|21 in ASSIGN.SYS).
+de: Zum Drucken wird GDOS mit|einem Druckertreiber|(Gerät 21 in ASSIGN.SYS)|benötigt.
+es: Para imprimir hace falta|GDOS con un controlador de|impresora (dispositivo 21).
+it: Per stampare serve GDOS|con un driver di stampa|(periferica 21).
+fr: L'impression demande GDOS|avec un pilote d'imprimante|(périphérique 21).
+@AL_PRINT_FAILED
+en: The document could not|be printed. Is the printer|on and its driver loaded?
+de: Das Dokument konnte nicht|gedruckt werden. Ist der|Drucker an und sein|Treiber geladen?
+es: No se pudo imprimir el|documento. ¿Está la|impresora encendida?
+it: Impossibile stampare il|documento. La stampante|è accesa?
+fr: Impossible d'imprimer le|document. L'imprimante|est-elle allumée ?
+@S_AMI_PROJECT
+en: Project
+de: Projekt
+es: Proyecto
+it: Progetto
+fr: Projet
+@AL_AMI_NO_PRINTER
+en: The printer can't be used:|printer.device didn't open,|or the printer chosen in|Printer preferences can't|print graphics.
+de: Der Drucker ist nicht|nutzbar: printer.device|fehlt, oder der Drucker in|den Voreinstellungen kann|keine Grafik drucken.
+es: No se puede usar la|impresora: falta|printer.device o la|impresora elegida no|imprime gráficos.
+it: Impossibile usare la|stampante: manca|printer.device o la|stampante scelta non|stampa grafica.
+fr: Impossible d'imprimer :|printer.device manque, ou|l'imprimante choisie dans|les préférences n'imprime|pas de graphisme.
+
+# ---- the Import and Export windows ----------------------------------------
+@M_EXPORT
+en: Export...
+de: Exportieren...
+es: Exportar...
+it: Esporta...
+fr: Exporter...
+@S_FORMAT
+en: Format:
+de: Format:
+es: Formato:
+it: Formato:
+fr: Format:
+@S_FMT_TEXT
+en: Text
+de: Text
+es: Texto
+it: Testo
+fr: Texte
+@S_INTO
+en: Import into:
+de: Importieren in:
+es: Importar en:
+it: Importa in:
+fr: Importer dans:
+@S_INTO_NEW
+en: a new document
+de: ein neues Dokument
+es: un documento nuevo
+it: un nuovo documento
+fr: un nouveau document
+@S_INTO_CURSOR
+en: this document, at the cursor
+de: dieses Dokument, an der Schreibmarke
+es: este documento, en el cursor
+it: questo documento, al cursore
+fr: ce document, au curseur
+@S_FS_EXPPT
+en: Export as Protext
+de: Als Protext exportieren
+es: Exportar como Protext
+it: Esporta come Protext
+fr: Exporter en Protext
+@S_FS_EXPRTF
+en: Export as RTF
+de: Als RTF exportieren
+es: Exportar como RTF
+it: Esporta come RTF
+fr: Exporter en RTF
+@S_XF_DOC
+en: Document: %s
+de: Dokument: %s
+es: Documento: %s
+it: Documento: %s
+fr: Document: %s
+@S_XF_DONE
+en: Written: %s
+de: Geschrieben: %s
+es: Guardado: %s
+it: Salvato: %s
+fr: Écrit: %s
+@S_XF_READ
+en: Imported: %s
+de: Importiert: %s
+es: Importado: %s
+it: Importato: %s
+fr: Importé: %s
+@S_XF_NODOC
+en: No document is open.
+de: Kein Dokument geöffnet.
+es: No hay ningún documento abierto.
+it: Nessun documento aperto.
+fr: Aucun document ouvert.
+@S_XF_FAILED
+en: That didn't work.
+de: Das hat nicht geklappt.
+es: No se pudo hacer.
+it: Non è riuscito.
+fr: Cela n'a pas marché.
+@S_XF_STYLES
+en: (text keeps no styles)
+de: (Text ohne Formate)
+es: (el texto no guarda estilos)
+it: (il testo non ha stili)
+fr: (le texte perd les styles)
+
+# ---- spelling dictionaries, charts ----------------------------------------
+@S_DICTIONARY
+en: Dictionary:
+de: Wörterbuch:
+es: Diccionario:
+it: Dizionario:
+fr: Dictionnaire:
+@M_CHART
+en: Chart...
+de: Diagramm...
+es: Gráfico...
+it: Grafico...
+fr: Graphique...
+@S_CH_NONE
+en: No chart
+de: Kein Diagramm
+es: Sin gráfico
+it: Nessun grafico
+fr: Pas de graphique
+@S_CH_PIE
+en: Pie chart
+de: Kreisdiagramm
+es: Gráfico circular
+it: Grafico a torta
+fr: Camembert
+@S_CH_BAR
+en: Bar chart
+de: Balkendiagramm
+es: Gráfico de barras
+it: Grafico a barre
+fr: Histogramme
+@S_CH_PIE3D
+en: 3D pie chart
+de: 3D-Kreisdiagramm
+es: Gráfico circular 3D
+it: Grafico a torta 3D
+fr: Camembert 3D
+@S_CH_BAR3D
+en: 3D bar chart
+de: 3D-Balkendiagramm
+es: Gráfico de barras 3D
+it: Grafico a barre 3D
+fr: Histogramme 3D
+@S_CH_TOP
+en: Above the table
+de: Über der Tabelle
+es: Encima de la tabla
+it: Sopra la tabella
+fr: Au-dessus du tableau
+@S_CH_BOTTOM
+en: Below the table
+de: Unter der Tabelle
+es: Debajo de la tabla
+it: Sotto la tabella
+fr: Sous le tableau
+@S_CH_LEFT
+en: Left of the table
+de: Links der Tabelle
+es: A la izquierda de la tabla
+it: A sinistra della tabella
+fr: À gauche du tableau
+@S_CH_RIGHT
+en: Right of the table
+de: Rechts der Tabelle
+es: A la derecha de la tabla
+it: A destra della tabella
+fr: À droite du tableau
+@AL_CHART_TABLE
+en: Put the cursor in a table|first: the chart shows the|numbers in it.
+de: Setzen Sie die Schreibmarke|zuerst in eine Tabelle: das|Diagramm zeigt ihre Zahlen.
+es: Ponga primero el cursor en|una tabla: el gráfico|muestra sus números.
+it: Metti prima il cursore in|una tabella: il grafico ne|mostra i numeri.
+fr: Placez d'abord le curseur|dans un tableau : le|graphique en montre les|nombres.
+@S_CH_KIND
+en: Chart:
+de: Diagramm:
+es: Gráfico:
+it: Grafico:
+fr: Graphique:
+@S_CH_PLACE
+en: Place:
+de: Platz:
+es: Lugar:
+it: Posizione:
+fr: Place:
+
+# ---- Windows version ------------------------------------------------------
+@S_W_PROPS
+en: Properties...
+de: Eigenschaften...
+es: Propiedades...
+it: Proprietà...
+fr: Propriétés...
+@S_W_ALLFILES
+en: All files
+de: Alle Dateien
+es: Todos los archivos
+it: Tutti i file
+fr: Tous les fichiers
+@S_W_ABOUT
+en: A word processor for Windows.
+de: Eine Textverarbeitung für Windows.
+es: Un procesador de textos para Windows.
+it: Un elaboratore di testi per Windows.
+fr: Un traitement de texte pour Windows.
+@S_W_EXIT
+en: Exit
+de: Beenden
+es: Salir
+it: Esci
+fr: Quitter
+@S_W_MINIMISE
+en: Minimise
+de: Minimieren
+es: Minimizar
+it: Riduci a icona
+fr: Réduire
+@S_W_MINALL
+en: Minimise All
+de: Alle minimieren
+es: Minimizar todas
+it: Riduci tutte a icona
+fr: Tout réduire
+@S_W_HELP
+en: Help
+de: Hilfe
+es: Ayuda
+it: ?
+fr: Aide
+@S_W_CLIPPIC
+en: Clipboard
+de: Zwischenablage
+es: Portapapeles
+it: Appunti
+fr: Presse-papiers
+@AL_W_NO_PRINTER
+en: There is no printer to print|on. Add one in the Printers|settings of Windows first.
+de: Es ist kein Drucker da.|Richten Sie zuerst einen in|den Windows-Druckern ein.
+es: No hay ninguna impresora.|Añada una en la configuración|de impresoras de Windows.
+it: Non c'è alcuna stampante.|Aggiungetene una nelle|stampanti di Windows.
+fr: Aucune imprimante n'est|installée. Ajoutez-en une dans|les imprimantes de Windows.
+
+# ---- repaginate, page numbers, page lists ----------------------------------
+@M_REPAG
+en: Repaginate
+de: Neu umbrechen
+es: Repaginar
+it: Ripagina
+fr: Repaginer
+@S_REPAGINATING
+en: Repaginating
+de: Umbrechen
+es: Repaginando
+it: Ripaginazione
+fr: Repagination
+@M_PAGENUM
+en: Page Numbers...
+de: Seitenzahlen...
+es: Números de página...
+it: Numeri di pagina...
+fr: Numéros de page...
+@S_PN_TITLE
+en: Page Numbers
+de: Seitenzahlen
+es: Números de página
+it: Numeri di pagina
+fr: Numéros de page
+@S_PN_WHERE
+en: Position:
+de: Position:
+es: Posición:
+it: Posizione:
+fr: Position :
+@S_PN_TOP
+en: Top (header)
+de: Oben (Kopfzeile)
+es: Arriba (encabezado)
+it: In alto (intestazione)
+fr: En haut (en-tête)
+@S_PN_BOTTOM
+en: Bottom (footer)
+de: Unten (Fußzeile)
+es: Abajo (pie)
+it: In basso (piè di pagina)
+fr: En bas (pied de page)
+@S_PN_ALIGN
+en: Alignment:
+de: Ausrichtung:
+es: Alineación:
+it: Allineamento:
+fr: Alignement :
+@S_PN_STYLE
+en: Style:
+de: Form:
+es: Forma:
+it: Forma:
+fr: Forme :
+@S_PN_PAGE
+en: Page
+de: Seite
+es: Página
+it: Pagina
+fr: Page
+@S_PN_OF
+en: of
+de: von
+es: de
+it: di
+fr: sur
+@S_PN_REMOVE
+en: Remove
+de: Entfernen
+es: Quitar
+it: Rimuovi
+fr: Supprimer
+@S_CUR_PAGE
+en: Current page
+de: Aktuelle Seite
+es: Página actual
+it: Pagina corrente
+fr: Page courante
+@S_PAGE_LIST
+en: Pages
+de: Seiten
+es: Páginas
+it: Pagine
+fr: Pages
+@S_PAGE_LIST_HINT
+en: e.g. 1-3, 5, 8-
+de: z. B. 1-3, 5, 8-
+es: p. ej. 1-3, 5, 8-
+it: es. 1-3, 5, 8-
+fr: p. ex. 1-3, 5, 8-
+@AL_NO_PAGES
+en: No pages to print.|Give page numbers such as|1-3, 5 or 8-.
+de: Keine Seiten zu drucken.|Geben Sie Seitenzahlen wie|1-3, 5 oder 8- an.
+es: No hay páginas que imprimir.|Indique páginas como|1-3, 5 u 8-.
+it: Nessuna pagina da stampare.|Indicare pagine come|1-3, 5 o 8-.
+fr: Aucune page à imprimer.|Donnez des pages comme|1-3, 5 ou 8-.
+
+# ---- page breaks preference, documents folder, templates -------------------
+@S_KEEP
+en: Page breaks:
+de: Seitenumbruch:
+es: Saltos de página:
+it: Interruzioni:
+fr: Sauts de page :
+@S_KEEP_ANY
+en: Anywhere
+de: Überall
+es: En cualquier sitio
+it: Ovunque
+fr: N'importe où
+@S_KEEP_WIDOWS
+en: No widows/orphans
+de: Keine Hurenkinder
+es: Sin viudas/huérfanas
+it: Niente righe isolate
+fr: Ni veuves ni orphelines
+@S_KEEP_TOGETHER
+en: Keep paragraphs together
+de: Absätze zusammenhalten
+es: Párrafos sin dividir
+it: Paragrafi interi
+fr: Paragraphes entiers
+@S_PREFS_MORE
+en: More...
+de: Weitere...
+es: Más...
+it: Altre...
+fr: Autres...
+@S_DOCDIR
+en: Documents folder:
+de: Dokumentordner:
+es: Carpeta de documentos:
+it: Cartella documenti:
+fr: Dossier des documents :
+@M_TEMPLATE
+en: New from Template...
+de: Neu aus Vorlage...
+es: Nuevo con plantilla...
+it: Nuovo da modello...
+fr: Nouveau d'après modèle...
+@S_TPL_TITLE
+en: New Document
+de: Neues Dokument
+es: Documento nuevo
+it: Nuovo documento
+fr: Nouveau document
+@S_TPL_KIND
+en: Template:
+de: Vorlage:
+es: Plantilla:
+it: Modello:
+fr: Modèle :
+@S_TPL_BLANK
+en: Blank
+de: Leer
+es: En blanco
+it: Vuoto
+fr: Vide
+@S_TPL_UK
+en: UK letter
+de: Brief (GB)
+es: Carta (Reino Unido)
+it: Lettera (UK)
+fr: Lettre (R.-U.)
+@S_TPL_US
+en: US letter
+de: Brief (USA)
+es: Carta (EE. UU.)
+it: Lettera (USA)
+fr: Lettre (É.-U.)
+@S_TPL_NEWS
+en: Newsletter
+de: Rundbrief
+es: Boletín
+it: Notiziario
+fr: Bulletin
+@S_TPL_NAME
+en: Your name:
+de: Ihr Name:
+es: Su nombre:
+it: Il vostro nome:
+fr: Votre nom :
+@S_TPL_ADDR
+en: Your address:
+de: Ihre Anschrift:
+es: Su dirección:
+it: Il vostro indirizzo:
+fr: Votre adresse :
+@S_TPL_NTITLE
+en: Newsletter title:
+de: Titel des Rundbriefs:
+es: Título del boletín:
+it: Titolo del notiziario:
+fr: Titre du bulletin :
+@S_TPL_CREATE
+en: Create
+de: Anlegen
+es: Crear
+it: Crea
+fr: Créer
+@T_TO
+en: Name of the person you are writing to
+de: Name des Empfängers
+es: Nombre del destinatario
+it: Nome del destinatario
+fr: Nom du destinataire
+@T_TOADDR
+en: Their address
+de: Seine Anschrift
+es: Su dirección
+it: Il suo indirizzo
+fr: Son adresse
+@T_DEAR_UK
+en: Dear Sir or Madam,
+de: Sehr geehrte Damen und Herren,
+es: Estimados señores:
+it: Gentili Signori,
+fr: Madame, Monsieur,
+@T_DEAR_US
+en: Dear Sir or Madam:
+de: Sehr geehrte Damen und Herren,
+es: Estimados señores:
+it: Gentili Signori,
+fr: Madame, Monsieur,
+@T_SUBJECT
+en: Subject
+de: Betreff
+es: Asunto
+it: Oggetto
+fr: Objet
+@T_BODY
+en: Write your letter here. Each paragraph ends with Return.
+de: Schreiben Sie hier Ihren Brief. Jeder Absatz endet mit Return.
+es: Escriba aquí su carta. Cada párrafo termina con Return.
+it: Scrivete qui la lettera. Ogni paragrafo termina con Return.
+fr: Écrivez votre lettre ici. Chaque paragraphe se termine par Return.
+@T_YOURS_UK
+en: Yours sincerely,
+de: Mit freundlichen Grüßen
+es: Atentamente,
+it: Cordiali saluti,
+fr: Veuillez agréer mes salutations distinguées.
+@T_YOURS_US
+en: Sincerely,
+de: Mit freundlichen Grüßen
+es: Atentamente,
+it: Distinti saluti,
+fr: Bien cordialement,
+@T_NL_ISSUE
+en: Issue 1
+de: Ausgabe 1
+es: Número 1
+it: Numero 1
+fr: Numéro 1
+@T_NL_MAIN
+en: Main story
+de: Hauptartikel
+es: Noticia principal
+it: Articolo principale
+fr: Article principal
+@T_NL_TEXT
+en: Write the story here. Replace the headings with your own and add more articles as you need them.
+de: Schreiben Sie hier den Artikel. Ersetzen Sie die Überschriften durch Ihre eigenen und fügen Sie weitere Artikel an.
+es: Escriba aquí la noticia. Cambie los títulos por los suyos y añada más artículos cuando los necesite.
+it: Scrivete qui l'articolo. Sostituite i titoli con i vostri e aggiungete altri articoli quando servono.
+fr: Écrivez l'article ici. Remplacez les titres par les vôtres et ajoutez d'autres articles au besoin.
+@T_NL_NEWS
+en: News in brief
+de: Kurz gemeldet
+es: Noticias breves
+it: In breve
+fr: En bref
+@T_NL_DATES
+en: Dates for your diary
+de: Termine
+es: Fechas para recordar
+it: Date da ricordare
+fr: Dates à retenir
+@T_NL_WHAT
+en: What
+de: Was
+es: Qué
+it: Cosa
+fr: Quoi
+@T_NL_WHEN
+en: When
+de: Wann
+es: Cuándo
+it: Quando
+fr: Quand
+@T_NL_CONTENTS
+en: In this issue
+de: In dieser Ausgabe
+es: En este número
+it: In questo numero
+fr: Dans ce numéro
+@T_NL_ORG
+en: Your club or organisation
+de: Ihr Verein
+es: Su club o asociación
+it: Il vostro club o associazione
+fr: Votre club ou association
+@T_NL_PAGE
+en: Page
+de: Seite
+es: Página
+it: Pagina
+fr: Page

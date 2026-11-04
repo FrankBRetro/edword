@@ -1,0 +1,369 @@
+@title EdWord 3.0
+@subtitle Handbuch
+@intro Eine Textverarbeitung für den Atari ST mit GDOS-Schriften, Tabellen, Diagrammen, Bildern, Zeichnungen, Rechtschreibprüfung in fünf Sprachen, Thesaurus und PDF-Export, auch für den Amiga, den Mac und Windows.
+@shotnote Die Bildschirmfotos entstanden in der hohen ST-Auflösung ohne GDOS, daher ist nur die Systemschrift zu sehen. Mit GDOS erscheint das Dokument in seinen echten Schriften. Die Fassungen für Amiga, Mac und Windows sehen aus wie ihr jeweiliges System, arbeiten aber genauso (siehe "EdWord auf anderen Computern").
+@contents Inhalt
+
+# Erste Schritte
+
+## Voraussetzungen
+EdWord läuft auf jedem Atari ST, STE, TT oder Falcon (und in Emulatoren) mit mindestens 1 MB Speicher in einer Auflösung von mindestens 640 Pixeln Breite: mittlere oder hohe ST-Auflösung oder mehr. Für mehr als die Systemschrift wird ein GDOS gebraucht (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS oder G+Plus); Vektorschriften sehen am besten aus. Die Fassungen für Amiga, Mac und Windows sind am Ende dieses Handbuchs beschrieben.
+
+## Installation
+Kopieren Sie diese Dateien in einen gemeinsamen Ordner:
+- `EDWORD.PRG` - das Programm.
+- `EDWORD.DIC` - das Wörterbuch für die Rechtschreibprüfung (britisches Englisch).
+- `EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC` - die Wörterbücher für Deutsch, Spanisch, Italienisch und Französisch, falls gewünscht.
+- `EDWORD.THS` - der Thesaurus (Englisch).
+- `MANUALDE.PDF` (und `MANUALEN`, `MANUALES`, `MANUALIT`, `MANUALFR`) - dieses Handbuch.
+EdWord legt im selben Ordner `EDWORD.INF` (Ihre Einstellungen) und `USER.UDC` (Ihre eigenen Wörter) an.
+
+## Starten
+Doppelklicken Sie auf `EDWORD.PRG`. Sie können auch ein Dokument auf das Programm ziehen oder es als Anwendung für `*.RTF` anmelden. Halten Sie beim Start **Control** gedrückt, um ohne GDOS-Schriften zu starten (sicherer Modus), oder **Alternate**, damit Vektorschriften mit `vst_point` statt `vst_arbpt` skaliert werden.
+
+## Sprache
+EdWord spricht Englisch, Deutsch, Spanisch, Italienisch und Französisch. Beim ersten Start richtet es sich nach der Sprache Ihres TOS; ändern können Sie sie jederzeit unter {M_PREFS}. Das Wörterbuch für die Rechtschreibung wählen Sie dort getrennt; der Thesaurus ist englisch.
+
+# Das Fenster
+
+![main] Ein Dokumentfenster: Titel, Infozeile, Symbolleiste und die Seite.
+
+Jedes Dokument hat ein eigenes Fenster; bis zu 32 Dokumente können offen sein. Unter dem Titel zeigt die **Infozeile** Schrift, Größe und Stil an der Schreibmarke, Ausrichtung, Liste und Überschrift des Absatzes, die Seitennummer, den Zoom und die Ansicht.
+
+## Die Symbolleiste
+Die Symbolleiste lässt sich für jedes Fenster mit {MT_WINDOW} > {M_TOOLBAR} (Control+T) zeigen oder verbergen. Von links nach rechts:
+| Symbol | Funktion |
+| Rückgängig, Wiederholen | letzte Änderung zurücknehmen oder wiederholen |
+| B I U | fett, kursiv, unterstrichen |
+| Vier Ausrichtungssymbole | links, zentriert, rechts, Blocksatz |
+| Listensymbole | Aufzählung, Nummerierung |
+| Tabelle | Tabelle einfügen |
+| Schrift, Größe und Farbe | Auswahllisten (mit kleinem Pfeil) |
+| Lupe | Zoom-Auswahl |
+| Haken | Rechtschreibung prüfen |
+| Codes | geteilte Ansicht mit den Formatcodes |
+| Lineal, Hilfslinien | Lineale an der Seite, gepunktete Rand- und Spaltenlinien |
+Eingeschaltete Einstellungen erscheinen gedrückt; Symbole, die gerade nicht nutzbar sind, sind grau.
+
+![zoompop] Die Zoom-Auswahl in der Symbolleiste.
+
+## Zoom
+Die Seite lässt sich mit 50, 75, 100, 125, 150 oder 200 Prozent anzeigen: über die Lupe in der Symbolleiste oder mit {M_ZOOMIN} (F8) und {M_ZOOMOUT} (F7) im Menü {MT_WINDOW}.
+
+![zoom] Das Dokument mit 150 Prozent.
+
+## Lineale und Hilfslinien
+{M_RULERS} (Control+Shift+R) zeigt Lineale in Zentimetern oben und links an der Seitenansicht; {M_GUIDES} zeichnet Ränder und Spalten als gepunktete Linien, die nicht gedruckt werden. Beides wird gespeichert. Ein Doppelklick auf das obere Lineal öffnet {M_INDENTS}, auf das linke {M_PAGE}.
+
+![rulers] Die Lineale.
+
+## Im Dokument bewegen
+Die Rollbalken, die Pfeiltasten und das Ziehen einer Auswahl bewegen durch das Dokument; neu gezeichnet wird nur der Teil, der ins Bild kommt, daher geht das Rollen schnell. {MT_EDIT} > {M_PREVPAGE} und {M_NEXTPAGE} (Control mit Pfeil hoch und runter) blättern seitenweise, {M_GOTOPAGE} (Control+J) springt zu jeder Seite.
+
+## Drei Ansichten
+{MT_WINDOW} > {M_VDOC} (F4) zeigt die formatierten Seiten. {M_SPLIT} (Control+Y) zeigt darunter zusätzlich die **Formatcodes** des Textes; beide Hälften sind bearbeitbar, ein Klick wechselt zwischen ihnen. {M_VCODES} (F6) zeigt nur die Codes in der Systemschrift - so lassen sich lange Dokumente am schnellsten bearbeiten. Eingetippte Codes werden übernommen, sobald Sie eine Pause machen oder zurück in die Seite klicken.
+
+![split] Geteilte Ansicht: oben die Seite, unten ihre Codes.
+
+![quick] {M_VCODES}: das ganze Fenster zeigt die Codes.
+
+Die Codes sind Schalter; jeder gilt bis zum nächsten Code seiner Art:
+| Code | Bedeutung |
+| `[Font Name]` `[Size 12]` | Schrift und Größe in Punkt |
+| `[B]` `[/B]` `[I]` `[/I]` `[U]` `[/U]` | fett, kursiv, unterstrichen ein und aus |
+| `[Colour Red]` | Textfarbe |
+| `[Left]` `[Centre]` `[Right]` `[Justify]` | Ausrichtung des Absatzes |
+| `[Spacing 1]` `[Spacing 1.5]` `[Spacing 2]` | Zeilenabstand |
+| `[Indent 36 -18]` | linker Einzug und erste Zeile in Punkt |
+| `[Bullet]` `[Number]` `[/List]` | Listen |
+| `[Heading 1]` bis `[Heading 3]`, `[/Heading]` | Überschriften für das Inhaltsverzeichnis |
+| `[Contents Title]` `[Contents]` `[/Contents]` | das erzeugte Inhaltsverzeichnis |
+| `[Table 120 120 Border]` `[Row]` `[Cell]` `[/Table]` | Tabellen, Spaltenbreiten in Punkt |
+| `[Tab]` `[Page]` `[Column]` | Tabulator, Seitenumbruch, Spaltenumbruch |
+| `[[` | eine echte "[" |
+Die Codes sind in allen Sprachen englisch. Eine Klammer, die kein bekannter Code ist, bleibt normaler Text.
+
+# Dateien
+
+![m_file] Das Menü {MT_FILE}.
+
+## Neu, öffnen und speichern
+{M_NEW} (Control+N) öffnet ein leeres Dokument, {M_SAVEDOC} (Control+S) und {M_SAVEAS} (Control+Shift+S) schreiben RTF. RTF bewahrt alles: Schriften, Stile, Farben, Absatzformate, Listen, Tabellen, Diagramme, Spalten, Seitenformate, Kopf- und Fußzeilen, Bilder und Zeichnungen. Andere Textverarbeitungen lesen Text, Stile, Absätze, Listen und Tabellen; EdWords eigene Zusätze sind so gespeichert, dass sie sie übergehen.
+
+{M_OPEN} (Control+O) liest jedes Dokument, das EdWord kennt, und erkennt sein Format am Inhalt: RTF, reiner Text, Markdown, 1st Word Plus und Protext. Ein Dokument, das kein RTF ist, öffnet sich als neues, ungesichertes Dokument; beim Speichern wird daher nach einem Namen gefragt.
+
+## Importieren und exportieren
+{M_IMPORT} und {M_EXPORT} öffnen je ein Fenster, das offen bleibt, während Sie arbeiten. Wählen Sie das Format und seine Optionen und dann mit dem Knopf des Fensters die Datei. Optionen, die für das gewählte Format nicht gelten, sind grau.
+
+![importwin] Das Fenster {M_IMPORT}.
+
+**Importieren** liest *{S_AUTO}* (das Format wird erkannt), RTF, Text, Markdown, 1st Word Plus oder Protext. Bei reinem Text wählen Sie die Zeichen (Atari ST, Windows oder UTF-8 oder automatisch) und ob jede Zeile ein Absatz ist oder Zeilen bis zu einer Leerzeile verbunden werden. Die Datei öffnet sich in einem neuen Fenster oder kommt an der Schreibmarke ins aktuelle Dokument.
+
+**Exportieren** schreibt eine Kopie des zuletzt benutzten Dokuments (das Fenster nennt es) als RTF, Text, Markdown, 1st Word Plus, Protext oder PDF; das Dokument behält seinen Namen. Bei Text wählen Sie Zeilenenden und Zeichen, bei PDF die Auflösung.
+
+![exportwin] Das Fenster {M_EXPORT}.
+
+| Format | Was erhalten bleibt |
+| Text | die Wörter; Zeilenenden und Zeichen nach Wahl |
+| Markdown (`.md`) | Überschriften, fett und kursiv, Listen, Zitate, Codeblöcke, Tabellen, Linien und Links |
+| 1st Word Plus (`.DOC`) | fett, kursiv und unterstrichen, das Lineal (Breite und Blocksatz), Kopf- und Fußzeilen, Seitenumbrüche |
+| Protext (`.PRO`) | fett, kursiv und unterstrichen, Blocksatz und zentrierte Zeilen, der linke Rand, Zeilenabstand, Kopf- und Fußzeilen mit Seitenzahl, Seitenumbrüche |
+| PDF | alles, wie gedruckt |
+
+Findet {M_OPEN} eine reine Textdatei, fragt es, wie sie gelesen werden soll. EdWord erkennt Zeilenenden von Atari/DOS (CR LF), Unix (LF) und Mac (CR) sowie Atari-ST-, Windows- und UTF-8-Zeichen. Wählen Sie *{S_JOIN_LINES}* für Text, in dem einfache Zeilenumbrüche nur umbrechen und Leerzeilen Absätze trennen.
+
+![import] Eine Textdatei lesen.
+
+## Seitenansicht, Drucken und PDF
+{M_PREVIEW} (Control+Shift+P) zeigt jede Seite so, wie sie gedruckt wird, mit Kopf- und Fußzeile. Die Seite wechseln Sie mit den Pfeilknöpfen oder den Cursortasten; ein Klick auf die Seite oder 100% vergrößert. Die Ansicht folgt Ihren Änderungen, und ihre Knöpfe drucken das Dokument oder exportieren es als PDF.
+
+![preview] Die Seitenansicht.
+
+{M_PRINT} (Control+P) fragt nach den Seiten und der Zahl der Kopien und druckt über den GDOS-Druckertreiber (Gerät 21) in der Auflösung des Druckers.
+
+Der PDF-Export schreibt das Dokument als PDF-Datei, die jeder Computer drucken kann. Jede Seite wird im Speicher mit der unter {M_PREFS} eingestellten Auflösung gezeichnet und als Bild abgelegt; das PDF braucht daher keine Schriften, und Bilder behalten ihre Farben. Eine Anzeige zeigt den Fortschritt. Solche Anzeigen erscheinen auch, wenn Öffnen, Importieren, Speichern oder Exportieren länger als einen Augenblick dauert und während ein Bild oder ein Wörterbuch geladen wird.
+
+![gauge] Export als PDF.
+
+## Automatisch sichern
+Unter {M_PREFS} kann EdWord alle paar Minuten sichern, entweder in eine Sicherungskopie (`NAME.ASV` neben dem Dokument) oder ins Dokument selbst.
+
+## Schließen
+{M_CLOSE} (Control+U) schließt das Fenster, {M_QUIT} (Control+Q) beendet EdWord. Bevor ungesicherte Änderungen verloren gehen, werden Sie gefragt.
+
+# Bearbeiten
+
+![m_edit] Das Menü {MT_EDIT}.
+
+## Schreiben und auswählen
+Schreiben Sie wie in jeder Textverarbeitung; Return beendet einen Absatz. Bewegen Sie sich mit den Cursortasten, mit Clr/Home an den Zeilenanfang und mit Shift+Clr/Home an das Zeilenende. Ziehen Sie mit der Maus oder halten Sie Shift zu einer Cursortaste oder einem Klick, um auszuwählen; ein Doppelklick wählt ein Wort.
+
+## Rückgängig und wiederholen
+EdWord merkt sich Ihre letzten 100 Änderungen. {M_UNDO} (die **Undo**-Taste) nimmt die letzte Änderung zurück, {M_REDO} (Shift+Undo) führt sie wieder aus. Ein getipptes Wort zählt als eine Änderung.
+
+## Ausschneiden, kopieren und einfügen
+{M_CUT} (Control+X), {M_COPY} (Control+C) und {M_PASTE} (Control+V) nutzen das GEM-Klemmbrett, so dass Sie Text mit anderen Programmen austauschen können: EdWord schreibt `SCRAP.RTF` mit Formatierung und `SCRAP.TXT` als reinen Text. Ein ausgewähltes Bild oder eine Zeichnung wird als `SCRAP.IMG` kopiert, und ein `SCRAP.IMG`, das neuer ist als der Text im Klemmbrett, wird als Bild eingefügt. {M_SELALL} (Control+A) wählt das ganze Dokument.
+
+## Suchen und Ersetzen
+{M_FIND} (Control+F) öffnet ein Fenster, das offen bleibt, während Sie arbeiten. Geben Sie den Suchtext und auf Wunsch den Ersatz ein. *{S_MATCH_CASE}*, *{S_WHOLE_WORDS}* und *{S_BACKWARDS}* grenzen die Suche ein. {S_FIND_NEXT} wählt den nächsten Treffer, {S_REPLACE} ersetzt den gewählten Treffer und sucht den nächsten, {S_REPLACE_ALL} ersetzt alle Treffer in einem Schritt (ein Rückgängig nimmt alle zurück). {M_FINDNEXT} (Control+G oder F3) sucht ohne das Fenster weiter.
+
+![find] Das Fenster {S_FIND_TITLE}.
+
+# Zeichen
+
+## Schriften und Größen
+Das Menü {MT_FONT} enthält die Schriften und die üblichen Größen zusammen. {M_SIZEOTHER} stellt jede Größe von 4 bis 120 Punkt ein. Passen nicht alle Schriften ins Menü, öffnet {M_MOREFONTS} die Schriftauswahl.
+
+![m_font] Das Menü {MT_FONT} mit Größen und Schriften.
+
+![size] Eine beliebige Größe.
+
+{M_FONTSEL} (Control+Shift+F) öffnet die **Schriftauswahl**, ein Fenster mit Listen der Schriften und Größen, Stilfeldern und einem Muster. Sie folgt der Schreibmarke im Dokument; {S_APPLY} (oder Return oder ein Doppelklick) übernimmt die Wahl. Läuft ein externer Fontselektor, der in der Umgebungsvariablen `FONTSELECT` genannt ist, nutzt EdWord stattdessen diesen.
+
+![fontsel] Die Schriftauswahl.
+
+## Stil und Farbe
+Das Menü {MT_STYLE} stellt {M_PLAIN}, {M_BOLD} (Control+B), {M_ITALIC} (Control+I) und {M_UNDER} (Control+Shift+U) sowie die Textfarbe ein. Farben bleiben in RTF und PDF erhalten und erscheinen am Bildschirm, soweit die Auflösung es erlaubt; unter {M_PREFS} lassen sie sich abschalten.
+
+![m_style] Das Menü {MT_STYLE}.
+
+Ist Text ausgewählt, gilt ein Stil für die Auswahl, sonst für das, was Sie als Nächstes tippen.
+
+# Absätze
+
+![m_para] Das Menü {MT_PARA}.
+
+Absatzeinstellungen gelten für den Absatz mit der Schreibmarke oder für alle Absätze der Auswahl.
+
+## Ausrichtung und Zeilenabstand
+{M_JLEFT} (Control+L), {M_JCENTRE} (Control+E), {M_JRIGHT} (Control+R) und {M_JFULL} (Control+Shift+J). Der Zeilenabstand kann {M_SP1}, {M_SP15} oder {M_SP2} sein.
+
+## Einzüge und hängende Einzüge
+{M_INDENTS} stellt den linken Einzug und die erste Zeile in Millimetern ein. Eine negative erste Zeile ergibt einen **hängenden Einzug**: Die erste Zeile beginnt weiter links als die übrigen, etwa für nummerierte Punkte oder ein Glossar. {M_HANGING} schaltet einen hängenden Einzug ein und aus. In der ersten Zeile eines Absatzes mit hängendem Einzug springt ein Tabulator zum Einzug, so dass der Text danach mit den Zeilen darunter abschließt.
+
+![indents] Einzüge; der Absatz darunter hat einen hängenden Einzug.
+
+## Listen
+{M_BULLETS} (F9) und {M_NUMBERS} (F10) machen aus Absätzen eine Liste; die Symbole in der Symbolleiste tun dasselbe. Jeder Absatz ist ein Eintrag. Die Nummern zählen durch die Liste weiter und beginnen nach jedem anderen Absatz neu. Wählen Sie denselben Befehl noch einmal, um die Liste zu beenden.
+
+![lists] Eine Aufzählung und eine nummerierte Liste.
+
+## Überschriften
+{M_HEAD1}, {M_HEAD2} und {M_HEAD3} kennzeichnen einen Absatz als Überschrift für das Inhaltsverzeichnis; {M_BODY} macht ihn wieder zu normalem Text. Überschriften sind beim Bearbeiten am Rand mit H1-H3 markiert; die Marken werden nicht gedruckt.
+
+## Umbruchspalte
+{M_WRAPCOL} bricht Zeilen zusätzlich nach einer Anzahl von Zeichen um, für Text mit fester Breite. Der Textexport beendet dann jede Zeile mit einem Zeilenumbruch.
+
+# Seiten
+
+![page] Der Dialog {S_PAGE_TITLE}.
+
+## Seitenlayout
+{M_PAGE} im Menü {MT_FILE} stellt Papier (A4, Letter, A5, Legal), Ausrichtung, Ränder, die Zahl der Textspalten (1 bis 4) und ihren Abstand ein. *{S_APPLY_TO}* bestimmt, wofür die Einstellungen gelten: *{S_WHOLE_DOC}*, *{S_THIS_PAGE}* (die Seite mit der Schreibmarke) oder *{S_THIS_PAGE_ON}*. So kann ein Dokument eine einspaltige erste Seite und danach zwei Spalten haben, oder eine Seite mit breiteren Rändern.
+
+![columns] Eine Seite mit zwei Spalten.
+
+## Umbrüche
+{MT_INSERT} > {M_PGBRK} (Control+Return) beginnt eine neue Seite; {M_COLBRK} (Control+Shift+Return) springt in die nächste Spalte.
+
+## Kopf- und Fußzeilen
+{M_HEADFOOT} gibt jeder Seite eine Kopf- und eine Fußzeile, links, zentriert oder rechts, in der gewünschten Größe. Die Felder `{page}`, `{pages}`, `{date}`, `{time}` und `{file}` werden auf jeder Seite ausgefüllt. Auf der ersten Seite können sie entfallen.
+
+![headfoot] Kopf- und Fußzeile.
+
+# Tabellen
+
+![m_insert] Das Menü {MT_INSERT}.
+
+## Eine Tabelle einfügen
+{MT_INSERT} > {M_TBLINS} fragt nach der Zahl der Zeilen und Spalten und ob Gitterlinien gezeichnet werden. Die Tabelle füllt die Textbreite mit gleich breiten Spalten.
+
+![tblins] Eine Tabelle einfügen.
+
+![tblnew] Die neue Tabelle.
+
+## In einer Tabelle arbeiten
+Schreiben Sie in einer Zelle wie in einem Absatz; der Text bricht in der Zelle um, und die Zeile wächst mit. **Tab** springt in die nächste Zelle, Shift+Tab in die vorige; Tab in der letzten Zelle fügt eine Zeile an. Return springt in die nächste Zelle und aus der letzten Zelle hinter die Tabelle. Eine Tabelle ohne Gitterlinien zeigt am Bildschirm gepunktete Linien, die nicht gedruckt werden.
+
+![table] Eine Tabelle mit Gitterlinien.
+
+## Eine Tabelle ändern
+Steht die Schreibmarke in einer Tabelle, stellt {M_TBLPROP} die Zahl der Zeilen und Spalten, die Breite jeder Spalte in Millimetern und die Gitterlinien ein. {M_ROWINS}, {M_ROWDEL}, {M_COLINS}, {M_COLDEL} und {M_TBLDEL} ändern die Tabelle an der Schreibmarke. Eine Tabelle kann bis zu 12 Spalten haben.
+
+![tblprop] {S_TBL_PROP_TITLE}.
+
+## Diagramme
+Eine Tabelle mit Zahlen kann ein **Diagramm** bekommen: Torte, Balken, 3D-Torte oder 3D-Balken, über, unter, links oder rechts der Tabelle. Setzen Sie die Schreibmarke in die Tabelle und wählen Sie {MT_INSERT} > {M_CHART}; ein Menü bietet die Art des Diagramms und seinen Platz. Ein Klick auf das Diagramm öffnet später dasselbe Menü; *{S_CH_NONE}* entfernt es.
+
+![chartmenu] Das Diagramm-Menü.
+
+Die Zeilen sind die Kategorien, die Spalten mit Zahlen die Reihen. Eine erste Zeile mit Wörtern (oder Jahreszahlen) benennt die Reihen, eine erste Spalte mit Wörtern die Kategorien. Das Diagramm folgt den Zahlen beim Tippen, wird gedruckt und kommt ins PDF; Farben werden genutzt, wo der Bildschirm sie hat.
+
+![chart] Ein Balkendiagramm unter seiner Tabelle.
+
+# Bilder und Zeichnungen
+
+## Bilder
+{MT_INSERT} > {M_PICTURE} setzt ein Bild auf die Seite mit der Schreibmarke. EdWord liest GEM IMG (monochrom, farbig, XIMG und Echtfarben), PNG (jede Art; durchsichtige Teile werden weiß) und IFF ILBM (auch HAM und 24 Bit). Auf Bildschirmen mit 15 Bit Farbe oder mehr erscheint das Bild in seinen Farben, sonst mit einer Rasterung, die seine Helligkeitsstufen erhält; so wird es auch gedruckt, und im RTF und in einem farbigen PDF behält es seine Farben.
+
+![picture] Ein Bild, um das der Text fließt.
+
+Ein Klick auf ein Bild oder eine Zeichnung wählt es aus: An den Ecken erscheinen Griffe. **Ziehen** Sie es, um es zu verschieben (auch auf eine andere Seite), und **ziehen Sie an einem Griff**, um die Größe zu ändern; Bilder behalten ihr Seitenverhältnis, außer Sie halten Shift. Die Cursortasten verschieben ein ausgewähltes Objekt ein Stück (mit Shift um einen Punkt), Delete entfernt es, Esc hebt die Auswahl auf.
+
+![objsel] Eine ausgewählte Zeichnung.
+
+Ein Doppelklick auf ein Bild oder Return öffnet seine Einstellungen: Position und Größe in Millimetern, Seite, Rahmen und den Textfluss: *{S_WRAP_NONE}* (das Objekt liegt über dem Text), *{S_WRAP_BOX}* oder bei Zeichnungen *{S_WRAP_SHAPE}*, wobei der Text dem Umriss der Formen folgt.
+
+![drawprops] Einstellungen einer Zeichnung.
+
+## Zeichnungen
+{MT_INSERT} > {M_DRAWING} setzt eine leere Zeichnung und öffnet das **Zeichenfenster**. Wählen Sie eine Form - Rechteck, abgerundetes Rechteck, Ellipse, Linie oder Dreieck - und ziehen Sie auf der Fläche, um sie zu zeichnen. *{S_DT_SELECT}* wählt eine Form aus: Ziehen verschiebt sie, Ziehen am Eckgriff ändert ihre Größe; Tab geht die Formen durch, die Cursortasten verschieben die gewählte. {S_DT_FILL} (keine, weiß, grau oder voll), {S_DT_WIDTH} (Linienstärke 0 bis 5) und die Farbe gelten für die gewählte Form und für neue. {S_DT_FRONT} holt eine Form vor die anderen, {S_DELETE} entfernt sie. Eine Zeichnung fasst bis zu 16 Formen. Jede Änderung erscheint sofort im Dokument; {S_DT_DONE} schließt das Fenster. Ein Doppelklick auf eine Zeichnung öffnet sie wieder.
+
+![drawedit] Das Zeichenfenster.
+
+# Inhaltsverzeichnis
+Kennzeichnen Sie die Überschriften mit {MT_PARA} > {M_HEAD1} bis {M_HEAD3}, setzen Sie die Schreibmarke an die Stelle für das Verzeichnis und wählen Sie {MT_INSERT} > {M_TOC}. EdWord listet die Überschriften, nach Ebene eingerückt, mit Füllpunkten und Seitenzahlen. Wählen Sie {M_TOC} nach Änderungen erneut, um das Verzeichnis zu aktualisieren; der Titel ist bearbeitbar und bleibt erhalten.
+
+# Extras
+
+![m_tools] Das Menü {MT_TOOLS}.
+
+## Rechtschreibung prüfen
+{M_SPELL} (Control+K) prüft das Dokument ab der Schreibmarke in einem Fenster, das offen bleibt. Zu jedem unbekannten Wort können Sie eine Korrektur eintippen oder einen Vorschlag wählen; {S_IGNORE} überspringt es, {S_IGNORE_ALL} überspringt es für diese Sitzung, {S_ADD} nimmt es in Ihr Benutzerwörterbuch auf.
+
+![spell] Die Rechtschreibprüfung.
+
+## Prüfung beim Tippen
+Ist {M_LIVESPELL} eingeschaltet, werden unbekannte Wörter beim Tippen mit einer Wellenlinie unterstrichen.
+
+![livespell] Unterstrichene unbekannte Wörter.
+
+**Halten Sie die linke Maustaste** eine halbe Sekunde auf einem unterstrichenen Wort: Ein Menü bietet die Vorschläge, *{S_IGNORE_ALL}* und *{S_ADD_TO_DIC}*.
+
+![livepopup] Vorschläge zu einem unterstrichenen Wort.
+
+## Fünf Sprachen
+Die Einstellung *{S_DICTIONARY}* unter {M_PREFS} wählt Englisch, Deutsch, Spanisch, Italienisch oder Französisch für die Rechtschreibung (die Wörterbuchdatei muss in EdWords Ordner liegen). Die deutsche Prüfung erkennt zusammengesetzte Wörter aus zwei bekannten Wörtern, die französische und italienische verkürzte Formen wie *l'homme* und *dell'anno*, und die Vorschläge nutzen die Akzentbuchstaben der Sprache.
+
+## Benutzerwörterbücher
+Hinzugefügte Wörter kommen in `USER.UDC`. Mit {M_UDLOAD} und {M_UDNEW} können Sie bis zu vier Benutzerwörterbücher führen, etwa eines je Fachgebiet; im Menü wählen Sie, welches neue Wörter aufnimmt.
+
+## Thesaurus
+Setzen Sie die Schreibmarke auf ein Wort und wählen Sie {M_THES} (Shift+F7). Das Fenster listet die Bedeutungen des Wortes (als Substantiv, Verb, Adjektiv oder Adverb markiert) und zur gewählten Bedeutung die Synonyme. Ein Klick auf ein Synonym setzt es in das Ersatzfeld, ein Doppelklick schlägt dieses Wort nach; dann {S_REPLACE}. Formen wie "boats" oder "rowing" werden unter ihrer Grundform gefunden. Der Thesaurus stammt aus Open English WordNet (Lizenz CC BY 4.0) und ist englisch.
+
+![thes] Der Thesaurus.
+
+## Dokumentstatistik
+{M_SUMMARY} zählt Seiten, Wörter, Zeichen (mit und ohne Leerzeichen), Absätze, Zeilen, Tabellen, Bilder und Zeichnungen.
+
+![summary] {S_SUMMARY_TITLE}.
+
+## Einstellungen
+{M_PREFS} legt Sprache, Datumsformat, Papier für neue Dokumente, die Symbolleiste für neue Fenster, Prüfung beim Tippen, das Wörterbuch, Textfarben, die PDF-Auflösung, die Anzeige (Papier, dunkel, grün oder bernstein) und das automatische Sichern fest. Sie werden in `EDWORD.INF` gespeichert.
+
+![prefs] {S_PREFS_TITLE}.
+
+# Fenster
+
+![m_window] Das Menü {MT_WINDOW}.
+
+{M_TILEV} und {M_TILEH} teilen den Bildschirm unter den offenen Dokumenten auf; {M_CASCADE} stapelt sie. {M_ICONIFY} (Control+Z) verkleinert ein Fenster zum Symbol (ab AES 4.1 auf die Art des AES), {M_ICONALL} tut das mit allen, {M_BOTTOM} legt ein Fenster hinter die anderen und {M_CYCLE} (Control+W) holt das nächste nach vorn. Die Liste am Ende des Menüs holt jedes Dokument nach vorn; sind es mehr Dokumente, als hineinpassen, listet {M_WINMORE} den Rest. Auch Dialoge und Fortschrittsanzeigen sind Fenster und lassen sich verschieben; ein Dokument, Dialog oder Werkzeugfenster öffnet sich wieder dort, wo es zuletzt geschlossen wurde.
+
+![tilev] {M_TILEV}.
+
+![tileh] {M_TILEH}.
+
+# Über EdWord
+
+![about] Das Info-Fenster.
+
+{MT_DESK} > {M_ABOUT} zeigt die Version. Wer EdWord aus den Quellen übersetzt, kann Versionsnummer und den Satz darunter auf der Kommandozeile setzen: `make ED_VERSION=3.1 ED_ABOUT="Für unseren Verein"`.
+
+# EdWord auf anderen Computern
+Dasselbe EdWord läuft auf dem Amiga, dem Mac und unter Windows. Dokumente, Layout, RTF, PDF, Rechtschreibung und Thesaurus verhalten sich genau wie auf dem ST, so dass ein Dokument überall gleich aussieht; Menüs, Tasten und Dialoge folgen den Gepflogenheiten des jeweiligen Systems.
+
+## Amiga
+Zwei Programme: **EdWord** für AmigaOS 2.04 oder neuer und **EdWord13** für Workbench 1.2 und 1.3, beide auf jedem 68000 oder besser. Kopieren Sie das Programm und sein Piktogramm mit den Wörterbüchern und dem Thesaurus in eine Schublade; die Einstellungen stehen in `EdWord.prefs` daneben. Jede Amiga-Bitmapschrift in `FONTS:` ist nutzbar.
+
+EdWord öffnet einen eigenen hochauflösenden Bildschirm mit 16 Farben. *{S_AMI_SCREEN}* unter {M_PREFS} wählt einen Interlace-Bildschirm, einen wie die Workbench, jeden Bildschirmmodus (ab Workbench 2.1) oder den Workbench-Bildschirm selbst; dort beendet das Schließen des letzten Dokuments EdWord. Das erste Menü ist *{S_AMI_PROJECT}*; Kürzel nutzen die rechte Amiga-Taste (N, O, S, A für Speichern unter, P, W, Q; Z, Y, X, C, V; F und G zum Suchen). Bei den Cursortasten springt Shift an die Zeilenenden oder um ein Fenster, Alt wortweise und seitenweise, Ctrl an die Enden des Dokuments, und Shift+Alt erweitert die Auswahl. Gedruckt wird über `printer.device` mit dem Drucker aus den Printer-Voreinstellungen.
+
+## Mac
+EdWord für macOS 11 oder neuer, auf Apple Silicon und Intel, nutzt jede Schrift des Macs in jeder Größe. Die Menüs folgen den Gepflogenheiten des Macs, mit den üblichen Befehlstasten und einem Hilfe-Menü, das dieses Handbuch öffnet; Importieren und Exportieren sind schwebende Fenster. Gedruckt wird mit dem gewohnten Druckdialog, der auch PDFs sichert, und Bilder kommen als Bilder ins Klemmbrett und aus ihm.
+
+## Windows
+Ein Programm, `EdWord.exe`, läuft auf jedem Windows von Windows 95 bis Windows 11 und braucht außer Wörterbüchern und Thesaurus keine weiteren Dateien. Die Dokumente sind Fenster im Hauptfenster von EdWord: Maximieren Sie eines, oder ordnen Sie sie über das Menü {MT_WINDOW} nebeneinander, überlappend oder minimiert an. Jede TrueType-Schrift ist nutzbar. Text erscheint genau an den Stellen, die das Layout ihm gibt, so dass Bildschirm, Ausdruck und PDF übereinstimmen.
+
+Die Menüs sind {MT_FILE}, {MT_EDIT}, {MT_INSERT}, {MT_FONT}, {MT_STYLE}, {MT_PARA}, {MT_TOOLS}, {MT_WINDOW} und {S_W_HELP} mit den unter Windows üblichen Tasten: Strg+N, O, S, P, W, Z, Y, X, C, V, A, F, B, I und U, Strg+Umschalt+S für {M_SAVEAS}, F3 zum Weitersuchen und Alt+F4 zum Beenden. Umschalt mit den Cursortasten erweitert die Auswahl, Strg springt wortweise und mit Pos1 und Ende an die Enden des Dokuments. Die **rechte Maustaste** öffnet ein Menü: Rechtschreibvorschläge auf einem unterstrichenen Wort, Ausschneiden, Kopieren und Einfügen auf Text, Eigenschaften und Löschen auf einem Bild oder einer Zeichnung.
+
+{M_PRINT} nutzt den Druckdialog von Windows, so dass jeder Drucker wählbar ist. Kopieren legt Text als RTF und reinen Text in die Zwischenablage, so dass andere Textverarbeitungen ihn mit Formatierung einfügen, und Bilder als Bitmaps; Einfügen nimmt RTF, Text oder eine Bitmap aus anderen Programmen. Dokumente lassen sich auf EdWords Fenster ziehen. Einstellungen, Benutzerwörterbücher und Sicherungen unbenannter Dokumente liegen in `EdWord.ini` und daneben im Anwendungsdaten-Ordner.
+
+# Tasten
+Auf dem ST:
+| Taste | Funktion |
+| Control+N, O, S, U, Q | neu, öffnen, speichern, schließen, beenden |
+| Control+Shift+S | speichern unter |
+| Control+P, Control+Shift+P | drucken, Seitenansicht |
+| Undo, Shift+Undo | rückgängig, wiederholen |
+| Control+X, C, V, A | ausschneiden, kopieren, einfügen, alles auswählen |
+| Control+F; Control+G oder F3 | suchen und ersetzen, weitersuchen |
+| Control+Pfeil hoch, runter; Control+J | vorige Seite, nächste Seite, gehe zu Seite |
+| Control+D | Datum einfügen |
+| Control+Return, Control+Shift+Return | Seitenumbruch, Spaltenumbruch |
+| Control+Shift+F | Schriftauswahl |
+| Control+B, I, Control+Shift+U | fett, kursiv, unterstrichen |
+| Control+L, E, R, Control+Shift+J | links, zentriert, rechts, Blocksatz |
+| F9, F10 | Aufzählung, Nummerierung |
+| Control+K, Shift+F7 | Rechtschreibung, Thesaurus |
+| F4, Control+Y, F6 | Seitenansicht, geteilte Ansicht, {M_VCODES} |
+| F7, F8 | verkleinern, vergrößern |
+| Control+T, Control+Shift+R | Symbolleiste, Lineale |
+| Control+Z, Control+W | ikonifizieren, nächstes Fenster |
+| Tab, Shift+Tab (in einer Tabelle) | nächste Zelle, vorige Zelle |
+| Esc | ein Werkzeugfenster schließen, ein Bild abwählen |
+Die Tasten auf Amiga, Mac und Windows stehen unter "EdWord auf anderen Computern".
+
+# Grenzen
+- 32 Dokumente gleichzeitig.
+- 255 verschiedene Absatzformate, 48 Tabellen und 32 Bilder und Zeichnungen je Dokument; 12 Spalten je Tabelle; 16 Formen je Zeichnung.
+- Bis zu 4 Textspalten je Seite.
+- Das Dokument muss in den Speicher passen; mit 1 MB sind das etwa 100 Seiten Text.

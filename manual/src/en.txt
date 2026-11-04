@@ -1,0 +1,369 @@
+@title EdWord 3.0
+@subtitle User manual
+@intro A word processor for the Atari ST with GDOS fonts, tables, charts, pictures, drawings, spelling in five languages, a thesaurus and PDF export, also for the Amiga, the Mac and Windows.
+@shotnote The screenshots were taken in ST high resolution without GDOS, so only the system font is shown. With GDOS loaded, the document is shown in its real fonts. The Amiga, Mac and Windows versions look like their own systems but work in the same way (see "EdWord on other computers").
+@contents Contents
+
+# Getting started
+
+## What you need
+EdWord runs on any Atari ST, STE, TT or Falcon (and in emulators) with at least 1 MB of memory, in a screen mode at least 640 pixels wide: ST medium resolution, ST high resolution or more. Load a GDOS (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS or G+Plus) to have more than the system font; outline fonts give the best results. Versions for the Amiga, the Mac and Windows are described at the end of this manual.
+
+## Installing
+Copy these files into one folder:
+- `EDWORD.PRG` - the program.
+- `EDWORD.DIC` - the spelling dictionary (British English).
+- `EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC` - the German, Spanish, Italian and French dictionaries, if you want them.
+- `EDWORD.THS` - the thesaurus (English).
+- `MANUALEN.PDF` (and `MANUALDE`, `MANUALES`, `MANUALIT`, `MANUALFR`) - this manual.
+EdWord creates `EDWORD.INF` (your preferences) and `USER.UDC` (your own words) in the same folder.
+
+## Starting
+Double-click `EDWORD.PRG`. You can also drop a document on it, or install it as an application for `*.RTF` files. Hold **Control** while it starts to skip the GDOS fonts (safe mode), or **Alternate** to size outline fonts with `vst_point` if your GDOS has trouble with `vst_arbpt`.
+
+## Language
+EdWord speaks English, German, Spanish, Italian and French. The first time it starts it uses the language of your TOS; you can change it at any time in {M_PREFS}. The spelling dictionary is chosen separately there; the thesaurus is English.
+
+# The window
+
+![main] A document window: title, information line, toolbar and the page.
+
+Each document has its own window; up to 32 documents can be open. Under the title the **information line** shows the font, size and style at the cursor, the paragraph's alignment, list and heading, the page number, the zoom and the view.
+
+## The toolbar
+The toolbar can be shown or hidden for each window with {MT_WINDOW} > {M_TOOLBAR} (Control+T). From left to right:
+| Icon | Does |
+| Undo, Redo | undo or redo the last change |
+| B I U | bold, italic, underline |
+| Four alignment icons | left, centred, right, justified |
+| List icons | bullet list, numbered list |
+| Table | insert a table |
+| Font, size and colour | pop-up lists (marked with a small arrow) |
+| Magnifier | zoom pop-up |
+| Tick | check spelling |
+| Codes | split view with the formatting codes |
+| Ruler, guides | rulers along the page, dotted margin and column guides |
+Settings that are on show pressed; icons that cannot be used now are grey.
+
+![zoompop] The zoom pop-up on the toolbar.
+
+## Zoom
+The page can be shown at 50, 75, 100, 125, 150 or 200 per cent: use the magnifier on the toolbar, or {M_ZOOMIN} (F8) and {M_ZOOMOUT} (F7) in the {MT_WINDOW} menu.
+
+![zoom] The document at 150 per cent.
+
+## Rulers and guides
+{M_RULERS} (Control+Shift+R) shows rulers in centimetres along the top and left of the page view; {M_GUIDES} draws the margins and columns as dotted lines that do not print. Both are remembered. Double-click the top ruler for {M_INDENTS}, the left one for {M_PAGE}.
+
+![rulers] The rulers.
+
+## Moving around
+The scroll bars, the arrow keys and dragging a selection move through the document; only the part that comes into view is drawn again, so scrolling is quick. {MT_EDIT} > {M_PREVPAGE} and {M_NEXTPAGE} (Control with the up and down arrows) go a page at a time and {M_GOTOPAGE} (Control+J) to any page.
+
+## Three views
+{MT_WINDOW} > {M_VDOC} (F4) shows the formatted pages. {M_SPLIT} (Control+Y) adds the **formatting codes** of the text below the page; both halves can be edited, and a click moves between them. {M_VCODES} (F6) shows only the codes, in the system font, which is the fastest way to edit long documents. Codes you type are applied when you pause or click back in the page.
+
+![split] Split view: the page above, its codes below.
+
+![quick] {M_VCODES}: the whole window shows the codes.
+
+The codes are switches, each lasting until the next code of its kind:
+| Code | Meaning |
+| `[Font name]` `[Size 12]` | font and point size |
+| `[B]` `[/B]` `[I]` `[/I]` `[U]` `[/U]` | bold, italic, underline on and off |
+| `[Colour Red]` | text colour |
+| `[Left]` `[Centre]` `[Right]` `[Justify]` | paragraph alignment |
+| `[Spacing 1]` `[Spacing 1.5]` `[Spacing 2]` | line spacing |
+| `[Indent 36 -18]` | left indent and first line, in points |
+| `[Bullet]` `[Number]` `[/List]` | lists |
+| `[Heading 1]` to `[Heading 3]`, `[/Heading]` | headings for the table of contents |
+| `[Contents Title]` `[Contents]` `[/Contents]` | the generated table of contents |
+| `[Table 120 120 Border]` `[Row]` `[Cell]` `[/Table]` | tables, column widths in points |
+| `[Tab]` `[Page]` `[Column]` | tab, page break, column break |
+| `[[` | a real "[" |
+A bracket that is not a known code stays ordinary text.
+
+# Files
+
+![m_file] The {MT_FILE} menu.
+
+## New, open and save
+{M_NEW} (Control+N) opens an empty document, {M_SAVEDOC} (Control+S) and {M_SAVEAS} (Control+Shift+S) write RTF. RTF keeps everything: fonts, styles, colours, paragraph formats, lists, tables, charts, columns, page formats, headers and footers, pictures and drawings. Other word processors read the text, styles, paragraphs, lists and tables; EdWord's own extras are stored so that they ignore them.
+
+{M_OPEN} (Control+O) reads any document EdWord knows, recognising its format by its contents: RTF, plain text, Markdown, 1st Word Plus and Protext. A document that is not RTF opens as a new, unsaved document, so saving it asks for a name.
+
+## Import and export
+{M_IMPORT} and {M_EXPORT} each open a window that stays open while you work. Choose the format and its options, then press the window's button to choose the file. Options that do not apply to the chosen format are grey.
+
+![importwin] The {M_IMPORT} window.
+
+**Import** reads *{S_AUTO}* (the format is recognised), RTF, Text, Markdown, 1st Word Plus or Protext. For plain text you choose the characters (Atari ST, Windows or UTF-8, or automatic) and whether each line is a paragraph or lines join up to a blank line. The file opens in a new window, or goes into the current document at the cursor.
+
+**Export** writes a copy of the document you used last (the window names it) as RTF, Text, Markdown, 1st Word Plus, Protext or PDF; the document keeps its own name. Text has a choice of line ends and characters, PDF of resolution.
+
+![exportwin] The {M_EXPORT} window.
+
+| Format | What is kept |
+| Text | the words; line ends and characters as you choose |
+| Markdown (`.md`) | headings, bold and italic, lists, quotes, code blocks, tables, rules and links |
+| 1st Word Plus (`.DOC`) | bold, italic and underline, the ruler (width and justification), headers, footers, page breaks |
+| Protext (`.PRO`) | bold, italic and underline, justified and centred lines, the left margin, line spacing, headers and footers with the page number, page breaks |
+| PDF | everything, as printed |
+
+When {M_OPEN} finds a plain text file, it asks how to read it. EdWord recognises Atari/DOS (CR LF), Unix (LF) and Mac (CR) line ends and Atari ST, Windows and UTF-8 characters. Choose *{S_JOIN_LINES}* for text where single line breaks only wrap lines and blank lines separate paragraphs.
+
+![import] Reading a text file.
+
+## Print preview, printing and PDF
+{M_PREVIEW} (Control+Shift+P) shows each page as it will print, with its header and footer. Change page with the arrow buttons or the cursor keys; click the page or use 100% to zoom in. The preview follows your editing, and its buttons print the document or export it as a PDF.
+
+![preview] The print preview.
+
+{M_PRINT} (Control+P) asks for the pages and the number of copies and prints through the GDOS printer driver (device 21), at the printer's own resolution.
+
+PDF export writes the document as a PDF file that any computer can print. Each page is drawn in memory at the resolution set in {M_PREFS} and stored as an image, so no fonts are needed in the PDF; pictures keep their colours. A gauge shows how far it has got. Gauges also come up when opening, importing, saving or exporting takes more than a moment, and while a picture or a dictionary loads.
+
+![gauge] Exporting a PDF.
+
+## Auto-save
+In {M_PREFS} you can have EdWord save every few minutes, either to a backup copy (`NAME.ASV` beside the document) or to the document itself.
+
+## Closing
+{M_CLOSE} (Control+U) closes the window, {M_QUIT} (Control+Q) leaves EdWord. You are asked before unsaved changes are lost.
+
+# Editing
+
+![m_edit] The {MT_EDIT} menu.
+
+## Typing and selecting
+Type as in any word processor; Return ends a paragraph. Move with the cursor keys, Clr/Home for the start of a line and Shift+Clr/Home for its end. Drag with the mouse or hold Shift with a cursor key or a click to select; double-click selects a word.
+
+## Undo and redo
+EdWord remembers your last 100 changes. {M_UNDO} (the **Undo** key) takes back the last change, {M_REDO} (Shift+Undo) does it again. Typing a word counts as one change.
+
+## Cut, copy and paste
+{M_CUT} (Control+X), {M_COPY} (Control+C) and {M_PASTE} (Control+V) use the GEM clipboard, so you can exchange text with other programs: EdWord writes `SCRAP.RTF` with the formatting and `SCRAP.TXT` as plain text. A selected picture or drawing is copied as `SCRAP.IMG`, and a `SCRAP.IMG` newer than the text on the clipboard is pasted as a picture. {M_SELALL} (Control+A) selects the whole document.
+
+## Find and replace
+{M_FIND} (Control+F) opens a window that stays open while you work. Type the text to find and, if you like, its replacement. *{S_MATCH_CASE}*, *{S_WHOLE_WORDS}* and *{S_BACKWARDS}* narrow the search. {S_FIND_NEXT} selects the next match, {S_REPLACE} replaces the selected match and finds the next, {S_REPLACE_ALL} replaces every match in one step (one Undo takes them all back). {M_FINDNEXT} (Control+G or F3) searches again without the window.
+
+![find] The {S_FIND_TITLE} window.
+
+# Characters
+
+## Fonts and sizes
+The {MT_FONT} menu has the fonts and the common point sizes together. {M_SIZEOTHER} sets any size from 4 to 120 points. If there are more fonts than fit in the menu, {M_MOREFONTS} opens the font selector.
+
+![m_font] The {MT_FONT} menu, with sizes and fonts.
+
+![size] Any point size.
+
+{M_FONTSEL} (Control+Shift+F) opens the **font selector**, a window with lists of fonts and sizes, style boxes and a sample. It follows the cursor in the document; {S_APPLY} (or Return, or a double-click) applies the choice. If an external font selector is running and named in the `FONTSELECT` environment variable, EdWord uses that instead.
+
+![fontsel] The font selector.
+
+## Style and colour
+The {MT_STYLE} menu sets {M_PLAIN}, {M_BOLD} (Control+B), {M_ITALIC} (Control+I) and {M_UNDER} (Control+Shift+U), and the text colour. Colours are kept in RTF and PDF and shown on screen as far as the resolution allows; they can be switched off in {M_PREFS}.
+
+![m_style] The {MT_STYLE} menu.
+
+With text selected, a style applies to the selection; otherwise it applies to what you type next.
+
+# Paragraphs
+
+![m_para] The {MT_PARA} menu.
+
+Paragraph settings apply to the paragraph with the cursor, or to every paragraph in the selection.
+
+## Alignment and spacing
+{M_JLEFT} (Control+L), {M_JCENTRE} (Control+E), {M_JRIGHT} (Control+R) and {M_JFULL} (Control+Shift+J). Line spacing can be {M_SP1}, {M_SP15} or {M_SP2}.
+
+## Indents and hanging indents
+{M_INDENTS} sets the left indent and the first line in millimetres. A negative first line makes a **hanging indent**: the first line starts further left than the rest, as for numbered points or a glossary. {M_HANGING} switches a hanging indent on and off. In the first line of a paragraph with a hanging indent, a tab moves on to the indent, so the text after it lines up with the lines below.
+
+![indents] Indents; the paragraph below uses a hanging indent.
+
+## Lists
+{M_BULLETS} (F9) and {M_NUMBERS} (F10) turn paragraphs into a list, with the toolbar icons doing the same. Each paragraph is one item. Numbers count on through the list and start again after any other paragraph. Choose the same command again to end the list.
+
+![lists] A bullet list and a numbered list.
+
+## Headings
+{M_HEAD1}, {M_HEAD2} and {M_HEAD3} mark a paragraph as a heading for the table of contents; {M_BODY} makes it ordinary text again. Headings are marked H1-H3 in the margin while you edit; the marks do not print.
+
+## Wrap column
+{M_WRAPCOL} also breaks lines after a number of characters, for text that must keep a fixed width. Text export then ends each line with a line break.
+
+# Pages
+
+![page] The {S_PAGE_TITLE} dialog.
+
+## Page layout
+{M_PAGE} in the {MT_FILE} menu sets the paper (A4, Letter, A5, Legal), the orientation, the margins, the number of text columns (1 to 4) and the gap between them. *{S_APPLY_TO}* decides where the settings go: *{S_WHOLE_DOC}*, *{S_THIS_PAGE}* (the page with the cursor), or *{S_THIS_PAGE_ON}*. So one document can have a single-column first page and two columns after it, or a page with wider margins.
+
+![columns] A page with two columns.
+
+## Breaks
+{MT_INSERT} > {M_PGBRK} (Control+Return) starts a new page; {M_COLBRK} (Control+Shift+Return) moves on to the next column.
+
+## Headers and footers
+{M_HEADFOOT} gives each page a header and a footer line, left, centred or right, at the size you choose. The fields `{page}`, `{pages}`, `{date}`, `{time}` and `{file}` are filled in on each page. They can be left off the first page.
+
+![headfoot] Header and footer.
+
+# Tables
+
+![m_insert] The {MT_INSERT} menu.
+
+## Inserting a table
+{MT_INSERT} > {M_TBLINS} asks for the number of rows and columns and whether to draw grid lines. The table fills the text width, with columns of equal width.
+
+![tblins] Inserting a table.
+
+![tblnew] The new table.
+
+## Working in a table
+Type in a cell as in a paragraph; text wraps inside the cell and the row grows. **Tab** moves to the next cell and Shift+Tab to the previous one; Tab in the last cell adds a row. Return moves to the next cell, and from the last cell out of the table. A table without grid lines shows dotted lines on screen that do not print.
+
+![table] A table with grid lines.
+
+## Changing a table
+With the cursor in a table, {M_TBLPROP} sets the number of rows and columns, each column's width in millimetres and the grid lines. {M_ROWINS}, {M_ROWDEL}, {M_COLINS}, {M_COLDEL} and {M_TBLDEL} change the table at the cursor. A table can have up to 12 columns.
+
+![tblprop] {S_TBL_PROP_TITLE}.
+
+## Charts
+A table of numbers can have a **chart**: a pie, a bar chart, a 3D pie or 3D bars, above, below, left or right of the table. Put the cursor in the table and choose {MT_INSERT} > {M_CHART}; a menu offers the kind of chart and its place. Click the chart later for the same menu, or choose *{S_CH_NONE}* to remove it.
+
+![chartmenu] The chart menu.
+
+The rows are the categories and the columns of numbers the series. A first row of words (or years) names the series and a first column of words names the categories. The chart follows the numbers as you type, prints, and goes into the PDF; colours are used where the screen has them.
+
+![chart] A bar chart below its table.
+
+# Pictures and drawings
+
+## Pictures
+{MT_INSERT} > {M_PICTURE} places a picture on the page with the cursor. EdWord reads GEM IMG (monochrome, colour, XIMG and true colour), PNG (every kind; transparent parts become white) and IFF ILBM (including HAM and 24-bit). On screens with 15 bits of colour or more the picture shows in its colours, elsewhere with a dither that keeps its shades; it prints that way and keeps its colours in the RTF and in a colour PDF.
+
+![picture] A picture with the text flowing around it.
+
+Click a picture or drawing to select it: handles appear at its corners. **Drag** it to move it (also to another page) and **drag a handle** to resize it; pictures keep their shape unless you hold Shift. The cursor keys move a selected object a little (with Shift, a point at a time), Delete removes it and Esc lets it go.
+
+![objsel] A selected drawing.
+
+Double-click a picture, or press Return, for its settings: position and size in millimetres, page, a frame, and how the text flows: *{S_WRAP_NONE}* (the object lies over the text), *{S_WRAP_BOX}*, or, for drawings, *{S_WRAP_SHAPE}*, where the text follows the outline of the shapes.
+
+![drawprops] Settings of a drawing.
+
+## Drawings
+{MT_INSERT} > {M_DRAWING} places an empty drawing and opens the **drawing window**. Choose a shape - box, rounded box, ellipse, line or triangle - and drag on the canvas to draw it. *{S_DT_SELECT}* selects a shape: drag it to move it or drag its corner handle to change its size; Tab steps through the shapes and the cursor keys move the selected one. {S_DT_FILL} (none, white, grey or solid), {S_DT_WIDTH} (line width 0 to 5) and the colour apply to the selected shape and to new ones. {S_DT_FRONT} brings a shape in front of the others and {S_DELETE} removes it. A drawing holds up to 16 shapes. Every change shows at once in the document; {S_DT_DONE} closes the window. Double-click a drawing to edit it again.
+
+![drawedit] The drawing window.
+
+# Table of contents
+Mark the headings with {MT_PARA} > {M_HEAD1} to {M_HEAD3}, put the cursor where the contents should go and choose {MT_INSERT} > {M_TOC}. EdWord lists the headings, indented by level, with dot leaders and page numbers. Choose {M_TOC} again whenever the document has changed to bring the list up to date; the title can be edited and is kept.
+
+# Tools
+
+![m_tools] The {MT_TOOLS} menu.
+
+## Checking spelling
+{M_SPELL} (Control+K) checks the document from the cursor in a window that stays open. For each unknown word you can type a correction or pick a suggestion, {S_IGNORE} it, {S_IGNORE_ALL} for this session, or {S_ADD} it to your user dictionary.
+
+![spell] Checking spelling.
+
+## Spelling as you type
+With {M_LIVESPELL} on, unknown words are underlined with a wavy line as you type.
+
+![livespell] Unknown words underlined.
+
+**Hold the left mouse button** on an underlined word for half a second: a menu offers the suggestions, *{S_IGNORE_ALL}* and *{S_ADD_TO_DIC}*.
+
+![livepopup] Suggestions for an underlined word.
+
+## Five languages
+The *{S_DICTIONARY}* setting in {M_PREFS} chooses English, German, Spanish, Italian or French for spelling (the dictionary file must be in EdWord's folder). The German checker accepts compound words made of two known words, the French and Italian ones elided forms such as *l'homme* and *dell'anno*, and suggestions use the language's accented letters.
+
+## User dictionaries
+Words you add go to `USER.UDC`. {M_UDLOAD} and {M_UDNEW} let you keep up to four user dictionaries, for example one per subject; choose in the menu which one receives new words.
+
+## Thesaurus
+Put the cursor on a word and choose {M_THES} (Shift+F7). The window lists the word's meanings (marked noun, verb, adjective or adverb) and, for the chosen meaning, its synonyms. Click a synonym to put it in the replacement box, double-click it to look that word up, then {S_REPLACE}. Forms such as "boats" or "rowing" are looked up under their base word. The thesaurus comes from Open English WordNet (licence CC BY 4.0).
+
+![thes] The thesaurus.
+
+## Document summary
+{M_SUMMARY} counts pages, words, characters (with and without spaces), paragraphs, lines, tables, pictures and drawings.
+
+![summary] {S_SUMMARY_TITLE}.
+
+## Preferences
+{M_PREFS} sets the language, the date format, the paper for new documents, the toolbar for new windows, spelling as you type, the spelling dictionary, text colours, the PDF resolution, the display (paper, dark, green or amber) and auto-save. They are saved in `EDWORD.INF`.
+
+![prefs] {S_PREFS_TITLE}.
+
+# Windows
+
+![m_window] The {MT_WINDOW} menu.
+
+{M_TILEV} and {M_TILEH} share the screen between the open documents; {M_CASCADE} stacks them. {M_ICONIFY} (Control+Z) shrinks a window to an icon (with AES 4.1 and later in the AES's own way), {M_ICONALL} does that to all, {M_BOTTOM} sends a window behind the others and {M_CYCLE} (Control+W) brings the next one forward. The list at the end of the menu brings any document to the front; when there are more documents than fit, {M_WINMORE} lists the rest. Dialogs and gauges are windows too, so they can be moved; a document, dialog or tool window opens again where it was last closed.
+
+![tilev] {M_TILEV}.
+
+![tileh] {M_TILEH}.
+
+# About EdWord
+
+![about] The About box.
+
+{MT_DESK} > {M_ABOUT} shows the version. When EdWord is built from its sources, the version number and the sentence under it can be set on the command line: `make ED_VERSION=3.1 ED_ABOUT="Built for our club"`.
+
+# EdWord on other computers
+The same EdWord runs on the Amiga, the Mac and Windows. Documents, layout, RTF, PDF, spelling and the thesaurus behave exactly as on the ST, so a document looks the same everywhere; the menus, keys and dialogs follow each system's own conventions.
+
+## Amiga
+Two programs: **EdWord** for AmigaOS 2.04 or newer and **EdWord13** for Workbench 1.2 and 1.3, both on any 68000 or better. Copy the program and its icon with the dictionaries and the thesaurus into one drawer; preferences are kept in `EdWord.prefs` beside it. Any Amiga bitmap font in `FONTS:` can be used.
+
+EdWord opens its own high-resolution 16-colour screen. *{S_AMI_SCREEN}* in {M_PREFS} chooses an interlaced screen, one like the Workbench, any screen mode (Workbench 2.1 and newer) or the Workbench screen itself, where closing the last document leaves EdWord. The first menu is *{S_AMI_PROJECT}*; shortcuts use the Right Amiga key (N, O, S, A for Save As, P, W, Q; Z, Y, X, C, V; F and G to find). With the cursor keys, Shift goes to the line's ends or a windowful, Alt by words and pages, Ctrl to the document's ends, and Shift+Alt extends the selection. Printing goes through `printer.device` with the printer set in Printer preferences.
+
+## Mac
+EdWord for macOS 11 or newer, on Apple silicon and Intel, uses every font of the Mac at any size. Its menus are EdWord, File, Edit, Insert, Format, View, Tools, Window and Help, with the usual Command keys; Import and Export are floating panels. Printing uses the standard print dialog, which also saves PDFs, and pictures go to and come from the clipboard as images.
+
+## Windows
+One program, `EdWord.exe`, runs on every Windows from Windows 95 to Windows 11 and needs no other files than its dictionaries and thesaurus. The documents are windows inside EdWord's main window: maximise one, or tile, cascade and minimise them from the {MT_WINDOW} menu. Every TrueType font can be used. Text is drawn at the positions the layout gives it, so the screen, the printout and the PDF agree.
+
+The menus are {MT_FILE}, {MT_EDIT}, {MT_INSERT}, {MT_FONT}, {MT_STYLE}, {MT_PARA}, {MT_TOOLS}, {MT_WINDOW} and {S_W_HELP}, with Windows' usual keys: Control+N, O, S, P, W, Z, Y, X, C, V, A, F, B, I and U, Control+Shift+S for {M_SAVEAS}, F3 to find again and Alt+F4 to leave. Shift with the cursor keys extends the selection, Control moves by words and, with Home and End, to the document's ends. The **right mouse button** opens a menu: spelling suggestions on an underlined word, cut, copy and paste on text, settings and delete on a picture or drawing.
+
+{M_PRINT} uses the Windows Print dialog, so any printer can be chosen. Copy puts text on the clipboard as RTF and plain text, so other word processors paste it with its formatting, and pictures as bitmaps; Paste takes RTF, text or a bitmap from other programs. Documents can be dropped on EdWord's window. Settings, user dictionaries and backups of untitled documents are kept in `EdWord.ini` and beside it in the Application Data folder.
+
+# Keys
+On the ST:
+| Key | Does |
+| Control+N, O, S, U, Q | new, open, save, close, quit |
+| Control+Shift+S | save as |
+| Control+P, Control+Shift+P | print, print preview |
+| Undo, Shift+Undo | undo, redo |
+| Control+X, C, V, A | cut, copy, paste, select all |
+| Control+F; Control+G or F3 | find and replace, find next |
+| Control+Up, Control+Down, Control+J | previous page, next page, go to page |
+| Control+D | insert the date |
+| Control+Return, Control+Shift+Return | page break, column break |
+| Control+Shift+F | font selector |
+| Control+B, I, Control+Shift+U | bold, italic, underline |
+| Control+L, E, R, Control+Shift+J | left, centre, right, justify |
+| F9, F10 | bullet list, numbered list |
+| Control+K, Shift+F7 | spelling, thesaurus |
+| F4, Control+Y, F6 | page view, split view, {M_VCODES} |
+| F7, F8 | zoom out, zoom in |
+| Control+T, Control+Shift+R | toolbar, rulers |
+| Control+Z, Control+W | iconify, next window |
+| Tab, Shift+Tab (in a table) | next cell, previous cell |
+| Esc | close a tool window, let go of a picture |
+The Amiga, Mac and Windows keys are described in "EdWord on other computers".
+
+# Limits
+- 32 documents at once.
+- 255 different paragraph formats, 48 tables and 32 pictures and drawings per document; 12 columns per table; 16 shapes per drawing.
+- Up to 4 text columns per page.
+- The document must fit in memory; with 1 MB that is roughly 100 pages of text.

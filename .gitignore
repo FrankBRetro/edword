@@ -1,0 +1,9 @@
+# build products (the release binaries themselves are committed)
+*.o
+build/
+hosttest
+mkdic
+MKDIC.TTP
+amiga/build/
+win/build/
+.DS_Store

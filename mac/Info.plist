@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>                 <string>EdWord</string>
+    <key>CFBundleDisplayName</key>          <string>EdWord</string>
+    <key>CFBundleIdentifier</key>           <string>org.edword.EdWord</string>
+    <key>CFBundleExecutable</key>           <string>EdWord</string>
+    <key>CFBundleIconFile</key>             <string>EdWord</string>
+    <key>CFBundlePackageType</key>          <string>APPL</string>
+    <key>CFBundleShortVersionString</key>   <string>@VERSION@</string>
+    <key>CFBundleVersion</key>              <string>@VERSION@</string>
+    <key>CFBundleDevelopmentRegion</key>    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array><string>en</string><string>de</string><string>es</string><string>it</string><string>fr</string></array>
+    <key>LSMinimumSystemVersion</key>       <string>11.0</string>
+    <key>NSPrincipalClass</key>             <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>      <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key> <true/>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>     <string>Rich Text Document</string>
+            <key>CFBundleTypeRole</key>     <string>Editor</string>
+            <key>LSHandlerRank</key>        <string>Alternate</string>
+            <key>LSItemContentTypes</key>   <array><string>public.rtf</string></array>
+            <key>NSDocumentClass</key>      <string>EWDocument</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>     <string>Plain Text</string>
+            <key>CFBundleTypeRole</key>     <string>Viewer</string>
+            <key>LSHandlerRank</key>        <string>Alternate</string>
+            <key>LSItemContentTypes</key>   <array><string>public.plain-text</string></array>
+            <key>NSDocumentClass</key>      <string>EWDocument</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>     <string>Markdown</string>
+            <key>CFBundleTypeRole</key>     <string>Viewer</string>
+            <key>LSHandlerRank</key>        <string>Alternate</string>
+            <key>LSItemContentTypes</key>   <array><string>net.daringfireball.markdown</string></array>
+            <key>CFBundleTypeExtensions</key> <array><string>md</string><string>markdown</string></array>
+            <key>NSDocumentClass</key>      <string>EWDocument</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>     <string>1st Word Plus Document</string>
+            <key>CFBundleTypeRole</key>     <string>Viewer</string>
+            <key>LSHandlerRank</key>        <string>Alternate</string>
+            <key>CFBundleTypeExtensions</key> <array><string>doc</string><string>DOC</string></array>
+            <key>LSItemContentTypes</key>   <array><string>com.microsoft.word.doc</string></array>
+            <key>NSDocumentClass</key>      <string>EWDocument</string>
+        </dict>
+    </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>     <string>net.daringfireball.markdown</string>
+            <key>UTTypeDescription</key>    <string>Markdown</string>
+            <key>UTTypeConformsTo</key>     <array><string>public.plain-text</string></array>
+            <key>UTTypeTagSpecification</key>
+            <dict><key>public.filename-extension</key><array><string>md</string><string>markdown</string></array></dict>
+        </dict>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,136 @@
+# The script that takes the manual's screenshots ("make EDDEMO=1").
+# Copy it to DEMO.SCR beside EDWORD.PRG with DEMO.RTF, LIGHT.IMG and
+# NOTES.TXT (see manual/build.sh).
+OPEN DEMO.RTF
+WIN 0 19 640 381
+SHOT main
+MENU 0 m_desk
+MENU 1 m_file
+MENU 3 m_insert
+MENU 4 m_font
+MENU 5 m_style
+MENU 6 m_para
+MENU 7 m_tools
+MENU 8 m_window
+DSHOT about
+CMD ABOUT
+DSHOT zoompop
+CLICK 422 67 1
+ZOOM 150
+SHOT zoom
+ZOOM 100
+CMD SPLIT
+SHOT split
+CMD VCODES
+SHOT quick
+CMD VDOC
+CMD LIVESPELL
+FIND year
+KEY 4D 0 0
+PAGETOP 0 150
+SHOT livespell
+DSHOT livepopup
+LONGPRESS recieve
+GO START
+CMD SPELL
+SHOT spell
+KEY 01 27 0
+FIND season
+CMD THES
+SHOT thes
+KEY 01 27 0
+CMD FIND
+FINDSET boat|boats
+SHOT find
+KEY 01 27 0
+DSHOT page
+DEXIT 1
+CMD PAGE
+DSHOT headfoot
+DEXIT 1
+CMD HEADFOOT
+FIND Harbour race
+SHOT table
+DSHOT tblprop
+DEXIT 1
+CMD TBLPROP
+FIND Note:
+DSHOT indents
+DEXIT 1
+CMD INDENTS
+FIND Warm clothes
+SHOT lists
+DSHOT summary
+CMD SUMMARY
+DSHOT prefs
+DEXIT 1
+CMD PREFS
+DSHOT size
+DEXIT 1
+CMD SIZEOTHER
+CMD FONTSEL
+SHOT fontsel
+KEY 01 27 0
+CMD PREVIEW
+SHOT preview
+KEY 01 27 0
+PAGETOP 1 0
+SHOT columns
+SELOBJ 0
+PAGETOP 1 60
+SHOT objsel
+DSHOT drawprops
+DEXIT 3
+CMD OBJPROP
+CMD OBJEDIT
+DRAWSEL 1
+SHOT drawedit
+KEY 01 27 0
+FIND Junior
+PICTURE LIGHT.IMG
+PAGETOP 1 280
+SHOT picture
+MENU 2 m_edit
+CMD UNDO
+CMD REDO
+CMD UNDO
+CMD IMPORT
+TOOLWIN 0 110
+SHOT importwin
+KEY 01 27 0
+CMD EXPORT
+TOOLWIN 0 110
+SHOT exportwin
+KEY 01 27 0
+DFILE NOTES.TXT
+DSHOT import
+DEXIT 1
+CMD OPEN
+DSHOT export
+DEXIT 1
+CMD EXPTXT
+DFILE DEMO.PDF
+DSHOT gauge
+CMD PDF
+FIND Visitors
+DSHOT chartmenu
+DEXIT 2
+CMD CHART
+PAGETOP 1 640
+SHOT chart
+GO START
+CMD RULERS
+SHOT rulers
+CMD RULERS
+GO START
+DSHOT tblins
+CMD TBLINS
+SHOT tblnew
+CMD UNDO
+CMD NEW
+TYPE A second document.\nWindows can be placed side by side or one above the other.
+CMD TILEV
+SHOT tilev
+CMD TILEH
+SHOT tileh
+QUIT

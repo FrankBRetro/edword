@@ -1,0 +1,31 @@
+/* Copyright (c) 2026 Francis C Bullen. SPDX-License-Identifier: MIT (see LICENSE) */
+/* EdWord for Windows: the icon, the version and the manifest */
+#include "verinfo.h"
+
+1 ICON "edword.ico"
+1 24 "edword.manifest"
+
+1 VERSIONINFO
+FILEVERSION ED_VER_N
+PRODUCTVERSION ED_VER_N
+FILEOS 0x4
+FILETYPE 0x1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName", "EdWord"
+      VALUE "FileDescription", "EdWord word processor"
+      VALUE "FileVersion", ED_VER_S
+      VALUE "InternalName", "EdWord"
+      VALUE "OriginalFilename", "EdWord.exe"
+      VALUE "ProductName", "EdWord"
+      VALUE "ProductVersion", ED_VER_S
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END
