@@ -1378,6 +1378,12 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
     edlog("print: v_opnwk(21) -> handle %d, %dx%d pixels of %dx%d microns", c.ph, work_out[0] + 1,
           work_out[1] + 1, work_out[3], work_out[4]);
     if (c.ph <= 0) return 0;
+    /* ask the printer again: Hatari's extended VDI mode overwrites the
+     * size v_opnwk returns with its screen size, whatever the device,
+     * but leaves vq_extnd alone (same values on a real machine) */
+    vq_extnd(c.ph, 0, work_out);
+    edlog("print: vq_extnd -> %dx%d pixels of %dx%d microns", work_out[0] + 1,
+          work_out[1] + 1, work_out[3], work_out[4]);
     if (work_out[3] <= 0 || work_out[4] <= 0) { v_clswk(c.ph); return 0; }
     c.o.w = work_out[0] + 1L; c.o.h = work_out[1] + 1L;
     c.o.pixw = work_out[3]; c.o.pixh = work_out[4];
