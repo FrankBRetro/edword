@@ -40,9 +40,17 @@ int obj_at(DOC *d, int page, long px, long py)
     return -1;
 }
 
+/* screen coordinates kept on the screen: the VDI draws where it's told
+ * when clipping is off, and a frame or handle below the screen's last
+ * line (a picture partly scrolled out of the window) wrote past the
+ * screen memory and crashed */
+static short on_scr_x(long x) { return (short)(x < 0 ? 0 : x >= scr_w ? scr_w - 1 : x); }
+static short on_scr_y(long y) { return (short)(y < 0 ? 0 : y >= scr_h ? scr_h - 1 : y); }
+
 static void xor_frame(long x0, long y0, long x1, long y1)
 {
     short p[10];
+    x0 = on_scr_x(x0); x1 = on_scr_x(x1); y0 = on_scr_y(y0); y1 = on_scr_y(y1);
     vswr_mode(vhandle, MD_XOR);
     vsl_color(vhandle, 1); vsl_type(vhandle, 7); vsl_udsty(vhandle, (short)0xAAAA); vsl_width(vhandle, 1);
     p[0] = p[6] = p[8] = (short)x0; p[2] = p[4] = (short)x1;
@@ -56,7 +64,7 @@ static void handle_box(long x, long y)
 {
     short p[4];
     vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, 1); vsf_perimeter(vhandle, 0);
-    p[0] = (short)(x - HS); p[1] = (short)(y - HS); p[2] = (short)(x + HS); p[3] = (short)(y + HS);
+    p[0] = on_scr_x(x - HS); p[1] = on_scr_y(y - HS); p[2] = on_scr_x(x + HS); p[3] = on_scr_y(y + HS);
     vswr_mode(vhandle, MD_XOR);
     vr_recfl(vhandle, p);
     vswr_mode(vhandle, MD_REPLACE);
@@ -113,6 +121,12 @@ static int drag(DOC *d, GRECT *tp, short mx, short my, int corner)
     long aw = o->w, ah = o->h;
     obj_scr(d, tp, o, &x0, &y0, &x1, &y1);
     nx0 = x0; ny0 = y0; nx1 = x1; ny1 = y1;
+    {
+        short c[4];                       /* the frame stays in the text pane */
+        c[0] = on_scr_x(tp->g_x); c[1] = on_scr_y(tp->g_y);
+        c[2] = on_scr_x((long)tp->g_x + tp->g_w - 1); c[3] = on_scr_y((long)tp->g_y + tp->g_h - 1);
+        vs_clip(vhandle, 1, c);
+    }
     wind_update(BEG_MCTRL);
     graf_mouse(corner < 0 ? FLAT_HAND : POINT_HAND, NULL);
     graf_mouse(M_OFF, NULL);
@@ -147,6 +161,7 @@ static int drag(DOC *d, GRECT *tp, short mx, short my, int corner)
     xor_frame(nx0, ny0, nx1 - 1, ny1 - 1);
     graf_mouse(M_ON, NULL);
     graf_mouse(ARROW, NULL);
+    vs_clip(vhandle, 0, NULL);
     wind_update(END_MCTRL);
     if (!moved) return 0;
     {
