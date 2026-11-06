@@ -42,7 +42,7 @@ enum {
     /* Tools */
     C_SPELL, C_LIVESPELL, C_THES, C_SUMMARY, C_UDLOAD, C_UDNEW, C_PREFS,
     /* Window */
-    C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
+    C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_ZOOMFIT, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
     C_CASCADE, C_ICONIFY, C_ICONALL, C_BOTTOM, C_CYCLE, C_WINMORE,
     /* pictures and drawings */
     C_OBJPROP, C_OBJDEL, C_OBJEDIT,
@@ -148,6 +148,9 @@ void  rebuild_codes(DOC *d);
 void  set_view(DOC *d, int view);
 void  set_toolbar(DOC *d, int on);
 void  set_zoom(DOC *d, int zoom);
+void  set_fit_width(DOC *d, int on);   /* zoom so the page fills the window's width */
+#define ZOOM_MIN 25
+#define ZOOM_MAX 400
 int   open_window(DOC *d);
 void  close_window(DOC *d);
 void  iconify(DOC *d, short *rect);

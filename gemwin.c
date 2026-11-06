@@ -630,10 +630,13 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
         break;
     case TB_ZOOM:
         n = -1;
-        for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (zooms[k] == d->zoom) n = k; }
+        for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (zooms[k] == d->zoom && !d->fitw) n = k; }
+        items[NZOOM] = L(M_ZOOMFIT);
+        if (d->fitw) n = NZOOM;
         sel = popup_rsc(RT_POPZOOM, n, px, py);
-        if (sel == -3) sel = popup(items, NZOOM, n, px, py);
-        if (sel >= 0) set_zoom(d, zooms[sel]);
+        if (sel == -3) sel = popup(items, NZOOM + 1, n, px, py);
+        if (sel >= 0 && sel < NZOOM) set_zoom(d, zooms[sel]);
+        else if (sel == NZOOM) set_fit_width(d, 1);
         break;
     default:
         if (!tb_disabled(d, cmd)) do_cmd(cmd);
@@ -1320,6 +1323,9 @@ static void edited(DOC *d, long from, int typing)
 void after_edit(DOC *d, long from)   { edited(d, from, 0); update_menu(d); }
 void after_typing(DOC *d, long from) { edited(d, from, 1); }
 
+static int fit_zoom(DOC *d);
+static void zoom_apply(DOC *d, int zoom);
+
 /* a change that may move anything (page set-up, tables, pictures...) */
 void doc_changed(DOC *d)
 {
@@ -1337,6 +1343,8 @@ void doc_changed(DOC *d)
     set_info(d);
     update_menu(d);
     preview_changed(d);
+    /* a new page size: the fit to the window again */
+    if (d->fitw && d->view != VIEW_CODES && fit_zoom(d) != d->zoom) zoom_apply(d, fit_zoom(d));
 }
 
 /* the caret at pos, inverted where the window shows it: drawing it twice
@@ -1492,11 +1500,22 @@ void set_toolbar(DOC *d, int on)
     update_menu(d);
 }
 
-void set_zoom(DOC *d, int zoom)
+/* the zoom at which the page, its shadow and the gaps fill the page pane's width */
+static int fit_zoom(DOC *d)
 {
-    if (zoom < zooms[0]) zoom = zooms[0];
-    if (zoom > zooms[NZOOM - 1]) zoom = zooms[NZOOM - 1];
-    if (zoom == d->zoom) return;
+    GRECT tb, tp, cp;
+    long pw = page_w_px(d), z;
+    get_panes(d, &tb, &tp, &cp);
+    if (pw <= 0 || tp.g_w <= 0) return d->zoom;
+    z = (tp.g_w - 2L * PGAP - 4) * 100 / pw;
+    return (int)(z < ZOOM_MIN ? ZOOM_MIN : z > ZOOM_MAX ? ZOOM_MAX : z);
+}
+
+static void zoom_apply(DOC *d, int zoom)
+{
+    if (zoom < ZOOM_MIN) zoom = ZOOM_MIN;
+    if (zoom > ZOOM_MAX) zoom = ZOOM_MAX;
+    if (zoom == d->zoom) { update_menu(d); return; }
     d->zoom = zoom;
     if (d->view == VIEW_CODES) set_view(d, VIEW_DOC);
     d->vsz = d->vpos = d->hsz = d->hpos = -1;
@@ -1508,12 +1527,25 @@ void set_zoom(DOC *d, int zoom)
     update_menu(d);
 }
 
+/* a zoom chosen by the user: the fit to the window's width ends */
+void set_zoom(DOC *d, int zoom) { d->fitw = 0; zoom_apply(d, zoom); }
+
+void set_fit_width(DOC *d, int on)
+{
+    d->fitw = on;
+    if (on && d->view == VIEW_CODES) set_view(d, VIEW_DOC);
+    if (on) zoom_apply(d, fit_zoom(d));
+    else update_menu(d);
+}
+
 void win_resized(DOC *d)
 {
     if (d->view != VIEW_DOC) {
         long cols = codes_cols_of(d);
         if (cols != d->cv.cols) codes_wrap(&d->cv, cols);
     }
+    /* fitting the page to the window: the zoom follows the new width */
+    if (d->fitw && !d->iconified && d->view != VIEW_CODES && fit_zoom(d) != d->zoom) { zoom_apply(d, fit_zoom(d)); return; }
     clamp_scroll(d);
     refresh_all(d);
     set_sliders(d);

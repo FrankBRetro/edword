@@ -261,6 +261,7 @@ typedef struct {
     long  scroll_x, scroll_y;
     int   view, focus;          /* VIEW_*; focus 0 text, 1 codes           */
     int   zoom;                 /* percent                                 */
+    int   fitw;                 /* zoom follows the window: page fits its width */
     int   toolbar, iconified, codes_stale;
     int   selobj;               /* selected picture/drawing, -1 none       */
     int   slot;                 /* its place in the front end's list       */

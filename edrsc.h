@@ -150,42 +150,43 @@
 #define MN_VCODES 171
 #define MN_ZOOMIN 173
 #define MN_ZOOMOUT 174
-#define MN_TOOLBAR 176
-#define MN_RULERS 177
-#define MN_GUIDES 178
-#define MN_TILEV 180
-#define MN_TILEH 181
-#define MN_CASCADE 182
-#define MN_ICONIFY 184
-#define MN_ICONALL 185
-#define MN_BOTTOM 186
-#define MN_CYCLE 187
-#define MN_WIN0 189
-#define MN_WIN1 190
-#define MN_WIN2 191
-#define MN_WIN3 192
-#define MN_WIN4 193
-#define MN_WIN5 194
-#define MN_WIN6 195
-#define MN_WIN7 196
-#define MN_WIN8 197
-#define MN_WIN9 198
-#define MN_WIN10 199
-#define MN_WIN11 200
-#define MN_WIN12 201
-#define MN_WIN13 202
-#define MN_WIN14 203
-#define MN_WIN15 204
-#define MN_WIN16 205
-#define MN_WIN17 206
-#define MN_WIN18 207
-#define MN_WIN19 208
-#define MN_WIN20 209
-#define MN_WIN21 210
-#define MN_WIN22 211
-#define MN_WIN23 212
-#define MN_WINMORE 213
-#define MN_COUNT 214
+#define MN_ZOOMFIT 175
+#define MN_TOOLBAR 177
+#define MN_RULERS 178
+#define MN_GUIDES 179
+#define MN_TILEV 181
+#define MN_TILEH 182
+#define MN_CASCADE 183
+#define MN_ICONIFY 185
+#define MN_ICONALL 186
+#define MN_BOTTOM 187
+#define MN_CYCLE 188
+#define MN_WIN0 190
+#define MN_WIN1 191
+#define MN_WIN2 192
+#define MN_WIN3 193
+#define MN_WIN4 194
+#define MN_WIN5 195
+#define MN_WIN6 196
+#define MN_WIN7 197
+#define MN_WIN8 198
+#define MN_WIN9 199
+#define MN_WIN10 200
+#define MN_WIN11 201
+#define MN_WIN12 202
+#define MN_WIN13 203
+#define MN_WIN14 204
+#define MN_WIN15 205
+#define MN_WIN16 206
+#define MN_WIN17 207
+#define MN_WIN18 208
+#define MN_WIN19 209
+#define MN_WIN20 210
+#define MN_WIN21 211
+#define MN_WIN22 212
+#define MN_WIN23 213
+#define MN_WINMORE 214
+#define MN_COUNT 215
 
 /* PRINT */
 #define PR_ROOT 0
@@ -390,7 +391,8 @@
 #define PZ_I3 4
 #define PZ_I4 5
 #define PZ_I5 6
-#define PZ_COUNT 7
+#define PZ_I6 7
+#define PZ_COUNT 8
 
 /* menu entries and their commands */
 #define RSC_MENU_CMDS \
@@ -516,41 +518,42 @@
     { 171, C_VCODES }, \
     { 173, C_ZOOMIN }, \
     { 174, C_ZOOMOUT }, \
-    { 176, C_TOOLBAR }, \
-    { 177, C_RULERS }, \
-    { 178, C_GUIDES }, \
-    { 180, C_TILEV }, \
-    { 181, C_TILEH }, \
-    { 182, C_CASCADE }, \
-    { 184, C_ICONIFY }, \
-    { 185, C_ICONALL }, \
-    { 186, C_BOTTOM }, \
-    { 187, C_CYCLE }, \
-    { 189, C_WIN0 + 0 }, \
-    { 190, C_WIN0 + 1 }, \
-    { 191, C_WIN0 + 2 }, \
-    { 192, C_WIN0 + 3 }, \
-    { 193, C_WIN0 + 4 }, \
-    { 194, C_WIN0 + 5 }, \
-    { 195, C_WIN0 + 6 }, \
-    { 196, C_WIN0 + 7 }, \
-    { 197, C_WIN0 + 8 }, \
-    { 198, C_WIN0 + 9 }, \
-    { 199, C_WIN0 + 10 }, \
-    { 200, C_WIN0 + 11 }, \
-    { 201, C_WIN0 + 12 }, \
-    { 202, C_WIN0 + 13 }, \
-    { 203, C_WIN0 + 14 }, \
-    { 204, C_WIN0 + 15 }, \
-    { 205, C_WIN0 + 16 }, \
-    { 206, C_WIN0 + 17 }, \
-    { 207, C_WIN0 + 18 }, \
-    { 208, C_WIN0 + 19 }, \
-    { 209, C_WIN0 + 20 }, \
-    { 210, C_WIN0 + 21 }, \
-    { 211, C_WIN0 + 22 }, \
-    { 212, C_WIN0 + 23 }, \
-    { 213, C_WINMORE }
+    { 175, C_ZOOMFIT }, \
+    { 177, C_TOOLBAR }, \
+    { 178, C_RULERS }, \
+    { 179, C_GUIDES }, \
+    { 181, C_TILEV }, \
+    { 182, C_TILEH }, \
+    { 183, C_CASCADE }, \
+    { 185, C_ICONIFY }, \
+    { 186, C_ICONALL }, \
+    { 187, C_BOTTOM }, \
+    { 188, C_CYCLE }, \
+    { 190, C_WIN0 + 0 }, \
+    { 191, C_WIN0 + 1 }, \
+    { 192, C_WIN0 + 2 }, \
+    { 193, C_WIN0 + 3 }, \
+    { 194, C_WIN0 + 4 }, \
+    { 195, C_WIN0 + 5 }, \
+    { 196, C_WIN0 + 6 }, \
+    { 197, C_WIN0 + 7 }, \
+    { 198, C_WIN0 + 8 }, \
+    { 199, C_WIN0 + 9 }, \
+    { 200, C_WIN0 + 10 }, \
+    { 201, C_WIN0 + 11 }, \
+    { 202, C_WIN0 + 12 }, \
+    { 203, C_WIN0 + 13 }, \
+    { 204, C_WIN0 + 14 }, \
+    { 205, C_WIN0 + 15 }, \
+    { 206, C_WIN0 + 16 }, \
+    { 207, C_WIN0 + 17 }, \
+    { 208, C_WIN0 + 18 }, \
+    { 209, C_WIN0 + 19 }, \
+    { 210, C_WIN0 + 20 }, \
+    { 211, C_WIN0 + 21 }, \
+    { 212, C_WIN0 + 22 }, \
+    { 213, C_WIN0 + 23 }, \
+    { 214, C_WINMORE }
 
 /* toolbar buttons and their commands (TB_FONT... open popups) */
 #define RSC_TB_CMDS \

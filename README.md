@@ -53,7 +53,10 @@ FPU.
   meanings by part of speech, synonyms, base-form lookup, replace in place.
 - **Window menu**: page/split/quick views, zoom, toolbar, tile side by side,
   tile stacked, cascade, iconify, send to back, next window, window list.
-- **Zoom** 50-200 % in the page view, from the toolbar or F7/F8.
+- **Zoom** 50-200 % in the page view, from the toolbar or F7/F8, and **Fit
+  Page Width** (Window menu, the toolbar's zoom popup, Shift+F8 on the ST):
+  the page fills the window's width and follows it when the window changes
+  size.
 - **Multi-level undo and redo** (100 steps; Undo key, Shift+Undo), covering
   text, formats, tables, page settings, pictures and drawings.
 - **Bullet and numbered lists** (F9, F10).

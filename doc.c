@@ -341,6 +341,7 @@ long doc_para_start(DOC *d, long pos)
 /* index of the cell that ends the paragraph (or len) */
 long doc_para_end(DOC *d, long pos)
 {
+    if (pos < 0) pos = 0;                 /* an empty document: no text to look at */
     while (pos < d->len && !ISBRK(d->text[pos].ch)) pos++;
     return pos;
 }

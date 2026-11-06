@@ -203,6 +203,11 @@ int main(int argc, char **argv)
     strcpy(fonts[1].name, "Swiss 721");  fonts[1].id = 2;
     strcpy(fonts[2].name, "Dutch 801");  fonts[2].id = 14;
 
+    /* --- an empty document: the paragraph end before any text (Insert > Chart) --- */
+    doc_init(&d);
+    CHECK(d.len == 0 && doc_para_end(&d, d.len - 1) == 0, "empty document: paragraph end of position -1");
+    doc_free(&d);
+
     /* --- RTF import, layout --- */
     doc_init(&d);
     CHECK(rtf_import(&d, argv[1]), "RTF import");

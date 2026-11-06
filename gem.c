@@ -219,10 +219,10 @@ static MI m_tools[] = {
     { M_UDLOAD, NULL, C_UDLOAD }, { M_UDNEW, NULL, C_UDNEW }, SEP,
     { DYN + 60, NULL, C_UD0 }, { DYN + 61, NULL, C_UD0 + 1 }, { DYN + 62, NULL, C_UD0 + 2 }, { DYN + 63, NULL, C_UD0 + 3 },
     SEP, { M_PREFS, NULL, C_PREFS }, { 0, NULL, 0 } };
-#define NWINFIX 20
+#define NWINFIX 21
 static const MI m_window_fixed[NWINFIX] = {
     { M_VDOC, "F4", C_VDOC }, { M_SPLIT, "^Y", C_SPLIT }, { M_VCODES, "F6", C_VCODES }, SEP,
-    { M_ZOOMIN, "F8", C_ZOOMIN }, { M_ZOOMOUT, "F7", C_ZOOMOUT }, SEP,
+    { M_ZOOMIN, "F8", C_ZOOMIN }, { M_ZOOMOUT, "F7", C_ZOOMOUT }, { M_ZOOMFIT, "\001F8", C_ZOOMFIT }, SEP,
     { M_TOOLBAR, "^T", C_TOOLBAR }, { M_RULERS, "^\001R", C_RULERS }, { M_GUIDES, NULL, C_GUIDES }, SEP,
     { M_TILEV, NULL, C_TILEV }, { M_TILEH, NULL, C_TILEH }, { M_CASCADE, NULL, C_CASCADE }, SEP,
     { M_ICONIFY, "^Z", C_ICONIFY }, { M_ICONALL, NULL, C_ICONALL }, { M_BOTTOM, NULL, C_BOTTOM },
@@ -509,6 +509,7 @@ void update_menu(DOC *d)
         enable(C_TBLINS, !intbl);
         enable(C_ZOOMIN, d->view != VIEW_CODES && d->zoom < zooms[NZOOM - 1]);
         enable(C_ZOOMOUT, d->view != VIEW_CODES && d->zoom > zooms[0]);
+        enable(C_ZOOMFIT, d->view != VIEW_CODES);
     }
     for (i = 0; i < font_items; i++) check(C_FONT0 + i, i == d->ins.font);
     for (i = 0; i < NSIZES; i++) check(C_SIZE0 + i, sizes[i] == d->ins.size);
@@ -528,6 +529,7 @@ void update_menu(DOC *d)
     }
     check(C_VDOC, d->view == VIEW_DOC); check(C_SPLIT, d->view == VIEW_SPLIT); check(C_VCODES, d->view == VIEW_CODES);
     check(C_TOOLBAR, d->toolbar);
+    check(C_ZOOMFIT, d->fitw);
     check(C_RULERS, pref_rulers);
     check(C_GUIDES, pref_guides);
     check(C_ICONIFY, d->iconified);
@@ -1397,7 +1399,7 @@ void do_cmd(int cmd)
         if (dlg_headfoot(d)) doc_changed(d);
         break;
     case C_CHART: {
-        long e2 = doc_para_end(d, d->cursor < d->len ? d->cursor : d->len - 1);
+        long e2 = d->len ? doc_para_end(d, d->cursor < d->len ? d->cursor : d->len - 1) : 0;
         int t2 = d->len ? PARA_OF(d, &d->text[e2 < d->len ? e2 : d->len - 1])->tbl - 1 : -1;
         short mx, my, mb, mk;
         if (t2 < 0) { alert(1, 1, AL_CHART_TABLE, AB_OK); break; }
@@ -1452,14 +1454,14 @@ void do_cmd(int cmd)
     case C_VCODES:  set_view(d, d->view == VIEW_CODES ? VIEW_DOC : VIEW_CODES); break;
     case C_ZOOMIN:
     case C_ZOOMOUT: {
+        /* the next size in the list, up or down (from a fit, the nearest) */
         int i, z = d->zoom;
-        for (i = 0; i < NZOOM; i++) if (zooms[i] == d->zoom) break;
-        if (i == NZOOM) i = 2;
-        i += cmd == C_ZOOMIN ? 1 : -1;
-        if (i >= 0 && i < NZOOM) z = zooms[i];
+        if (cmd == C_ZOOMIN) { for (i = 0; i < NZOOM && zooms[i] <= d->zoom; i++) ; if (i < NZOOM) z = zooms[i]; }
+        else { for (i = NZOOM - 1; i >= 0 && zooms[i] >= d->zoom; i--) ; if (i >= 0) z = zooms[i]; }
         set_zoom(d, z);
         break;
     }
+    case C_ZOOMFIT: set_fit_width(d, !d->fitw); break;
     case C_TOOLBAR: set_toolbar(d, !d->toolbar); break;
     case C_SPELL:   spell_run(d); break;
     case C_THES:    thes_run(d); break;
@@ -1633,6 +1635,7 @@ static int special_key(short ks, short key)
     case 0x43: do_cmd(C_BULLETS); return 1;                         /* F9 */
     case 0x44: do_cmd(C_NUMBERS); return 1;                         /* F10 */
     case 0x5A: do_cmd(C_THES); return 1;                            /* Shift F7 */
+    case 0x5B: do_cmd(C_ZOOMFIT); return 1;                         /* Shift F8 */
     }
     return 0;
 }
@@ -1901,7 +1904,7 @@ int cmd_by_name(const char *s)
         { "NUMBERS", C_NUMBERS }, { "HEAD1", C_HEAD1 }, { "HEAD2", C_HEAD2 }, { "HEAD3", C_HEAD3 }, { "BODY", C_BODY },
         { "WRAPCOL", C_WRAPCOL }, { "SPELL", C_SPELL }, { "LIVESPELL", C_LIVESPELL }, { "THES", C_THES },
         { "SUMMARY", C_SUMMARY }, { "PREFS", C_PREFS }, { "VDOC", C_VDOC }, { "SPLIT", C_SPLIT }, { "VCODES", C_VCODES },
-        { "ZOOMIN", C_ZOOMIN }, { "ZOOMOUT", C_ZOOMOUT }, { "TOOLBAR", C_TOOLBAR }, { "TILEV", C_TILEV },
+        { "ZOOMIN", C_ZOOMIN }, { "ZOOMOUT", C_ZOOMOUT }, { "ZOOMFIT", C_ZOOMFIT }, { "TOOLBAR", C_TOOLBAR }, { "TILEV", C_TILEV },
         { "TILEH", C_TILEH }, { "CASCADE", C_CASCADE }, { "ICONIFY", C_ICONIFY }, { "OBJPROP", C_OBJPROP },
         { "OBJEDIT", C_OBJEDIT }, { "CHART", C_CHART }, { "EXPTXT", C_EXPTXT }, { "IMPORT", C_IMPORT }, { "INSFILE", C_INSFILE },
         { "CUT", C_CUT }, { "COPY", C_COPY }, { "PASTE", C_PASTE }, { "SAVEAS", C_SAVEAS }, { "OPEN", C_OPEN },

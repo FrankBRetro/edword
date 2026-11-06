@@ -409,7 +409,8 @@ def menus():
                ('M_SUMMARY', None, 'C_SUMMARY'), SEP, ('M_UDLOAD', None, 'C_UDLOAD'), ('M_UDNEW', None, 'C_UDNEW'), SEP,
                ('DYN', 'UD', 4, 24, 'C_UD0'), SEP, ('M_PREFS', None, 'C_PREFS')]
     m_window = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'), SEP,
-                ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'), SEP,
+                ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'),
+                ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), SEP,
                 ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES'), SEP,
                 ('M_TILEV', None, 'C_TILEV'), ('M_TILEH', None, 'C_TILEH'), ('M_CASCADE', None, 'C_CASCADE'), SEP,
                 ('M_ICONIFY', '^Z', 'C_ICONIFY'), ('M_ICONALL', None, 'C_ICONALL'), ('M_BOTTOM', None, 'C_BOTTOM'),
@@ -564,7 +565,7 @@ def main():
         trees += [tb16, tb8,
                   popup('POPSIZE', [b'%d ' % s + L('S_POINT') for s in SIZES] + [L('M_SIZEOTHER')]),
                   popup('POPCOLOUR', [L(s) for s in COLOURS]),
-                  popup('POPZOOM', [b'%d%%' % z for z in ZOOMS])]
+                  popup('POPZOOM', [b'%d%%' % z for z in ZOOMS] + [L('M_ZOOMFIT')])]
         size = write_rsc(os.path.join(outdir, RSCNAME[lg]), trees)
         # the object numbers: the same in every language
         nm = []

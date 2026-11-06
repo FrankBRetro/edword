@@ -85,6 +85,7 @@ enum {
     M_VCODES,
     M_ZOOMIN,
     M_ZOOMOUT,
+    M_ZOOMFIT,
     M_TOOLBAR,
     M_TILEV,
     M_TILEH,

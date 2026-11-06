@@ -508,6 +508,12 @@ de: Verkleinern
 es: Reducir
 it: Riduci
 fr: Zoom arrière
+@M_ZOOMFIT
+en: Fit Page Width
+de: Seitenbreite
+es: Ajustar al ancho
+it: Adatta alla larghezza
+fr: Pleine largeur
 @M_TOOLBAR
 en: Toolbar
 de: Symbolleiste

@@ -42,6 +42,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "gemui.h"
 
 int demo_on;
@@ -225,6 +226,21 @@ static void run_line(char *s)
     else if (!strcmp(cmd, "DFILE")) { strncpy(dfile, s, 39); dfile[39] = 0; }
     else if (!strcmp(cmd, "MENU")) { int i = atoi(next_word(&s)); menu_shot(i, s); }
     else if (!strcmp(cmd, "WAIT")) wait_ticks = atoi(s);
+    else if (!strcmp(cmd, "TYPETIME")) {                 /* type n keys as the user would; the time to TYPETIME.TXT */
+        int n = atoi(s), k;
+        clock_t t0 = clock();
+        char path[300];
+        FILE *f;
+        for (k = 0; k < n; k++) {
+            static const char txt[] = "The quick brown fox jumps over the lazy dog. ";
+            int c = txt[k % (int)(sizeof txt - 1)];
+            handle_key(0, (short)c);
+            pump_redraws();
+        }
+        sprintf(path, "%sTYPETIME.TXT", progdir);
+        f = fopen(path, "a");
+        if (f) { fprintf(f, "%d keys: %ld ticks\r\n", n, (long)(clock() - t0)); fclose(f); }
+    }
     else if (!strcmp(cmd, "PRTIME")) { void print_timing(DOC *, int); print_timing(d, atoi(s)); }
     else if (!strcmp(cmd, "QUIT")) {
         char path[300];

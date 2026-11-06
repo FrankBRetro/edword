@@ -684,9 +684,20 @@ void draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
     long w = ox + tw2px_xs(o->x + o->w, n, den) - x, h = oy + tw2px_ys(o->y + o->h, n, den) - y;
     int k;
     if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg) {
-        int colour = (tc_ok || pal_ok) && d->imgs[o->img].rgb != NULL;
-        MFDB *m = scaled(d, &d->imgs[o->img], w, h, colour), scr;
-        if (!m && colour) m = scaled(d, &d->imgs[o->img], w, h, colour = 0);
+        /* colour, unless it has already failed for want of memory at this size:
+         * trying again at every redraw would make typing crawl */
+        static struct { const unsigned char *src; long w, h; } nocol[8];
+        static int nnc;
+        int colour = (tc_ok || pal_ok) && d->imgs[o->img].rgb != NULL, f;
+        MFDB *m, scr;
+        for (f = 0; f < 8 && colour; f++)
+            if (nocol[f].src == d->imgs[o->img].bits && nocol[f].w == w && nocol[f].h == h) colour = 0;
+        m = scaled(d, &d->imgs[o->img], w, h, colour);
+        if (!m && colour) {
+            nocol[nnc].src = d->imgs[o->img].bits; nocol[nnc].w = w; nocol[nnc].h = h;
+            nnc = (nnc + 1) & 7;
+            m = scaled(d, &d->imgs[o->img], w, h, colour = 0);
+        }
         if (m) {
             short pxy[8], col[2];
             memset(&scr, 0, sizeof scr);

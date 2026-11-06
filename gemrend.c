@@ -441,18 +441,19 @@ static void draw_line_ex(short h, DOC *d, long li, long ox, long base, const SCA
 #endif
                 if (sc->sn == sc->sd && !(st.font < nfonts && fonts[st.font].outline))
                     v_gtext(h, (short)x, (short)base, buf);
+                else if (n == 1) v_gtext(h, (short)x, (short)base, buf);
                 else {
                     /* zoomed (the screen font may not come in this size),
                      * or an outline font (SpeedoGDOS's v_gtext spaces the
                      * characters its own way, not by the advance widths the
-                     * layout uses): put each character where the layout says */
-                    char one[2];
-                    int i;
-                    one[1] = 0;
-                    for (i = 0; i < n; i++) {
-                        one[0] = buf[i];
-                        v_gtext(h, (short)(ox + SP(xs[i], sc)), (short)base, one);
-                    }
+                     * layout uses): the word stretched or squeezed to the
+                     * width the layout gives it, in one call, so each
+                     * character is within a pixel of its place (one call
+                     * a character was much slower, above all with GDOS) */
+                    long wpx = ox + SP(w.x, sc) - x;
+                    (void)xs;
+                    if (wpx > 0 && wpx < 32000) v_justified(h, (short)x, (short)base, buf, (short)wpx, 0, 1);
+                    else v_gtext(h, (short)x, (short)base, buf);
                 }
 #ifdef EDLOG
                 if (first) { edlog("  drawn"); first = 0; }
