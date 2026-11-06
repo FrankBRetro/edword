@@ -745,7 +745,7 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
     vswr_mode(vhandle, MD_TRANS);
     set_sys_font();
     wmm = (long)PS(d).w * 254 / 720;
-    step = label_step(d, mm_x, 3 * wchar);
+    step = label_step(d, mm_x, 4L * wchar);   /* two digits and two spaces */
     for (mm = 0; mm <= wmm; mm++) {
         long x = x0 + zx(d, mm_x(mm)), h;
         if (x < r.g_x - 2 * wchar || x > r.g_x + r.g_w + 2 * wchar) continue;

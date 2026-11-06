@@ -347,7 +347,9 @@ void dlg_end(DLG *g)
     /* the tree: the box, radio groups first (so items found inside them
      * win), then everything else */
     g->n = 0;
-    root = add(g, -1, G_BOX, 0, 0, 0, (short)(cols * wchar), (short)(g->nrows * rh));
+    /* half a row under the buttons, so they and their 3D edges and the
+     * default button's frame stand clear of the bottom */
+    root = add(g, -1, G_BOX, 0, 0, 0, (short)(cols * wchar), (short)(g->nrows * rh + (nbtn ? rh / 2 : 0)));
     g->o[root].ob_spec.index = g->framed ? 0x00021100L : 0x00001100L;
     g->o[root].ob_state = (short)(g->framed ? OS_OUTLINED : 0);
     for (i = 0; i < g->nit; i++) {

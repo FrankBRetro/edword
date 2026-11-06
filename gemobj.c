@@ -771,15 +771,16 @@ static const char *btn_text(int b, char *buf)
 static short lay_buttons(short w)
 {
     char buf[60];
-    short x = 2, y = 2, bh = (short)(hchar + 4), b;
+    short m = (short)(aes_3d ? 4 : 2), g = (short)(aes_3d ? 6 : 2);   /* 3D buttons stand 2 pixels out */
+    short x = m, y = m, bh = (short)(hchar + 4), b;
     for (b = 0; b < NBTN; b++) {
         short bw = (short)((strlen(btn_text(b, buf)) + 2) * wchar);
         if (b == B_FILL || b == B_WIDTH) bw = (short)(bw + 3 * wchar);  /* room for longer values */
-        if (x + bw > w - 2 && x > 2) { x = 2; y = (short)(y + bh + 2); }
+        if (x + bw > w - m && x > m) { x = m; y = (short)(y + bh + g); }
         dw.bt[b].g_x = x; dw.bt[b].g_y = y; dw.bt[b].g_w = bw; dw.bt[b].g_h = bh;
-        x = (short)(x + bw + (b == T_FREE || b == B_COLOUR ? wchar : 2));
+        x = (short)(x + bw + (b == T_FREE || b == B_COLOUR ? wchar : g));
     }
-    return (short)(y + bh + 3);
+    return (short)(y + bh + m + 1);
 }
 
 static OBJ *dobj(void)
@@ -807,26 +808,30 @@ static void canvas_geom(GRECT *wa, GRECT *cv)
     dw.cy = cv->g_y + (cv->g_h - bh * dw.num / dw.den) / 2;
 }
 
-static void draw_btn(int b, GRECT *wa)
+/* the button bar: an AES object tree, so it has the AES's look (3D
+ * where it has it) */
+static OBJECT dwt[NBTN + 1];
+static char   dwtxt[NBTN][60];
+
+static void bar_tree(GRECT *wa)
 {
-    char buf[60];
-    const char *t = btn_text(b, buf);
-    short p[10], x = (short)(wa->g_x + dw.bt[b].g_x), y = (short)(wa->g_y + dw.bt[b].g_y), w = dw.bt[b].g_w, h = dw.bt[b].g_h;
-    short dum, sel = (b < NTOOLS && b == dw.tool);
-    int dis = (b >= B_FRONT && b <= B_DELETE && dw.sel < 0);
-    vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, sel ? 1 : 0); vsf_perimeter(vhandle, 0);
-    vswr_mode(vhandle, MD_REPLACE);
-    p[0] = x; p[1] = y; p[2] = (short)(x + w - 1); p[3] = (short)(y + h - 1);
-    vr_recfl(vhandle, p);
-    draw_frame(x, y, x + w - 1, y + h - 1, 1);
-    set_sys_font();
-    vst_color(vhandle, sel ? 0 : 1);
-    vst_effects(vhandle, dis ? 2 : 0);
-    vst_alignment(vhandle, 0, 5, &dum, &dum);
-    vswr_mode(vhandle, MD_TRANS);
-    v_gtext(vhandle, (short)(x + (w - (short)strlen(t) * wchar) / 2), (short)(y + 2), (char *)t);
-    vst_effects(vhandle, 0);
-    vst_color(vhandle, 1);
+    int b;
+    memset(dwt, 0, sizeof dwt);
+    dwt[0].ob_next = -1; dwt[0].ob_head = 1; dwt[0].ob_tail = NBTN;
+    dwt[0].ob_type = G_BOX; dwt[0].ob_spec.index = 0x00001100L;   /* white, or the AES's grey */
+    dwt[0].ob_x = wa->g_x; dwt[0].ob_y = wa->g_y; dwt[0].ob_width = wa->g_w; dwt[0].ob_height = dw.barh;
+    if (aes_3d) dwt[0].ob_flags = OF_FL3DBAK;
+    for (b = 0; b < NBTN; b++) {
+        OBJECT *o = &dwt[b + 1];
+        const char *t = btn_text(b, dwtxt[b]);
+        if (t != dwtxt[b]) { strncpy(dwtxt[b], t, 59); dwtxt[b][59] = 0; }
+        o->ob_next = (short)(b + 1 < NBTN ? b + 2 : 0); o->ob_head = o->ob_tail = -1;
+        o->ob_type = G_BUTTON; o->ob_spec.free_string = dwtxt[b];
+        o->ob_flags = (short)(OF_SELECTABLE | (aes_3d ? OF_FL3DACT : 0) | (b == NBTN - 1 ? OF_LASTOB : 0));
+        o->ob_state = (short)(((b < NTOOLS && b == dw.tool) ? OS_SELECTED : 0) |
+                              ((b >= B_FRONT && b <= B_DELETE && dw.sel < 0) ? OS_DISABLED : 0));
+        o->ob_x = dw.bt[b].g_x; o->ob_y = dw.bt[b].g_y; o->ob_width = dw.bt[b].g_w; o->ob_height = dw.bt[b].g_h;
+    }
 }
 
 static void sel_frame(const SHAPE *s)
@@ -844,9 +849,10 @@ static void dw_draw(GRECT *area)
     GRECT r, wa, cv;
     OBJ *o = dobj();
     short clip[4], p[4];
-    int b, k;
+    int k;
     wind_get(dw.wh, WF_WORKXYWH, &wa.g_x, &wa.g_y, &wa.g_w, &wa.g_h);
     canvas_geom(&wa, &cv);
+    bar_tree(&wa);
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
     wind_get(dw.wh, WF_FIRSTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
@@ -860,13 +866,10 @@ static void dw_draw(GRECT *area)
             vs_clip(vhandle, 1, clip);
             vswr_mode(vhandle, MD_REPLACE);
             vsf_perimeter(vhandle, 0);
-            vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, 0);
-            p[0] = wa.g_x; p[1] = wa.g_y; p[2] = (short)(wa.g_x + wa.g_w - 1); p[3] = (short)(cv.g_y - 1);
-            vr_recfl(vhandle, p);
+            if (y1 < cv.g_y) objc_draw(dwt, 0, 1, x1, y1, (short)(x2 - x1), (short)(y2 - y1));
             vsf_interior(vhandle, FIS_PATTERN); vsf_style(vhandle, 1); vsf_color(vhandle, 1);
             p[0] = cv.g_x; p[1] = cv.g_y; p[2] = (short)(cv.g_x + cv.g_w - 1); p[3] = (short)(cv.g_y + cv.g_h - 1);
             vr_recfl(vhandle, p);
-            for (b = 0; b < NBTN; b++) draw_btn(b, &wa);
             if (o) {
                 long bw = tw2px_x(o->w) * dw.num / dw.den, bh = tw2px_y(o->h) * dw.num / dw.den;
                 vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, 0);

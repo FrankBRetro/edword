@@ -65,32 +65,6 @@ static void t_box(const GRECT *r)
     v_pline(vhandle, 5, p);
 }
 
-static void t_invert(const GRECT *r)
-{
-    short p[4];
-    p[0] = r->g_x; p[1] = r->g_y; p[2] = r->g_x + r->g_w - 1; p[3] = r->g_y + r->g_h - 1;
-    vswr_mode(vhandle, MD_XOR);
-    vsf_interior(vhandle, FIS_SOLID);
-    vsf_color(vhandle, 1);
-    vr_recfl(vhandle, p);
-    vswr_mode(vhandle, MD_TRANS);
-}
-
-/* system-font text; base is the top of the character cell */
-static void t_text(long x, long top, const char *s)
-{
-    v_gtext(vhandle, (short)x, (short)(top + sys_asc), s);
-}
-
-static void t_button(const GRECT *r, const char *label, int sel)
-{
-    t_fill(r, 0, 0);
-    t_box(r);
-    vswr_mode(vhandle, MD_TRANS);
-    t_text(r->g_x + (r->g_w - (long)strlen(label) * wchar) / 2, r->g_y + (r->g_h - hchar) / 2, label);
-    if (sel) t_invert(r);
-}
-
 /* walk a window's rectangle list and call draw for each piece */
 static void t_redraw(short wh, const GRECT *area, void (*draw)(const GRECT *clip))
 {
@@ -239,6 +213,41 @@ static void fs_thumb(const GRECT *trk, GRECT *th)
 typedef char fs_rsc_check[FS_COUNT == FO_N && FS_FUP == FO_FUP && FS_SROW0 == FO_SROW0 && FS_CLOSE == FO_CLOSE ? 1 : -1];
 
 /* the tree from the resource file: the texts that change and the states */
+/* the 3D look where the AES has it: a grey window, raised arrows and
+ * buttons. 3D objects stand 2 pixels out from their rectangles, so the
+ * arrows and the scroll bar move off the lists' edges. The style buttons
+ * share one width either way. */
+static void fs_3d(void)
+{
+    static const int sty[3] = { S_BOLD, S_ITALIC, S_UNDERLINE };
+    int i;
+    short w = 0;
+    for (i = 0; i < 3; i++) if ((short)((strlen(L(sty[i])) + 3) * wchar) > w) w = (short)((strlen(L(sty[i])) + 3) * wchar);
+    for (i = 0; i < 3; i++) ft[FO_ST0 + i].ob_width = w;
+    ft[FO_ROOT].ob_spec.index = 0x00001100L;     /* hollow white: the AES's grey where it has 3D */
+    if (!aes_3d) return;
+    ft[FO_ROOT].ob_flags |= OF_FL3DBAK;
+    for (i = FO_LFONT; i <= FO_LSTYLE; i++) ft[i].ob_flags |= OF_FL3DBAK;
+    ft[FO_FUP].ob_flags |= OF_FL3DACT; ft[FO_FDN].ob_flags |= OF_FL3DACT;
+    ft[FO_SUP].ob_flags |= OF_FL3DACT; ft[FO_SDN].ob_flags |= OF_FL3DACT;
+    ft[FO_FTHUMB].ob_flags |= OF_FL3DACT;
+    ft[FO_APPLY].ob_flags |= OF_FL3DACT; ft[FO_CLOSE].ob_flags |= OF_FL3DACT;
+    /* the AES greys only hollow white objects: a solid white one stays white */
+    ft[FO_FUP].ob_spec.index &= ~0x70L; ft[FO_FDN].ob_spec.index &= ~0x70L;
+    ft[FO_SUP].ob_spec.index &= ~0x70L; ft[FO_SDN].ob_spec.index &= ~0x70L;
+    ft[FO_FTHUMB].ob_spec.index &= ~0x70L;
+    for (i = FO_FUP; i <= FO_FTRK; i++) ft[i].ob_x += 3;
+    ft[FO_SUP].ob_x += 3; ft[FO_SDN].ob_x += 3;
+    ft[FO_FTRK].ob_y += 2; ft[FO_FTRK].ob_height -= 4;
+    {
+        GRECT trk, z;
+        setr(&trk, 0, 0, ft[FO_FTRK].ob_width, ft[FO_FTRK].ob_height);
+        fs_thumb(&trk, &z);
+        ft[FO_FTHUMB].ob_x = z.g_x; ft[FO_FTHUMB].ob_y = z.g_y;
+        ft[FO_FTHUMB].ob_width = z.g_w; ft[FO_FTHUMB].ob_height = z.g_h;
+    }
+}
+
 static int fs_tree_rsc(void)
 {
     OBJECT *t = rsc_tree(RT_FONTSEL);
@@ -271,14 +280,7 @@ static int fs_tree_rsc(void)
         if (aes_magic) ft[FO_ST0 + i].ob_state |= (short)(OS_WHITEBAK | 0x8000 | (0x7F << 8));
         else if (aes_3d) ft[FO_ST0 + i].ob_flags |= OF_FL3DIND;
     }
-    if (aes_3d) {
-        ft[FO_ROOT].ob_flags |= OF_FL3DBAK;
-        for (i = FO_LFONT; i <= FO_LSTYLE; i++) ft[i].ob_flags |= OF_FL3DBAK;
-        ft[FO_FUP].ob_flags |= OF_FL3DACT; ft[FO_FDN].ob_flags |= OF_FL3DACT;
-        ft[FO_SUP].ob_flags |= OF_FL3DACT; ft[FO_SDN].ob_flags |= OF_FL3DACT;
-        ft[FO_FTHUMB].ob_flags |= OF_FL3DACT; ft[FO_FTRK].ob_flags |= OF_FL3DBAK;
-        ft[FO_APPLY].ob_flags |= OF_FL3DACT; ft[FO_CLOSE].ob_flags |= OF_FL3DACT;
-    }
+    fs_3d();
     return 1;
 }
 
@@ -342,14 +344,7 @@ static void fs_tree(void)
     ft[FO_APPLY].ob_spec.free_string = (char *)L(S_APPLY);
     fo_set(FO_CLOSE, G_BUTTON, 0, OF_SELECTABLE | OF_EXIT, &Y.cl, &Y.w);
     ft[FO_CLOSE].ob_spec.free_string = (char *)L(S_CLOSE);
-    if (aes_3d) {
-        ft[FO_ROOT].ob_flags |= OF_FL3DBAK;
-        for (i = FO_LFONT; i <= FO_LSTYLE; i++) ft[i].ob_flags |= OF_FL3DBAK;
-        ft[FO_FUP].ob_flags |= OF_FL3DACT; ft[FO_FDN].ob_flags |= OF_FL3DACT;
-        ft[FO_SUP].ob_flags |= OF_FL3DACT; ft[FO_SDN].ob_flags |= OF_FL3DACT;
-        ft[FO_FTHUMB].ob_flags |= OF_FL3DACT; ft[FO_FTRK].ob_flags |= OF_FL3DBAK;
-        ft[FO_APPLY].ob_flags |= OF_FL3DACT; ft[FO_CLOSE].ob_flags |= OF_FL3DACT;
-    }
+    fs_3d();
     /* the tree's links */
     for (i = FO_LFONT; i < FO_N; i++)
         if (!(i > FO_FBOX && i < FO_FUP) && !(i > FO_SBOX && i < FO_SUP) && i != FO_FTHUMB) objc_add(ft, FO_ROOT, (short)i);
@@ -595,14 +590,15 @@ static void pv_layout(PVLAY *Y)
     wind_get(pv.wh, WF_WORKXYWH, &Y->w.g_x, &Y->w.g_y, &Y->w.g_w, &Y->w.g_h);
     setr(&Y->bar, Y->w.g_x, Y->w.g_y, Y->w.g_w, hchar + 10);
     setr(&Y->area, Y->w.g_x, Y->w.g_y + Y->bar.g_h, Y->w.g_w, Y->w.g_h - Y->bar.g_h);
+    long gap = aes_3d ? 6 : 4;             /* 3D buttons stand 2 pixels out */
     by = Y->w.g_y + 3;
-    x = Y->w.g_x + 4;
-    setr(&Y->prev, x, by, 4 * wchar, bh); x += 4 * wchar + 4;
+    x = Y->w.g_x + gap;
+    setr(&Y->prev, x, by, 4 * wchar, bh); x += 4 * wchar + gap;
     setr(&Y->next, x, by, 4 * wchar, bh); x += 4 * wchar + 2 * wchar;
     Y->lx = x; x += ((long)strlen(L(S_PAGE_N_OF)) + 2) * wchar;
-    setr(&Y->zoom, x, by, ((long)strlen(L(S_WHOLE_PAGE)) + 2) * wchar, bh); x += Y->zoom.g_w + 4;
-    setr(&Y->prt, x, by, ((long)strlen(L(S_PRINT_BTN)) + 2) * wchar, bh); x += Y->prt.g_w + 4;
-    setr(&Y->pdf, x, by, ((long)strlen(L(S_EXPORT_PDF)) + 2) * wchar, bh); x += Y->pdf.g_w + 4;
+    setr(&Y->zoom, x, by, ((long)strlen(L(S_WHOLE_PAGE)) + 2) * wchar, bh); x += Y->zoom.g_w + gap;
+    setr(&Y->prt, x, by, ((long)strlen(L(S_PRINT_BTN)) + 2) * wchar, bh); x += Y->prt.g_w + gap;
+    setr(&Y->pdf, x, by, ((long)strlen(L(S_EXPORT_PDF)) + 2) * wchar, bh); x += Y->pdf.g_w + gap;
     setr(&Y->close, x, by, ((long)strlen(L(S_CLOSE)) + 2) * wchar, bh);
 }
 
@@ -665,23 +661,40 @@ static void pv_draw(const GRECT *clip)
     PVLAY Y;
     GRECT r, page, sh;
     long n, den, ox, oy, W, H;
-    char s[40];
 
     pv_layout(&Y);
     /* button bar */
     r = Y.bar;
     if (rc_and(clip, &r)) {
-        short p[4];
-        t_fill(&Y.bar, 0, 0);
-        t_button(&Y.prev, "\004", 0);
-        t_button(&Y.next, "\003", 0);
-        sprintf(s, L(S_PAGE_N_OF), pv.page + 1, doc_npages(pv.d));
-        vswr_mode(vhandle, MD_TRANS);
-        t_text(Y.lx, Y.bar.g_y + (Y.bar.g_h - hchar) / 2, s);
-        t_button(&Y.zoom, pv.zoom ? L(S_WHOLE_PAGE) : "100%", 0);
-        t_button(&Y.prt, L(S_PRINT_BTN), 0);
-        t_button(&Y.pdf, L(S_EXPORT_PDF), 0);
-        t_button(&Y.close, L(S_CLOSE), 0);
+        /* an AES object tree: the AES's buttons, 3D where it has them */
+        static OBJECT t[8];
+        static char pg[40];
+        const GRECT *b[6];
+        const char *lab[6];
+        short p[4], i;
+        b[0] = &Y.prev; b[1] = &Y.next; b[2] = &Y.zoom; b[3] = &Y.prt; b[4] = &Y.pdf; b[5] = &Y.close;
+        lab[0] = "\004"; lab[1] = "\003"; lab[2] = pv.zoom ? L(S_WHOLE_PAGE) : "100%";
+        lab[3] = L(S_PRINT_BTN); lab[4] = L(S_EXPORT_PDF); lab[5] = L(S_CLOSE);
+        sprintf(pg, L(S_PAGE_N_OF), pv.page + 1, doc_npages(pv.d));
+        memset(t, 0, sizeof t);
+        t[0].ob_next = -1; t[0].ob_head = 1; t[0].ob_tail = 7;
+        t[0].ob_type = G_BOX; t[0].ob_spec.index = 0x00001100L;
+        t[0].ob_flags = (short)(aes_3d ? OF_FL3DBAK : 0);
+        t[0].ob_x = Y.bar.g_x; t[0].ob_y = Y.bar.g_y; t[0].ob_width = Y.bar.g_w; t[0].ob_height = (short)(Y.bar.g_h - 1);
+        for (i = 0; i < 6; i++) {
+            OBJECT *o = &t[i + 1];
+            o->ob_next = (short)(i + 2); o->ob_head = o->ob_tail = -1;
+            o->ob_type = G_BUTTON; o->ob_spec.free_string = (char *)lab[i];
+            o->ob_flags = (short)(OF_SELECTABLE | (aes_3d ? OF_FL3DACT : 0));
+            o->ob_x = (short)(b[i]->g_x - Y.bar.g_x); o->ob_y = (short)(b[i]->g_y - Y.bar.g_y);
+            o->ob_width = b[i]->g_w; o->ob_height = b[i]->g_h;
+        }
+        t[7].ob_next = 0; t[7].ob_head = t[7].ob_tail = -1;
+        t[7].ob_type = G_STRING; t[7].ob_spec.free_string = pg;
+        t[7].ob_flags = (short)(OF_LASTOB | (aes_3d ? OF_FL3DBAK : 0));
+        t[7].ob_x = (short)(Y.lx - Y.bar.g_x); t[7].ob_y = (short)((Y.bar.g_h - hchar) / 2);
+        t[7].ob_width = (short)(strlen(pg) * wchar); t[7].ob_height = hchar;
+        objc_draw(t, 0, 1, r.g_x, r.g_y, r.g_w, r.g_h);
         p[0] = Y.bar.g_x; p[2] = Y.bar.g_x + Y.bar.g_w - 1;
         p[1] = p[3] = Y.bar.g_y + Y.bar.g_h - 1;
         v_pline(vhandle, 2, p);

@@ -93,6 +93,7 @@ void set_sys_font(void)
     vst_height(vhandle, hchar >= 16 ? 13 : 6, &dmy, &dmy, &dmy, &dmy);
     vst_effects(vhandle, 0);
     vst_color(vhandle, 1);
+    vst_alignment(vhandle, 0, 0, &dmy, &dmy);           /* left, baseline */
 }
 
 /* vqt_fontinfo with full-size reply buffers. gemlib's binding keeps only

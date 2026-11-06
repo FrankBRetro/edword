@@ -291,7 +291,7 @@ def fontsel(L):
     # positions as in fs_layout(): characters and pixels from the window's work area
     top = cp(1, 6)
     lh = FROWS
-    root = Obj(G_BOX, cp(0), cp(0), cp(60), cp(1 + FROWS + 3 + 1, 6 + 8 + 8 + 6 + 4 + 8), spec=0x00001170, name='ROOT')
+    root = Obj(G_BOX, cp(0), cp(0), cp(60), cp(1 + FROWS + 3 + 1, 6 + 8 + 8 + 6 + 4 + 8), spec=0x00001100, name='ROOT')
     def at(c, p=0): return cp(c, p)
     add(root, Obj(G_STRING, at(1), cp(0, 3), cp(20), cp(1), spec=('str', L('S_FONT')), name='LFONT'))
     add(root, Obj(G_STRING, at(31), cp(0, 3), cp(len(L('S_SIZE')) + 4), cp(1), spec=('str', L('S_SIZE') + b' 999'), name='LSIZE'))
@@ -343,7 +343,7 @@ def toolbar(icons, big):
     tbh = 24 if big else 15
     ih = 16 if big else 8
     bh = tbh - 5
-    root = Obj(G_BOX, cp(0), cp(0), cp(80), cp(0, tbh), spec=0x00001170, name='ROOT')    # white, no frame
+    root = Obj(G_BOX, cp(0), cp(0), cp(80), cp(0, tbh), spec=0x00001100, name='ROOT')    # white (the AES's grey with 3D), no frame
     x = 4
     for t in TB:
         if t is None:
