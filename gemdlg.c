@@ -1832,7 +1832,7 @@ void dlg_about(void)
 #endif
     dlg_text(&g, vline);
     dlg_row(&g);
-    dlg_text(&g, ED_ABOUT[0] ? ED_ABOUT : L(S_ABOUT_LINE1));
+    dlg_text(&g, ED_ABOUT[0] ? ED_ABOUT : L(S_ABOUT_ATARI));
     dlg_row(&g);
     dlg_text(&g, L(S_ABOUT_LINE2));
     dlg_row(&g);

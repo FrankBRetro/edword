@@ -147,6 +147,7 @@ enum {
     S_FONT_SAMPLE,
     S_VERSION,
     S_ABOUT_LINE1,
+    S_ABOUT_ATARI,
     S_ABOUT_LINE2,
     S_ABOUT_LINE3,
     S_ABOUT_THES,

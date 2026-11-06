@@ -878,6 +878,12 @@ de: Eine Textverarbeitung für den Atari ST.
 es: Un procesador de textos para el Atari ST.
 it: Un elaboratore di testi per l'Atari ST.
 fr: Un traitement de texte pour l'Atari ST.
+@S_ABOUT_ATARI
+en: A word processor for Atari compatible computers.
+de: Eine Textverarbeitung für Atari-kompatible Computer.
+es: Un procesador de textos para ordenadores compatibles Atari.
+it: Un elaboratore di testi per computer compatibili Atari.
+fr: Un traitement de texte pour ordinateurs compatibles Atari.
 @S_ABOUT_LINE2
 en: Documents are saved as RTF and exported as PDF.
 de: Dokumente werden als RTF gespeichert, Export als PDF.
