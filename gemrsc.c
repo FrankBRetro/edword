@@ -22,6 +22,7 @@ static short title_obj[RT_COUNT];
 /* ext types from mkrsc.py */
 enum { X_ROW = 1, X_GROUP = 2, X_BUTTON = 3, X_TITLE = 4 };
 
+#ifdef ED_RSC
 static void spread(int tree)
 {
     OBJECT *t;
@@ -55,9 +56,17 @@ static void clear_ext(int tree)
     }
 }
 
+#endif
+
 /* load the file for a language (again, with force: fresh trees) */
 int rsc_load(int lang, int force)
 {
+#ifndef ED_RSC
+    /* built without resource files ("make RSC=1" uses them): EdWord's own
+     * menus and dialogs, as everywhere a file isn't found */
+    (void)lang; (void)force;
+    return 0;
+#else
     char path[300];
     int i;
     if (lang < 0 || lang >= NLANG) lang = 0;
@@ -76,6 +85,7 @@ int rsc_load(int lang, int force)
     }
     edlog("resource file %s", path);
     return 1;
+#endif
 }
 
 void rsc_free(void)

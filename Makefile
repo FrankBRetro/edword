@@ -5,6 +5,10 @@
 #   make                      EDWORD.PRG
 #   make EDLOG=1              ... that writes a start-up log, EDWORD.LOG
 #   make EDDEMO=1             ... that runs DEMO.SCR (screenshots for the manual)
+#   make RSC=1                ... whose menu bar, Print and Preferences dialogs, font
+#                             selector, toolbar and popups come from EDWORD*.RSC
+#                             (without it EdWord builds them itself; "make clean"
+#                             when switching, the objects don't know)
 #   make ED_VERSION=3.1 ED_ABOUT="Built for the Atari club"
 #                             set the version and the sentence in the About box
 #
@@ -60,6 +64,9 @@ CFLAGS  = -O2 $(CPUFLAGS) -fomit-frame-pointer -Wall -std=gnu89
 
 ifdef EDDIAG
 CFLAGS += -DEDDIAG
+endif
+ifdef RSC
+CFLAGS += -DED_RSC
 endif
 ifdef EDLOG
 CFLAGS += -DEDLOG
