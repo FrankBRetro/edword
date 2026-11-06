@@ -218,6 +218,7 @@ static void run_line(char *s)
     edlog("demo: %s %s", cmd, s);
     if (!strcmp(cmd, "OPEN")) { char path[300]; sprintf(path, "%s%s", progdir, s); open_path(path, strstr(s, ".TXT") != NULL); }
     else if (!strcmp(cmd, "CMD")) { int c = cmd_by_name(s); if (c) do_cmd(c); }
+    else if (!strcmp(cmd, "LIVE")) { int c = cmd_by_name(s); demo_on = 0; if (c) do_cmd(c); }   /* as the user would: the script ends */
     else if (!strcmp(cmd, "SHOT")) { pump_redraws(); evnt_timer(50L); pump_redraws(); demo_shot(s); }
     else if (!strcmp(cmd, "DSHOT")) { strncpy(dshot, s, 15); dshot[15] = 0; }
     else if (!strcmp(cmd, "DSHOT2")) { strncpy(dshot2, s, 15); dshot2[15] = 0; }
