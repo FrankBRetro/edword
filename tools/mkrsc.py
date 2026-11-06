@@ -411,15 +411,15 @@ def menus():
     m_tools = [('M_SPELL', '^K', 'C_SPELL'), ('M_LIVESPELL', None, 'C_LIVESPELL'), ('M_THES', '\x01F7', 'C_THES'),
                ('M_SUMMARY', None, 'C_SUMMARY'), SEP, ('M_UDLOAD', None, 'C_UDLOAD'), ('M_UDNEW', None, 'C_UDNEW'), SEP,
                ('DYN', 'UD', 4, 24, 'C_UD0'), SEP, ('M_PREFS', None, 'C_PREFS')]
-    m_window = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'), SEP,
-                ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'),
-                ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), SEP,
-                ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES'), SEP,
-                ('M_TILEV', None, 'C_TILEV'), ('M_TILEH', None, 'C_TILEH'), ('M_CASCADE', None, 'C_CASCADE'), SEP,
+    m_view = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'), SEP,
+              ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'),
+              ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), SEP,
+              ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES')]
+    m_window = [('M_TILEV', None, 'C_TILEV'), ('M_TILEH', None, 'C_TILEH'), ('M_CASCADE', None, 'C_CASCADE'), SEP,
                 ('M_ICONIFY', '^Z', 'C_ICONIFY'), ('M_ICONALL', None, 'C_ICONALL'), ('M_BOTTOM', None, 'C_BOTTOM'),
                 ('M_CYCLE', '^W', 'C_CYCLE'), SEP, ('DYN', 'WIN', 24, 24, 'C_WIN0'), ('M_WINMORE', None, 'C_WINMORE')]
     return [('MT_DESK', m_desk), ('MT_FILE', m_file), ('MT_EDIT', m_edit), ('MT_INSERT', m_insert), ('MT_FONT', m_font),
-            ('MT_STYLE', m_style), ('MT_PARA', m_para), ('MT_TOOLS', m_tools), ('MT_WINDOW', m_window)]
+            ('MT_STYLE', m_style), ('MT_PARA', m_para), ('MT_TOOLS', m_tools), ('MT_VIEW', m_view), ('MT_WINDOW', m_window)]
 
 def menubar(L):
     root = Obj(G_IBOX, cp(0), cp(0), cp(80), cp(25), name='ROOT')
@@ -427,6 +427,9 @@ def menubar(L):
     ms = menus()
     titles = [b' ' + L(t)[:12] + b' ' for t, _ in ms]
     total = sum(len(t) for t in titles)
+    if total > 78:          # as gem.c does: one space before each title when two don't fit
+        titles = [b' ' + L(t)[:12] for t, _ in ms]
+        total = sum(len(t) for t in titles)
     active = add(bar, Obj(G_IBOX, cp(2), cp(0), cp(total), cp(1, 3), name='ACTIVE'))
     tx, x = [], 0
     for i, t in enumerate(titles):

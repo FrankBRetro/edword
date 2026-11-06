@@ -176,7 +176,7 @@ static int tos_language(void)
 /* ================================================================= */
 
 #define MAXOBJ 260
-#define NMENU  9
+#define NMENU  10
 #define MAXFONTMENU 24
 
 typedef struct { int text; const char *key; short cmd; } MI;    /* text < 0: separator */
@@ -236,11 +236,14 @@ static MI m_tools[] = {
     { M_UDLOAD, NULL, C_UDLOAD }, { M_UDNEW, NULL, C_UDNEW }, SEP,
     { DYN + 60, NULL, C_UD0 }, { DYN + 61, NULL, C_UD0 + 1 }, { DYN + 62, NULL, C_UD0 + 2 }, { DYN + 63, NULL, C_UD0 + 3 },
     SEP, { M_PREFS, NULL, C_PREFS }, { 0, NULL, 0 } };
-#define NWINFIX 21
-static const MI m_window_fixed[NWINFIX] = {
+/* the view, apart from the Window menu: TOS 1-4 can't drop down a menu
+ * that tall (see menu_rows_fit) */
+static const MI m_view[] = {
     { M_VDOC, "F4", C_VDOC }, { M_SPLIT, "^Y", C_SPLIT }, { M_VCODES, "F6", C_VCODES }, SEP,
     { M_ZOOMIN, "F8", C_ZOOMIN }, { M_ZOOMOUT, "F7", C_ZOOMOUT }, { M_ZOOMFIT, "\001F8", C_ZOOMFIT }, SEP,
-    { M_TOOLBAR, "^T", C_TOOLBAR }, { M_RULERS, "^\001R", C_RULERS }, { M_GUIDES, NULL, C_GUIDES }, SEP,
+    { M_TOOLBAR, "^T", C_TOOLBAR }, { M_RULERS, "^\001R", C_RULERS }, { M_GUIDES, NULL, C_GUIDES }, { 0, NULL, 0 } };
+#define NWINFIX 9
+static const MI m_window_fixed[NWINFIX] = {
     { M_TILEV, NULL, C_TILEV }, { M_TILEH, NULL, C_TILEH }, { M_CASCADE, NULL, C_CASCADE }, SEP,
     { M_ICONIFY, "^Z", C_ICONIFY }, { M_ICONALL, NULL, C_ICONALL }, { M_BOTTOM, NULL, C_BOTTOM },
     { M_CYCLE, "^W", C_CYCLE }, SEP };
@@ -248,10 +251,27 @@ static MI m_window[NWINFIX + MAX_DOCS + 2];
 static int win_items;                   /* document windows listed in the menu */
 static short winmap[MAX_DOCS];          /* menu entry -> document slot */
 
+/* The rows a drop-down menu of this many characters' width may have.
+ * TOS 1-4 save the screen under a drop-down in a buffer a quarter of
+ * the screen's size and don't check: a bigger menu writes over memory
+ * that isn't theirs (in 256 colours, enough to hang or crash the
+ * machine). MagiC (AES 3.99) and AES 4 (MultiTOS, XaAES, MyAES, N.AES)
+ * have no such limit; EmuTOS cuts the menu short instead. */
+static int menu_rows_fit(int wchars)
+{
+    long w, lim, rows;
+    int screen_rows = (scr_h - hchar - 4) / hchar - 1;
+    if (aes_global[0] >= 0x0399) return screen_rows;
+    w = ((long)wchars * wchar + 2 + 15) / 16 * 16 + 16;       /* word-aligned, wherever it lands */
+    lim = (long)scr_w * scr_h / 4;
+    rows = (lim / w - 2) / hchar;
+    return (int)(rows < screen_rows ? rows : screen_rows);
+}
+
 /* the Window menu: as many documents as fit, then "More windows..." */
 static void build_window_menu(void)
 {
-    int i, n = 0, rows = (scr_h - hchar - 4) / hchar - 1, room;
+    int i, n = 0, rows = menu_rows_fit(28), room;
     for (i = 0; i < NWINFIX; i++) m_window[n++] = m_window_fixed[i];
     room = rows - n;
     if (room > MAX_DOCS) room = MAX_DOCS;
@@ -292,9 +312,10 @@ static const char *mi_text(const MI *m)
 }
 
 /* the Font menu: the selector, sizes, then as many fonts as fit */
+static int menu_rows_fit(int wchars);
 static void build_font_menu(void)
 {
-    int i, n = 0, rows = (scr_h - hchar - 4) / hchar - 1, room;
+    int i, n = 0, rows = menu_rows_fit(28), room;
     m_font[n].text = M_FONTSEL; m_font[n].key = "^\001F"; m_font[n].cmd = C_FONTSEL; n++;
     m_font[n].text = M_SIZEOTHER; m_font[n].key = NULL; m_font[n].cmd = C_SIZEOTHER; n++;
     m_font[n].text = -1; m_font[n].cmd = -1; m_font[n].key = NULL; n++;
@@ -340,7 +361,7 @@ static int build_menu_rsc(void)
 {
     static const short cm[][2] = { RSC_MENU_CMDS };
     OBJECT *t;
-    int i, rows = (scr_h - hchar - 4) / hchar - 1, room, nfix;
+    int i, room, nfix;
     short b;
     if (!rsc_load(ui_lang, 1) || !(t = rsc_tree(RT_MENU))) return 0;
     mtree = t;
@@ -356,7 +377,7 @@ static int build_menu_rsc(void)
     t[MN_SCREEN].ob_height = (short)(scr_h - t[MN_SCREEN].ob_y);
     /* the fonts: as many as fit, then "More fonts..." */
     nfix = MN_FONT0 - (t[MN_BOX4].ob_head);
-    room = rows - nfix;
+    room = menu_rows_fit(t[MN_BOX4].ob_width / wchar) - nfix;
     if (room > MAXFONTMENU) room = MAXFONTMENU;
     font_items = nfonts <= room ? nfonts : room - 1;
     if (font_items < 1) font_items = 1;
@@ -375,8 +396,8 @@ static int build_menu_rsc(void)
     else { t[MN_MOREFONTS].ob_flags |= OF_HIDETREE; cmdobj[C_MOREFONTS] = 0; }
     t[MN_BOX4].ob_height = (short)((nfix + font_items + (font_items < nfonts)) * hchar);
     /* the windows */
-    nfix = MN_WIN0 - (t[MN_BOX8].ob_head);
-    room = rows - nfix;
+    nfix = MN_WIN0 - (t[MN_BOX9].ob_head);
+    room = menu_rows_fit(t[MN_BOX9].ob_width / wchar) - nfix;
     if (room > MAX_DOCS) room = MAX_DOCS;
     if (room > 24) room = 24;
     win_items = room >= MAX_DOCS ? MAX_DOCS : room - 1;
@@ -388,7 +409,7 @@ static int build_menu_rsc(void)
     }
     if (win_items < MAX_DOCS) t[MN_WINMORE].ob_y = (short)(t[MN_WIN0].ob_y + win_items * hchar);
     else { t[MN_WINMORE].ob_flags |= OF_HIDETREE; cmdobj[C_WINMORE] = 0; }
-    t[MN_BOX8].ob_height = (short)((nfix + win_items + (win_items < MAX_DOCS)) * hchar);
+    t[MN_BOX9].ob_height = (short)((nfix + win_items + (win_items < MAX_DOCS)) * hchar);
     for (i = 0; i < win_items; i++) set_item(C_WIN0 + i, "-");
     for (i = 0; i < MAX_UDICT; i++) set_item(C_UD0 + i, L(S_NO_UDICT));
     /* each menu on the screen */
@@ -399,7 +420,7 @@ static int build_menu_rsc(void)
 
 static void build_menu(void)
 {
-    static const int tid[NMENU] = { MT_DESK, MT_FILE, MT_EDIT, MT_INSERT, MT_FONT, MT_STYLE, MT_PARA, MT_TOOLS, MT_WINDOW };
+    static const int tid[NMENU] = { MT_DESK, MT_FILE, MT_EDIT, MT_INSERT, MT_FONT, MT_STYLE, MT_PARA, MT_TOOLS, MT_VIEW, MT_WINDOW };
     const MI *menus[NMENU];
     short root, bar, active, screen, tx[NMENU], x = 0, i, k, total = 0;
 
@@ -411,7 +432,7 @@ static void build_menu(void)
     for (i = 0; i < win_items; i++) strcpy(dyn[70 + i], "-");
     for (i = 0; i < MAX_UDICT; i++) strcpy(dyn[60 + i], L(S_NO_UDICT));
     menus[0] = m_desk; menus[1] = m_file; menus[2] = m_edit; menus[3] = m_insert; menus[4] = m_font;
-    menus[5] = m_style; menus[6] = m_para; menus[7] = m_tools; menus[8] = m_window;
+    menus[5] = m_style; menus[6] = m_para; menus[7] = m_tools; menus[8] = m_view; menus[9] = m_window;
 
     nobj = 0;
     memset(mcmd, 0, sizeof mcmd);
@@ -419,6 +440,13 @@ static void build_menu(void)
     for (i = 0; i < NMENU; i++) {
         sprintf(titles[i], " %.12s ", L(tid[i]));
         total += (short)strlen(titles[i]) * wchar;
+    }
+    if (total > scr_w - 4 * wchar) {       /* one space before each title when two don't fit */
+        total = 0;
+        for (i = 0; i < NMENU; i++) {
+            sprintf(titles[i], " %.12s", L(tid[i]));
+            total += (short)strlen(titles[i]) * wchar;
+        }
     }
     root   = mk(-1, G_IBOX, 0, 0, scr_w, scr_h);
     bar    = mk(root, G_BOX, 0, 0, scr_w, hchar + 2);

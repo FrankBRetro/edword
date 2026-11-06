@@ -28,165 +28,167 @@
 #define MN_T6 9
 #define MN_T7 10
 #define MN_T8 11
-#define MN_SCREEN 12
-#define MN_BOX0 13
-#define MN_ABOUT 14
-#define MN_ACC0 16
-#define MN_ACC1 17
-#define MN_ACC2 18
-#define MN_ACC3 19
-#define MN_ACC4 20
-#define MN_ACC5 21
-#define MN_BOX1 22
-#define MN_NEW 23
-#define MN_TEMPLATE 24
-#define MN_OPEN 25
-#define MN_IMPORT 26
-#define MN_CLOSE 27
-#define MN_SAVEDOC 29
-#define MN_SAVEAS 30
-#define MN_EXPORT 31
-#define MN_PAGE 33
-#define MN_HEADFOOT 34
-#define MN_PREVIEW 35
-#define MN_PRINT 36
-#define MN_QUIT 38
-#define MN_BOX2 39
-#define MN_UNDO 40
-#define MN_REDO 41
-#define MN_CUT 43
-#define MN_COPY 44
-#define MN_PASTE 45
-#define MN_SELALL 46
-#define MN_FIND 48
-#define MN_FINDNEXT 49
-#define MN_PREVPAGE 51
-#define MN_NEXTPAGE 52
-#define MN_GOTOPAGE 53
-#define MN_REPAG 55
-#define MN_BOX3 56
-#define MN_DATE 57
-#define MN_TIME 58
-#define MN_PGBRK 60
-#define MN_COLBRK 61
-#define MN_PAGENUM 62
-#define MN_TBLINS 64
-#define MN_TBLPROP 65
-#define MN_ROWINS 66
-#define MN_ROWDEL 67
-#define MN_COLINS 68
-#define MN_COLDEL 69
-#define MN_TBLDEL 70
-#define MN_CHART 71
-#define MN_PICTURE 73
-#define MN_DRAWING 74
-#define MN_TOC 76
-#define MN_INSFILE 78
-#define MN_BOX4 79
-#define MN_FONTSEL 80
-#define MN_SIZEOTHER 81
-#define MN_FONT0 92
-#define MN_FONT1 93
-#define MN_FONT2 94
-#define MN_FONT3 95
-#define MN_FONT4 96
-#define MN_FONT5 97
-#define MN_FONT6 98
-#define MN_FONT7 99
-#define MN_FONT8 100
-#define MN_FONT9 101
-#define MN_FONT10 102
-#define MN_FONT11 103
-#define MN_FONT12 104
-#define MN_FONT13 105
-#define MN_FONT14 106
-#define MN_FONT15 107
-#define MN_FONT16 108
-#define MN_FONT17 109
-#define MN_FONT18 110
-#define MN_FONT19 111
-#define MN_FONT20 112
-#define MN_FONT21 113
-#define MN_FONT22 114
-#define MN_FONT23 115
-#define MN_MOREFONTS 116
-#define MN_BOX5 117
-#define MN_PLAIN 118
-#define MN_BOLD 120
-#define MN_ITALIC 121
-#define MN_UNDER 122
-#define MN_BOX6 132
-#define MN_JLEFT 133
-#define MN_JCENTRE 134
-#define MN_JRIGHT 135
-#define MN_JFULL 136
-#define MN_SP1 138
-#define MN_SP15 139
-#define MN_SP2 140
-#define MN_INDENTS 142
-#define MN_HANGING 143
-#define MN_BULLETS 144
-#define MN_NUMBERS 145
-#define MN_HEAD1 147
-#define MN_HEAD2 148
-#define MN_HEAD3 149
-#define MN_BODY 150
-#define MN_WRAPCOL 152
-#define MN_BOX7 153
-#define MN_SPELL 154
-#define MN_LIVESPELL 155
-#define MN_THES 156
-#define MN_SUMMARY 157
-#define MN_UDLOAD 159
-#define MN_UDNEW 160
-#define MN_UD0 162
-#define MN_UD1 163
-#define MN_UD2 164
-#define MN_UD3 165
-#define MN_PREFS 167
-#define MN_BOX8 168
-#define MN_VDOC 169
-#define MN_SPLIT 170
-#define MN_VCODES 171
-#define MN_ZOOMIN 173
-#define MN_ZOOMOUT 174
-#define MN_ZOOMFIT 175
-#define MN_TOOLBAR 177
-#define MN_RULERS 178
-#define MN_GUIDES 179
-#define MN_TILEV 181
-#define MN_TILEH 182
-#define MN_CASCADE 183
-#define MN_ICONIFY 185
-#define MN_ICONALL 186
-#define MN_BOTTOM 187
-#define MN_CYCLE 188
-#define MN_WIN0 190
-#define MN_WIN1 191
-#define MN_WIN2 192
-#define MN_WIN3 193
-#define MN_WIN4 194
-#define MN_WIN5 195
-#define MN_WIN6 196
-#define MN_WIN7 197
-#define MN_WIN8 198
-#define MN_WIN9 199
-#define MN_WIN10 200
-#define MN_WIN11 201
-#define MN_WIN12 202
-#define MN_WIN13 203
-#define MN_WIN14 204
-#define MN_WIN15 205
-#define MN_WIN16 206
-#define MN_WIN17 207
-#define MN_WIN18 208
-#define MN_WIN19 209
-#define MN_WIN20 210
-#define MN_WIN21 211
-#define MN_WIN22 212
-#define MN_WIN23 213
-#define MN_WINMORE 214
-#define MN_COUNT 215
+#define MN_T9 12
+#define MN_SCREEN 13
+#define MN_BOX0 14
+#define MN_ABOUT 15
+#define MN_ACC0 17
+#define MN_ACC1 18
+#define MN_ACC2 19
+#define MN_ACC3 20
+#define MN_ACC4 21
+#define MN_ACC5 22
+#define MN_BOX1 23
+#define MN_NEW 24
+#define MN_TEMPLATE 25
+#define MN_OPEN 26
+#define MN_IMPORT 27
+#define MN_CLOSE 28
+#define MN_SAVEDOC 30
+#define MN_SAVEAS 31
+#define MN_EXPORT 32
+#define MN_PAGE 34
+#define MN_HEADFOOT 35
+#define MN_PREVIEW 36
+#define MN_PRINT 37
+#define MN_QUIT 39
+#define MN_BOX2 40
+#define MN_UNDO 41
+#define MN_REDO 42
+#define MN_CUT 44
+#define MN_COPY 45
+#define MN_PASTE 46
+#define MN_SELALL 47
+#define MN_FIND 49
+#define MN_FINDNEXT 50
+#define MN_PREVPAGE 52
+#define MN_NEXTPAGE 53
+#define MN_GOTOPAGE 54
+#define MN_REPAG 56
+#define MN_BOX3 57
+#define MN_DATE 58
+#define MN_TIME 59
+#define MN_PGBRK 61
+#define MN_COLBRK 62
+#define MN_PAGENUM 63
+#define MN_TBLINS 65
+#define MN_TBLPROP 66
+#define MN_ROWINS 67
+#define MN_ROWDEL 68
+#define MN_COLINS 69
+#define MN_COLDEL 70
+#define MN_TBLDEL 71
+#define MN_CHART 72
+#define MN_PICTURE 74
+#define MN_DRAWING 75
+#define MN_TOC 77
+#define MN_INSFILE 79
+#define MN_BOX4 80
+#define MN_FONTSEL 81
+#define MN_SIZEOTHER 82
+#define MN_FONT0 93
+#define MN_FONT1 94
+#define MN_FONT2 95
+#define MN_FONT3 96
+#define MN_FONT4 97
+#define MN_FONT5 98
+#define MN_FONT6 99
+#define MN_FONT7 100
+#define MN_FONT8 101
+#define MN_FONT9 102
+#define MN_FONT10 103
+#define MN_FONT11 104
+#define MN_FONT12 105
+#define MN_FONT13 106
+#define MN_FONT14 107
+#define MN_FONT15 108
+#define MN_FONT16 109
+#define MN_FONT17 110
+#define MN_FONT18 111
+#define MN_FONT19 112
+#define MN_FONT20 113
+#define MN_FONT21 114
+#define MN_FONT22 115
+#define MN_FONT23 116
+#define MN_MOREFONTS 117
+#define MN_BOX5 118
+#define MN_PLAIN 119
+#define MN_BOLD 121
+#define MN_ITALIC 122
+#define MN_UNDER 123
+#define MN_BOX6 133
+#define MN_JLEFT 134
+#define MN_JCENTRE 135
+#define MN_JRIGHT 136
+#define MN_JFULL 137
+#define MN_SP1 139
+#define MN_SP15 140
+#define MN_SP2 141
+#define MN_INDENTS 143
+#define MN_HANGING 144
+#define MN_BULLETS 145
+#define MN_NUMBERS 146
+#define MN_HEAD1 148
+#define MN_HEAD2 149
+#define MN_HEAD3 150
+#define MN_BODY 151
+#define MN_WRAPCOL 153
+#define MN_BOX7 154
+#define MN_SPELL 155
+#define MN_LIVESPELL 156
+#define MN_THES 157
+#define MN_SUMMARY 158
+#define MN_UDLOAD 160
+#define MN_UDNEW 161
+#define MN_UD0 163
+#define MN_UD1 164
+#define MN_UD2 165
+#define MN_UD3 166
+#define MN_PREFS 168
+#define MN_BOX8 169
+#define MN_VDOC 170
+#define MN_SPLIT 171
+#define MN_VCODES 172
+#define MN_ZOOMIN 174
+#define MN_ZOOMOUT 175
+#define MN_ZOOMFIT 176
+#define MN_TOOLBAR 178
+#define MN_RULERS 179
+#define MN_GUIDES 180
+#define MN_BOX9 181
+#define MN_TILEV 182
+#define MN_TILEH 183
+#define MN_CASCADE 184
+#define MN_ICONIFY 186
+#define MN_ICONALL 187
+#define MN_BOTTOM 188
+#define MN_CYCLE 189
+#define MN_WIN0 191
+#define MN_WIN1 192
+#define MN_WIN2 193
+#define MN_WIN3 194
+#define MN_WIN4 195
+#define MN_WIN5 196
+#define MN_WIN6 197
+#define MN_WIN7 198
+#define MN_WIN8 199
+#define MN_WIN9 200
+#define MN_WIN10 201
+#define MN_WIN11 202
+#define MN_WIN12 203
+#define MN_WIN13 204
+#define MN_WIN14 205
+#define MN_WIN15 206
+#define MN_WIN16 207
+#define MN_WIN17 208
+#define MN_WIN18 209
+#define MN_WIN19 210
+#define MN_WIN20 211
+#define MN_WIN21 212
+#define MN_WIN22 213
+#define MN_WIN23 214
+#define MN_WINMORE 215
+#define MN_COUNT 216
 
 /* PRINT */
 #define PR_ROOT 0
@@ -399,164 +401,164 @@
 
 /* menu entries and their commands */
 #define RSC_MENU_CMDS \
-    { 14, C_ABOUT }, \
-    { 23, C_NEW }, \
-    { 24, C_TEMPLATE }, \
-    { 25, C_OPEN }, \
-    { 26, C_IMPORT }, \
-    { 27, C_CLOSE }, \
-    { 29, C_SAVE }, \
-    { 30, C_SAVEAS }, \
-    { 31, C_EXPORT }, \
-    { 33, C_PAGE }, \
-    { 34, C_HEADFOOT }, \
-    { 35, C_PREVIEW }, \
-    { 36, C_PRINT }, \
-    { 38, C_QUIT }, \
-    { 40, C_UNDO }, \
-    { 41, C_REDO }, \
-    { 43, C_CUT }, \
-    { 44, C_COPY }, \
-    { 45, C_PASTE }, \
-    { 46, C_SELALL }, \
-    { 48, C_FIND }, \
-    { 49, C_FINDNEXT }, \
-    { 51, C_PREVPAGE }, \
-    { 52, C_NEXTPAGE }, \
-    { 53, C_GOTOPAGE }, \
-    { 55, C_REPAG }, \
-    { 57, C_INSDATE }, \
-    { 58, C_INSTIME }, \
-    { 60, C_PGBRK }, \
-    { 61, C_COLBRK }, \
-    { 62, C_PAGENUM }, \
-    { 64, C_TBLINS }, \
-    { 65, C_TBLPROP }, \
-    { 66, C_ROWINS }, \
-    { 67, C_ROWDEL }, \
-    { 68, C_COLINS }, \
-    { 69, C_COLDEL }, \
-    { 70, C_TBLDEL }, \
-    { 71, C_CHART }, \
-    { 73, C_PICTURE }, \
-    { 74, C_DRAWING }, \
-    { 76, C_TOC }, \
-    { 78, C_INSFILE }, \
-    { 80, C_FONTSEL }, \
-    { 81, C_SIZEOTHER }, \
-    { 83, C_SIZE0 + 0 }, \
-    { 84, C_SIZE0 + 1 }, \
-    { 85, C_SIZE0 + 2 }, \
-    { 86, C_SIZE0 + 3 }, \
-    { 87, C_SIZE0 + 4 }, \
-    { 88, C_SIZE0 + 5 }, \
-    { 89, C_SIZE0 + 6 }, \
-    { 90, C_SIZE0 + 7 }, \
-    { 92, C_FONT0 + 0 }, \
-    { 93, C_FONT0 + 1 }, \
-    { 94, C_FONT0 + 2 }, \
-    { 95, C_FONT0 + 3 }, \
-    { 96, C_FONT0 + 4 }, \
-    { 97, C_FONT0 + 5 }, \
-    { 98, C_FONT0 + 6 }, \
-    { 99, C_FONT0 + 7 }, \
-    { 100, C_FONT0 + 8 }, \
-    { 101, C_FONT0 + 9 }, \
-    { 102, C_FONT0 + 10 }, \
-    { 103, C_FONT0 + 11 }, \
-    { 104, C_FONT0 + 12 }, \
-    { 105, C_FONT0 + 13 }, \
-    { 106, C_FONT0 + 14 }, \
-    { 107, C_FONT0 + 15 }, \
-    { 108, C_FONT0 + 16 }, \
-    { 109, C_FONT0 + 17 }, \
-    { 110, C_FONT0 + 18 }, \
-    { 111, C_FONT0 + 19 }, \
-    { 112, C_FONT0 + 20 }, \
-    { 113, C_FONT0 + 21 }, \
-    { 114, C_FONT0 + 22 }, \
-    { 115, C_FONT0 + 23 }, \
-    { 116, C_MOREFONTS }, \
-    { 118, C_PLAIN }, \
-    { 120, C_BOLD }, \
-    { 121, C_ITALIC }, \
-    { 122, C_UNDER }, \
-    { 124, C_COLOR0 + 0 }, \
-    { 125, C_COLOR0 + 1 }, \
-    { 126, C_COLOR0 + 2 }, \
-    { 127, C_COLOR0 + 3 }, \
-    { 128, C_COLOR0 + 4 }, \
-    { 129, C_COLOR0 + 5 }, \
-    { 130, C_COLOR0 + 6 }, \
-    { 131, C_COLOR0 + 7 }, \
-    { 133, C_JLEFT }, \
-    { 134, C_JCENTRE }, \
-    { 135, C_JRIGHT }, \
-    { 136, C_JFULL }, \
-    { 138, C_SP1 }, \
-    { 139, C_SP15 }, \
-    { 140, C_SP2 }, \
-    { 142, C_INDENTS }, \
-    { 143, C_HANGING }, \
-    { 144, C_BULLETS }, \
-    { 145, C_NUMBERS }, \
-    { 147, C_HEAD1 }, \
-    { 148, C_HEAD2 }, \
-    { 149, C_HEAD3 }, \
-    { 150, C_BODY }, \
-    { 152, C_WRAPCOL }, \
-    { 154, C_SPELL }, \
-    { 155, C_LIVESPELL }, \
-    { 156, C_THES }, \
-    { 157, C_SUMMARY }, \
-    { 159, C_UDLOAD }, \
-    { 160, C_UDNEW }, \
-    { 162, C_UD0 + 0 }, \
-    { 163, C_UD0 + 1 }, \
-    { 164, C_UD0 + 2 }, \
-    { 165, C_UD0 + 3 }, \
-    { 167, C_PREFS }, \
-    { 169, C_VDOC }, \
-    { 170, C_SPLIT }, \
-    { 171, C_VCODES }, \
-    { 173, C_ZOOMIN }, \
-    { 174, C_ZOOMOUT }, \
-    { 175, C_ZOOMFIT }, \
-    { 177, C_TOOLBAR }, \
-    { 178, C_RULERS }, \
-    { 179, C_GUIDES }, \
-    { 181, C_TILEV }, \
-    { 182, C_TILEH }, \
-    { 183, C_CASCADE }, \
-    { 185, C_ICONIFY }, \
-    { 186, C_ICONALL }, \
-    { 187, C_BOTTOM }, \
-    { 188, C_CYCLE }, \
-    { 190, C_WIN0 + 0 }, \
-    { 191, C_WIN0 + 1 }, \
-    { 192, C_WIN0 + 2 }, \
-    { 193, C_WIN0 + 3 }, \
-    { 194, C_WIN0 + 4 }, \
-    { 195, C_WIN0 + 5 }, \
-    { 196, C_WIN0 + 6 }, \
-    { 197, C_WIN0 + 7 }, \
-    { 198, C_WIN0 + 8 }, \
-    { 199, C_WIN0 + 9 }, \
-    { 200, C_WIN0 + 10 }, \
-    { 201, C_WIN0 + 11 }, \
-    { 202, C_WIN0 + 12 }, \
-    { 203, C_WIN0 + 13 }, \
-    { 204, C_WIN0 + 14 }, \
-    { 205, C_WIN0 + 15 }, \
-    { 206, C_WIN0 + 16 }, \
-    { 207, C_WIN0 + 17 }, \
-    { 208, C_WIN0 + 18 }, \
-    { 209, C_WIN0 + 19 }, \
-    { 210, C_WIN0 + 20 }, \
-    { 211, C_WIN0 + 21 }, \
-    { 212, C_WIN0 + 22 }, \
-    { 213, C_WIN0 + 23 }, \
-    { 214, C_WINMORE }
+    { 15, C_ABOUT }, \
+    { 24, C_NEW }, \
+    { 25, C_TEMPLATE }, \
+    { 26, C_OPEN }, \
+    { 27, C_IMPORT }, \
+    { 28, C_CLOSE }, \
+    { 30, C_SAVE }, \
+    { 31, C_SAVEAS }, \
+    { 32, C_EXPORT }, \
+    { 34, C_PAGE }, \
+    { 35, C_HEADFOOT }, \
+    { 36, C_PREVIEW }, \
+    { 37, C_PRINT }, \
+    { 39, C_QUIT }, \
+    { 41, C_UNDO }, \
+    { 42, C_REDO }, \
+    { 44, C_CUT }, \
+    { 45, C_COPY }, \
+    { 46, C_PASTE }, \
+    { 47, C_SELALL }, \
+    { 49, C_FIND }, \
+    { 50, C_FINDNEXT }, \
+    { 52, C_PREVPAGE }, \
+    { 53, C_NEXTPAGE }, \
+    { 54, C_GOTOPAGE }, \
+    { 56, C_REPAG }, \
+    { 58, C_INSDATE }, \
+    { 59, C_INSTIME }, \
+    { 61, C_PGBRK }, \
+    { 62, C_COLBRK }, \
+    { 63, C_PAGENUM }, \
+    { 65, C_TBLINS }, \
+    { 66, C_TBLPROP }, \
+    { 67, C_ROWINS }, \
+    { 68, C_ROWDEL }, \
+    { 69, C_COLINS }, \
+    { 70, C_COLDEL }, \
+    { 71, C_TBLDEL }, \
+    { 72, C_CHART }, \
+    { 74, C_PICTURE }, \
+    { 75, C_DRAWING }, \
+    { 77, C_TOC }, \
+    { 79, C_INSFILE }, \
+    { 81, C_FONTSEL }, \
+    { 82, C_SIZEOTHER }, \
+    { 84, C_SIZE0 + 0 }, \
+    { 85, C_SIZE0 + 1 }, \
+    { 86, C_SIZE0 + 2 }, \
+    { 87, C_SIZE0 + 3 }, \
+    { 88, C_SIZE0 + 4 }, \
+    { 89, C_SIZE0 + 5 }, \
+    { 90, C_SIZE0 + 6 }, \
+    { 91, C_SIZE0 + 7 }, \
+    { 93, C_FONT0 + 0 }, \
+    { 94, C_FONT0 + 1 }, \
+    { 95, C_FONT0 + 2 }, \
+    { 96, C_FONT0 + 3 }, \
+    { 97, C_FONT0 + 4 }, \
+    { 98, C_FONT0 + 5 }, \
+    { 99, C_FONT0 + 6 }, \
+    { 100, C_FONT0 + 7 }, \
+    { 101, C_FONT0 + 8 }, \
+    { 102, C_FONT0 + 9 }, \
+    { 103, C_FONT0 + 10 }, \
+    { 104, C_FONT0 + 11 }, \
+    { 105, C_FONT0 + 12 }, \
+    { 106, C_FONT0 + 13 }, \
+    { 107, C_FONT0 + 14 }, \
+    { 108, C_FONT0 + 15 }, \
+    { 109, C_FONT0 + 16 }, \
+    { 110, C_FONT0 + 17 }, \
+    { 111, C_FONT0 + 18 }, \
+    { 112, C_FONT0 + 19 }, \
+    { 113, C_FONT0 + 20 }, \
+    { 114, C_FONT0 + 21 }, \
+    { 115, C_FONT0 + 22 }, \
+    { 116, C_FONT0 + 23 }, \
+    { 117, C_MOREFONTS }, \
+    { 119, C_PLAIN }, \
+    { 121, C_BOLD }, \
+    { 122, C_ITALIC }, \
+    { 123, C_UNDER }, \
+    { 125, C_COLOR0 + 0 }, \
+    { 126, C_COLOR0 + 1 }, \
+    { 127, C_COLOR0 + 2 }, \
+    { 128, C_COLOR0 + 3 }, \
+    { 129, C_COLOR0 + 4 }, \
+    { 130, C_COLOR0 + 5 }, \
+    { 131, C_COLOR0 + 6 }, \
+    { 132, C_COLOR0 + 7 }, \
+    { 134, C_JLEFT }, \
+    { 135, C_JCENTRE }, \
+    { 136, C_JRIGHT }, \
+    { 137, C_JFULL }, \
+    { 139, C_SP1 }, \
+    { 140, C_SP15 }, \
+    { 141, C_SP2 }, \
+    { 143, C_INDENTS }, \
+    { 144, C_HANGING }, \
+    { 145, C_BULLETS }, \
+    { 146, C_NUMBERS }, \
+    { 148, C_HEAD1 }, \
+    { 149, C_HEAD2 }, \
+    { 150, C_HEAD3 }, \
+    { 151, C_BODY }, \
+    { 153, C_WRAPCOL }, \
+    { 155, C_SPELL }, \
+    { 156, C_LIVESPELL }, \
+    { 157, C_THES }, \
+    { 158, C_SUMMARY }, \
+    { 160, C_UDLOAD }, \
+    { 161, C_UDNEW }, \
+    { 163, C_UD0 + 0 }, \
+    { 164, C_UD0 + 1 }, \
+    { 165, C_UD0 + 2 }, \
+    { 166, C_UD0 + 3 }, \
+    { 168, C_PREFS }, \
+    { 170, C_VDOC }, \
+    { 171, C_SPLIT }, \
+    { 172, C_VCODES }, \
+    { 174, C_ZOOMIN }, \
+    { 175, C_ZOOMOUT }, \
+    { 176, C_ZOOMFIT }, \
+    { 178, C_TOOLBAR }, \
+    { 179, C_RULERS }, \
+    { 180, C_GUIDES }, \
+    { 182, C_TILEV }, \
+    { 183, C_TILEH }, \
+    { 184, C_CASCADE }, \
+    { 186, C_ICONIFY }, \
+    { 187, C_ICONALL }, \
+    { 188, C_BOTTOM }, \
+    { 189, C_CYCLE }, \
+    { 191, C_WIN0 + 0 }, \
+    { 192, C_WIN0 + 1 }, \
+    { 193, C_WIN0 + 2 }, \
+    { 194, C_WIN0 + 3 }, \
+    { 195, C_WIN0 + 4 }, \
+    { 196, C_WIN0 + 5 }, \
+    { 197, C_WIN0 + 6 }, \
+    { 198, C_WIN0 + 7 }, \
+    { 199, C_WIN0 + 8 }, \
+    { 200, C_WIN0 + 9 }, \
+    { 201, C_WIN0 + 10 }, \
+    { 202, C_WIN0 + 11 }, \
+    { 203, C_WIN0 + 12 }, \
+    { 204, C_WIN0 + 13 }, \
+    { 205, C_WIN0 + 14 }, \
+    { 206, C_WIN0 + 15 }, \
+    { 207, C_WIN0 + 16 }, \
+    { 208, C_WIN0 + 17 }, \
+    { 209, C_WIN0 + 18 }, \
+    { 210, C_WIN0 + 19 }, \
+    { 211, C_WIN0 + 20 }, \
+    { 212, C_WIN0 + 21 }, \
+    { 213, C_WIN0 + 22 }, \
+    { 214, C_WIN0 + 23 }, \
+    { 215, C_WINMORE }
 
 /* toolbar buttons and their commands (TB_FONT... open popups) */
 #define RSC_TB_CMDS \

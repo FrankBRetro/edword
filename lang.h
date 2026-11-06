@@ -12,6 +12,7 @@ enum {
     MT_STYLE,
     MT_PARA,
     MT_TOOLS,
+    MT_VIEW,
     MT_WINDOW,
     M_ABOUT,
     M_ACC,

@@ -52,6 +52,12 @@ de: Extras
 es: Utiles
 it: Utilità
 fr: Outils
+@MT_VIEW
+en: View
+de: Ansicht
+es: Ver
+it: Vista
+fr: Affichage
 @MT_WINDOW
 en: Window
 de: Fenster

@@ -121,7 +121,8 @@ def main():
                 if len(btn) > 3 or max(len(x) for x in btn) > 10:
                     print('alert buttons too big: %s/%s: %r' % (i, lg, s)); bad += 1
     for lg in LANGS:
-        w = sum(len(to_st(text[i].get(lg, text[i]['en']), i)) + 2 for i in ids if i.startswith('MT_'))
+        # gem.c and mkrsc.py put one space before each title, not two, when two don't fit
+        w = sum(len(to_st(text[i].get(lg, text[i]['en']), i)) + 1 for i in ids if i.startswith('MT_'))
         if w > 78:
             print('menu bar too wide in %s: %d characters' % (lg, w)); bad += 1
     if bad:
