@@ -143,7 +143,7 @@ static void fs_layout(FSLAY *Y)
     setr(&Y->pv, Y->w.g_x + wchar, top + lh + 8, Y->w.g_w - 2 * wchar, pv_h());
     {
         long cw = ((long)strlen(L(S_CLOSE)) + 2) * wchar, aw = ((long)strlen(L(S_APPLY)) + 2) * wchar;
-        setr(&Y->cl, Y->w.g_x + Y->w.g_w - wchar - cw, Y->pv.g_y + Y->pv.g_h + 6, cw, hchar + 4);
+        setr(&Y->cl, Y->w.g_x + Y->w.g_w - wchar - cw, Y->pv.g_y + Y->pv.g_h + 10, cw, hchar + 4);
         setr(&Y->ap, Y->cl.g_x - wchar - aw, Y->cl.g_y, aw, hchar + 4);
     }
 }
@@ -368,15 +368,25 @@ static void fs_draw(const GRECT *clip)
     if (rc_and(clip, &r)) {
         short ext[8], p[4];
         const char *sample = L(S_FONT_SAMPLE);
-        long base = FL.pv.g_y + FL.pv.g_h * 2 / 3;
+        int sz = fs.size, at = fs.attr & (A_BOLD | A_ITALIC);
+        long avail = FL.pv.g_h - 6, base;
+        const METRICS *m = get_metrics(fs.font, sz, at);
+        /* a size too big for the box: shown as large as fits */
+        if (m && m->asc + m->desc > avail && m->asc + m->desc > 0) {
+            sz = (int)((long)sz * avail / (m->asc + m->desc));
+            if (sz < 6) sz = 6;
+            m = get_metrics(fs.font, sz, at);
+        }
+        /* the line in the middle of the box */
+        base = m ? FL.pv.g_y + (FL.pv.g_h - m->asc - m->desc) / 2 + m->asc : FL.pv.g_y + FL.pv.g_h * 2 / 3;
         clip_to(&r);
         vswr_mode(vhandle, MD_TRANS);
-        set_text_style(fs.font, fs.size, fs.attr & (A_BOLD | A_ITALIC), 0);
+        set_text_style(fs.font, sz, at, 0);
         v_gtext(vhandle, (short)(FL.pv.g_x + 6), (short)base, sample);
         if (fs.attr & A_UNDER) {
             vqt_extent(vhandle, sample, ext);
             p[0] = (short)(FL.pv.g_x + 6); p[2] = (short)(p[0] + ext[2] - ext[0]);
-            p[1] = p[3] = (short)(base + 2);
+            p[1] = p[3] = (short)(base + (m && m->desc > 4 ? m->desc / 2 : 2));
             vsl_color(vhandle, 1);
             v_pline(vhandle, 2, p);
         }
@@ -425,7 +435,7 @@ void fontsel_open(void)
     long ww, wh;
     if (fs.open) { wind_set(fs.wh, WF_TOP, 0, 0, 0, 0); fs.font = -1; fontsel_sync(); return; }
     ww = 60L * wchar;
-    wh = hchar + 6 + FROWS * hchar + 8 + pv_h() + 6 + hchar + 4 + 8;
+    wh = hchar + 6 + FROWS * hchar + 8 + pv_h() + 10 + hchar + 4 + 8;
     if (rsc_tree(RT_FONTSEL)) { ww = rsc_tree(RT_FONTSEL)->ob_width; wh = rsc_tree(RT_FONTSEL)->ob_height; }
     wind_calc(WC_BORDER, FSKIND, 0, 0, (short)ww, (short)wh, &x, &y, &w, &h);
     x = (short)(desk.g_x + desk.g_w - w - 8);
