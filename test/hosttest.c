@@ -64,7 +64,7 @@ static int prt_render(void *ctx, DOC *dd, int page, int color, long y0, long h, 
 }
 /* the printed page, collected band by band (colour passes OR-ed) */
 static unsigned char *prt_page;
-static long prt_prb, prt_passes[NCOLORS + 1];
+static long prt_prb, prt_passes[PRT_INK + 8];
 static int prt_out(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rb)
 {
     long k;
@@ -874,6 +874,19 @@ int main(int argc, char **argv)
             CHECK(rtf_import(&d2, path) && d2.nimg == 1 && d2.imgs[0].rgb &&
                   !memcmp(d2.imgs[0].rgb, d.imgs[0].rgb, 40 * 30 * 3) && !memcmp(d2.imgs[0].bits, d.imgs[0].bits, 5 * 30),
                   "colours read back from RTF");
+            {   /* printed in colour: the picture in passes of the printer's inks */
+                PRTOUT pc;
+                int k, ninks = 0;
+                memset(&pc, 0, sizeof pc);
+                pc.pixw = pc.pixh = 85; pc.band = 64; pc.colour = 1;
+                pc.render = prt_render; pc.out = prt_out; pc.ctx = &pc;
+                memset(prt_passes, 0, sizeof prt_passes);
+                doc_layout(&d);
+                CHECK(page_inks(&d, 0) == PRT_INKS && print_page(&d, 0, &pc), "print a colour picture in colour");
+                for (k = 1; k < 7; k++) if (prt_passes[PRT_INK + k + 1]) ninks++;
+                printf("  print: %d of 6 inks used, black %ld\n", ninks, prt_passes[1]);
+                CHECK(ninks >= 3 && prt_passes[1] == 1, "colour picture: black and the inks it needs");
+            }
             img_rgb_max = 0;
             doc_init(&d2);
             CHECK(rtf_import(&d2, path) && d2.nimg == 1 && !d2.imgs[0].rgb, "colours skipped when there's no room");

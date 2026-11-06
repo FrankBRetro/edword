@@ -2582,6 +2582,36 @@ de: Zum Drucken wird GDOS mit|einem Druckertreiber|(Gerät 21 in ASSIGN.SYS)|ben
 es: Para imprimir hace falta|GDOS con un controlador de|impresora (dispositivo 21).
 it: Per stampare serve GDOS|con un driver di stampa|(periferica 21).
 fr: L'impression demande GDOS|avec un pilote d'imprimante|(périphérique 21).
+@AL_PRT_NO_COLOUR
+en: The printer driver has only|%d colours: the document|prints in black and white.
+de: Der Druckertreiber hat nur|%d Farben: das Dokument|wird schwarzweiß gedruckt.
+es: El controlador de impresora|solo tiene %d colores: se|imprime en blanco y negro.
+it: Il driver della stampante|ha solo %d colori: si stampa|in bianco e nero.
+fr: Le pilote d'imprimante n'a|que %d couleurs : le document|s'imprime en noir et blanc.
+@AB_PRINT_CANCEL
+en: Print|Cancel
+de: Drucken|Abbruch
+es: Imprimir|Cancelar
+it: Stampa|Annulla
+fr: Imprimer|Annuler
+@S_PRT_COLOURS
+en: Colours:
+de: Farben:
+es: Colores:
+it: Colori:
+fr: Couleurs :
+@S_PRT_COLOUR
+en: Colour
+de: Farbe
+es: Color
+it: Colore
+fr: Couleur
+@S_PRT_MONO
+en: Black and white
+de: Schwarzweiß
+es: Blanco y negro
+it: Bianco e nero
+fr: Noir et blanc
 @AL_PRINT_FAILED
 en: The document could not|be printed. Is the printer|on and its driver loaded?
 de: Das Dokument konnte nicht|gedruckt werden. Ist der|Drucker an und sein|Treiber geladen?

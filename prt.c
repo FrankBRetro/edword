@@ -197,7 +197,7 @@ int print_page(DOC *d, int page, PRTOUT *o)
     long sw, sh, pw, ph, srb, prb, band, y, sband, sx;
     long *dlo;
     unsigned char *src, *dst, *tmp;
-    int scale, ok = 1, pass, npass = 0, col[NCOLORS + 1], use_map;
+    int scale, ok = 1, pass, npass = 0, col[32], use_map;
     BYTEMAP map;
     unsigned used;
 
@@ -225,9 +225,9 @@ int print_page(DOC *d, int page, PRTOUT *o)
     /* source rows a band of printer rows needs, with rows to spare */
     sband = band * o->pixh * scale / dev_pixh + 4;
     /* the colours to print: one pass each, or all in black at once */
-    used = o->colour ? page_colours(d, page) : 1u;
+    used = o->colour ? page_colours(d, page) | page_inks(d, page) : 1u;
     if (o->colour && (used & ~1u)) {
-        for (pass = 0; pass < NCOLORS; pass++) if (used & (1u << pass)) col[npass++] = pass;
+        for (pass = 0; pass < 32; pass++) if (used & (1u << pass)) col[npass++] = pass;
     } else col[npass++] = -1;
     src = (unsigned char *)malloc(srb * sband);
     dst = (unsigned char *)malloc(prb * band);
@@ -251,6 +251,12 @@ int print_page(DOC *d, int page, PRTOUT *o)
             if (sy1 > sy0) {
                 memset(src, 0, srb * (sy1 - sy0));
                 if (!o->render(o->ctx, d, page, col[pass], sy0, sy1 - sy0, sw, src, srb)) { ok = 0; break; }
+                /* nothing in this colour here: no need to scale it or send it */
+                if (npass > 1) {
+                    const unsigned char *q = src, *qe = src + srb * (sy1 - sy0);
+                    while (q < qe && !*q) q++;
+                    if (q == qe) continue;
+                }
             }
             for (sy = sy0; sy < sy1; sy++) {
                 /* printer rows r0 .. r1-1 of this source row, at least one */

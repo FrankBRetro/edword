@@ -1395,7 +1395,7 @@ int printer_name(char *out)
     return 1;
 }
 
-typedef struct { PRTOUT o; short ph, npens; int page, npg, done, stop; } PCTX;
+typedef struct { PRTOUT o; short ph, npens, ink[7]; int page, npg, done, stop; } PCTX;
 
 static int prt_render(void *ctx, DOC *d, int page, int color, long y0, long h, long w,
                       unsigned char *bits, long rb)
@@ -1421,7 +1421,8 @@ static int prt_out(void *ctx, int color, long y0, long h, long w, const unsigned
     pxy[0] = 0; pxy[1] = 0; pxy[2] = (short)(w - 1); pxy[3] = (short)(h - 1);
     pxy[4] = 0; pxy[5] = (short)y0; pxy[6] = (short)(w - 1); pxy[7] = (short)(y0 + h - 1);
     /* the ink in the printer's pen for this colour (black: pen 1) */
-    col[0] = (short)(color > 0 && color < NCOLORS ? pen_of[color] : 1);
+    col[0] = (short)(color > PRT_INK && color < PRT_INK + 7 ? c->ink[color - PRT_INK] :
+                     color > 0 && color < NCOLORS ? pen_of[color] : 1);
     if (col[0] >= c->npens) col[0] = 1;
     col[1] = 0;
     vrt_cpyfm(c->ph, MD_TRANS, pxy, &src, &dst, col);
@@ -1482,7 +1483,7 @@ void print_timing(DOC *d, int colour)
 }
 #endif
 
-int print_doc(DOC *d, const unsigned char *sel, int copies)
+int print_doc(DOC *d, const unsigned char *sel, int copies, int colour)
 {
     short work_in[11], work_out[57], i;
     PCTX c;
@@ -1505,8 +1506,9 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
     if (work_out[3] <= 0 || work_out[4] <= 0) { v_clswk(c.ph); return 0; }
     /* a colour printer: each colour in its own pen, set to EdWord's colour */
     c.npens = work_out[13];
-    c.o.colour = colour_on && c.npens >= 8;
+    c.o.colour = colour && c.npens >= 8;
     edlog("print: %d pens, %s", c.npens, c.o.colour ? "colour" : "black and white");
+    if (colour && !c.o.colour && alert(1, 2, AL_PRT_NO_COLOUR, AB_PRINT_CANCEL, c.npens) != 1) { v_clswk(c.ph); return -1; }
     if (c.o.colour) {
         int k;
         for (k = 1; k < NCOLORS; k++)
@@ -1517,6 +1519,17 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
                 rgb[2] = (short)(color_rgb[k][2] * 1000L / 255);
                 vs_color(c.ph, pen_of[k], rgb);
             }
+        /* the inks of colour pictures: pure colours in pens of their own (10 to
+         * 15) when the printer has 16 or more, else the nearest text colour's */
+        for (k = 1; k < 7; k++) {
+            static const short near[7] = { 0, 1, 2, 6, 3, 5, 4 };     /* text colour nearest each ink */
+            if (c.npens >= 16) {
+                short rgb[3];
+                c.ink[k] = (short)(9 + k);
+                rgb[0] = (short)(k & 1 ? 1000 : 0); rgb[1] = (short)(k & 2 ? 1000 : 0); rgb[2] = (short)(k & 4 ? 1000 : 0);
+                vs_color(c.ph, c.ink[k], rgb);
+            } else c.ink[k] = pen_of[near[k]];
+        }
     }
     c.o.w = work_out[0] + 1L; c.o.h = work_out[1] + 1L;
     c.o.pixw = work_out[3]; c.o.pixh = work_out[4];

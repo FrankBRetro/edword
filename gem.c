@@ -958,7 +958,7 @@ int export_doc(DOC *d, int fmt, int crlf, int cs, char *written)
 /* File > Print: through GDOS to its printer (device 21) */
 void cmd_print(DOC *d)
 {
-    static int copies = 1;
+    static int copies = 1, colour = 1;
     unsigned char *sel;
     char name[80];
     if (!d) return;
@@ -967,7 +967,7 @@ void cmd_print(DOC *d)
     if (!printer_name(name)) { alert(1, 3, AL_NO_PRINTER, AB_OK); return; }
     sel = (unsigned char *)malloc((size_t)doc_npages(d) + 1);
     if (!sel) { alert(1, 3, AL_NO_MEMORY, AB_OK); return; }
-    if (dlg_print(d, name, sel, &copies) && d->used && !print_doc(d, sel, copies))   /* -1: cancelled */
+    if (dlg_print(d, name, sel, &copies, &colour) && d->used && !print_doc(d, sel, copies, colour))   /* -1: cancelled */
         alert(1, 3, AL_PRINT_FAILED, AB_OK);
     free(sel);
 }

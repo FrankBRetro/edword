@@ -47,6 +47,17 @@ static void rle_row(FILE *f, const unsigned char *s, long n, long *cnt)
     }
 }
 
+/* the printer's inks for colour pictures, if the page has one */
+unsigned page_inks(DOC *d, int page)
+{
+    int i;
+    for (i = 0; i < d->a.nobj; i++) {
+        OBJ *o = &d->a.objs[i];
+        if (o->page == page && o->type == OB_IMG && o->img >= 0 && o->img < d->nimg && d->imgs[o->img].rgb) return PRT_INKS;
+    }
+    return 0;
+}
+
 /* which colours does a page use? bit c set for colour c */
 unsigned page_colours(DOC *d, int page)
 {

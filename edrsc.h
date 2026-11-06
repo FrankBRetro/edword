@@ -195,15 +195,18 @@
 #define PR_CUR 3
 #define PR_RANGE 4
 #define PR_LIST 5
-#define PR_TITLE 6
-#define PR_PRINTER 8
-#define PR_FROM 11
-#define PR_TO 13
-#define PR_LISTED 15
-#define PR_COPIES 18
-#define PR_CANCEL 19
-#define PR_OK 20
-#define PR_COUNT 21
+#define PR_COLOURGRP 6
+#define PR_COLOUR 7
+#define PR_MONO 8
+#define PR_TITLE 9
+#define PR_PRINTER 11
+#define PR_FROM 14
+#define PR_TO 16
+#define PR_LISTED 18
+#define PR_COPIES 22
+#define PR_CANCEL 23
+#define PR_OK 24
+#define PR_COUNT 25
 
 /* PREFS */
 #define PF_ROOT 0

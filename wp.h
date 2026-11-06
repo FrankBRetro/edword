@@ -613,6 +613,13 @@ typedef struct {
 } PRTOUT;
 int  print_page(DOC *d, int page, PRTOUT *o);
 unsigned page_colours(DOC *d, int page);
+/* colour pictures on a printer: dithered to six inks besides black, each
+ * printed in a pass of its own, colour PRT_INK + k (k: 1 red, 2 green,
+ * 3 yellow, 4 blue, 5 magenta, 6 cyan; red, green and blue bits) */
+#define PRT_INK 16
+#define PRT_INKS (0x7Eu << PRT_INK)
+unsigned page_inks(DOC *d, int page);         /* PRT_INKS if a colour picture is on the page */
+void rs_img_ink(BAND *b, const IMG *im, long x, long y, long w, long h, int ink);
 
 /* spell.c */
 #define MAX_UDICT 4

@@ -238,6 +238,36 @@ void rs_img(BAND *b, const IMG *im, long x, long y, long w, long h)
     }
 }
 
+/* the pixels of a colour picture (scaled to w x h at x, y) that dither to
+ * ink: each of red, green and blue on or off by an 8 x 8 ordered dither,
+ * so each pixel is one of black, the six inks and white (no ink) */
+void rs_img_ink(BAND *b, const IMG *im, long x, long y, long w, long h, int ink)
+{
+    static const unsigned char bayer[8][8] = {
+        {  0, 32,  8, 40,  2, 34, 10, 42 }, { 48, 16, 56, 24, 50, 18, 58, 26 },
+        { 12, 44,  4, 36, 14, 46,  6, 38 }, { 60, 28, 52, 20, 62, 30, 54, 22 },
+        {  3, 35, 11, 43,  1, 33,  9, 41 }, { 51, 19, 59, 27, 49, 17, 57, 25 },
+        { 15, 47,  7, 39, 13, 45,  5, 37 }, { 63, 31, 55, 23, 61, 29, 53, 21 } };
+    long yy, ya, yb, xx, x0, x1;
+    if (w < 1 || h < 1 || !im->rgb || im->w < 1 || im->h < 1) return;
+    ya = y > b->y0 ? y : b->y0;
+    yb = y + h < b->y0 + b->h ? y + h : b->y0 + b->h;
+    x0 = x < 0 ? -x : 0;
+    x1 = x + w > b->w ? b->w - x : w;
+    for (yy = ya; yy < yb; yy++) {
+        const unsigned char *src = im->rgb + ((yy - y) * im->h / h) * im->w * 3, *t = bayer[yy & 7];
+        long run = -1;
+        for (xx = x0; xx < x1; xx++) {
+            const unsigned char *p = src + (xx * im->w / w) * 3;
+            int th = t[(x + xx) & 7] * 4 + 2;
+            int k = (p[0] > th ? 1 : 0) | (p[1] > th ? 2 : 0) | (p[2] > th ? 4 : 0);
+            if (k == ink) { if (run < 0) run = xx; }
+            else if (run >= 0) { put_span(b, x + run, x + xx, yy, FL_SOLID); run = -1; }
+        }
+        if (run >= 0) put_span(b, x + run, x + x1, yy, FL_SOLID);
+    }
+}
+
 void rs_blit(BAND *b, const IMG *im, long x, long y)
 {
     long r, c;
@@ -350,8 +380,12 @@ void rs_obj(BAND *b, DOC *d, const OBJ *o, int color, long num, long den)
     long ow = tw2px_xs(o->x + o->w, num, den) - ox, oh = tw2px_ys(o->y + o->h, num, den) - oy;
     int k;
     if (oy + oh < b->y0 || oy > b->y0 + b->h) return;
-    if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg && color <= 0 && !(rs_skip_rgb && d->imgs[o->img].rgb)) {
-        rs_img(b, &d->imgs[o->img], ox, oy, ow > 4000 ? 4000 : ow, oh > 4000 ? 4000 : oh);
+    if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg && !(rs_skip_rgb && d->imgs[o->img].rgb)) {
+        const IMG *im = &d->imgs[o->img];
+        long w = ow > 4000 ? 4000 : ow, h = oh > 4000 ? 4000 : oh;
+        if (color < 0 || (color == 0 && !im->rgb)) rs_img(b, im, ox, oy, w, h);
+        else if (im->rgb && (color == 0 || color > PRT_INK))           /* a colour pass of a printer */
+            rs_img_ink(b, im, ox, oy, w, h, color == 0 ? 0 : color - PRT_INK);
     }
     if (o->type == OB_DRAW)
         for (k = 0; k < o->nsh; k++)

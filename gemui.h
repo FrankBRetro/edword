@@ -216,7 +216,7 @@ void  draw_page(DOC *d, int page, long ox, long oy, long n, long den, const GREC
 void  draw_preview_page(DOC *d, int page, long ox, long oy, long n, long den);
 int   export_pdf(DOC *d, const char *path, void (*gauge)(long done, long total));
 int   printer_name(char *out);
-int   print_doc(DOC *d, const unsigned char *sel, int copies);   /* sel: a flag per page, NULL all */
+int   print_doc(DOC *d, const unsigned char *sel, int copies, int colour);   /* sel: a flag per page, NULL all */
 int   word_misspelt(DOC *d, long a, long b);
 void  img_cache_free(DOC *d);
 
@@ -281,7 +281,7 @@ int   dlg_objprops(DOC *d, OBJ *o);
 void  dlg_summary(DOC *d);
 void  dlg_about(void);
 int   dlg_goto(DOC *d, int *page);
-int   dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies);
+int   dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour);
 void  dlg_init(void);
 void  dlg_front(void);
 extern int dlg_busy, aes_3d, aes_magic, win_dialogs;

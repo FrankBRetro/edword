@@ -148,8 +148,10 @@ FPU.
   page range and copies. On the ST it prints through the GDOS printer driver
   (device 21), about eight times faster than before, with a Cancel button in
   the progress window (or Esc/Undo), the busy bee only over EdWord's
-  windows, and in colour on a GDOS colour printer driver (8 pens or more)
-  when Preferences ▸ Show colours is on; on the Mac through the standard print dialog; on the Amiga
+  windows, and in colour on a GDOS colour printer driver (8 pens or more):
+  the Print dialog chooses Colour or Black and white, and colour pictures
+  print in colour too, dithered to six inks and black (pure inks in pens of
+  their own with 16 pens or more); on the Mac through the standard print dialog; on the Amiga
   through `printer.device` with the Preferences printer; on Windows through
   the Windows Print dialog.
 - **Page navigation**: Previous page, Next page and Go to page… in the Edit

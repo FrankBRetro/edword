@@ -1936,11 +1936,11 @@ int dlg_goto(DOC *d, int *page)
 }
 
 /* pages from..to (1-based, inclusive) and copies */
-int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
+int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour)
 {
     static DLG g;
     static char fb[6], tb[6], lb[41], cb[4], pr[60], cur[40];
-    short ok, all, now, rng, lst;
+    short ok, all, now, rng, lst, col;
     int np = doc_npages(d), a, b, c, k, page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0;
     sprintf(fb, "%d", 1);
     sprintf(tb, "%d", np);
@@ -1956,6 +1956,9 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
         dlg_edtext(&g, PR_LISTED, lb);
         dlg_edtext(&g, PR_COPIES, cb);
         dlg_set(&g, PR_ALL, 1);
+        dlg_set(&g, PR_COLOUR, *colour);
+        dlg_set(&g, PR_MONO, !*colour);
+        col = PR_COLOUR;
         g.cancel = PR_CANCEL;
         dlg_tree_end(&g);
         all = PR_ALL; now = PR_CUR; rng = PR_RANGE; lst = PR_LIST; ok = PR_OK;
@@ -1977,6 +1980,10 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
     lst = dlg_radio(&g, 1, L(S_PAGE_LIST), 0);
     dlg_edit(&g, tmpl(NULL, 16, NULL), lb, valid_x(40));
     dlg_text(&g, L(S_PAGE_LIST_HINT));
+    dlg_row(&g);
+    dlg_label(&g, L(S_PRT_COLOURS));
+    col = dlg_radio(&g, 2, L(S_PRT_COLOUR), *colour);
+    dlg_radio(&g, 2, L(S_PRT_MONO), !*colour);
     dlg_row(&g);
     dlg_label(&g, L(S_COPIES));
     dlg_edit(&g, tmpl(NULL, 2, NULL), cb, valid_n(2));
@@ -2003,6 +2010,7 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
     }
     c = atoi(cb);
     *copies = c < 1 ? 1 : c > 99 ? 99 : c;
+    *colour = dlg_on(&g, col);
     return 1;
 }
 
