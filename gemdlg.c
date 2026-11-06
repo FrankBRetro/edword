@@ -15,6 +15,7 @@
 #include <string.h>
 #include <time.h>
 #include "gemui.h"
+#include "edrsc.h"
 
 /* ================================================================= */
 /*  The dialog builder                                                */
@@ -179,6 +180,91 @@ static void dlg_style(DLG *g)
             o->ob_state |= (short)(OS_WHITEBAK | (it->ul << 8));
     }
     if (aes_3d && g->framed) g->o[0].ob_spec.index = 0x00011100L;
+}
+
+/* ---- dialogs from the resource file: each object is an item of its
+ * own, so dlg_on() and dlg_run()'s answer are object numbers ---------- */
+
+int dlg_tree(DLG *g, int tree)
+{
+    OBJECT *t = rsc_tree(tree);
+    short n, i, title = rsc_title(tree);
+    if (!t) return 0;
+    for (n = 0; n < MAXDOBJ && !(t[n].ob_flags & OF_LASTOB); n++) ;
+    if (n >= MAXDOBJ || n >= MAXDITEM) return 0;
+    n++;
+    if (t[0].ob_width > scr_w - 2 * wchar || t[0].ob_height > desk.g_h) return 0;   /* the screen's too small */
+    memset(g, 0, sizeof *g);
+    g->framed = 1;
+    g->edit1 = -1;
+    memcpy(g->o, t, sizeof(OBJECT) * (size_t)n);
+    g->n = g->nit = n;
+    for (i = 0; i < n; i++) {
+        OBJECT *o = &g->o[i];
+        DITEM *it = &g->it[i];
+        it->obj = i;
+        it->ul = -1;
+        it->type = T_TEXT;
+        switch (o->ob_type) {
+        case G_STRING:
+            it->type = i == title ? T_TITLE : T_TEXT;
+            it->s = o->ob_spec.free_string;
+            break;
+        case G_BUTTON:
+            it->type = (o->ob_flags & OF_EXIT) ? T_BUTTON : (o->ob_flags & OF_RBUTTON) ? T_RADIO : T_CHECK;
+            it->s = o->ob_spec.free_string;
+            break;
+        case G_FTEXT: case G_FBOXTEXT:
+            if (g->nte < MAXTED) {
+                g->te[g->nte] = *o->ob_spec.tedinfo;      /* a copy: the text goes where the caller says */
+                o->ob_spec.tedinfo = &g->te[g->nte++];
+            }
+            it->type = T_EDIT;
+            it->s = "";
+            if (g->edit1 < 0) g->edit1 = i;
+            break;
+        default:
+            it->s = "";
+            break;
+        }
+        it->wc = (short)(o->ob_width / wchar);
+    }
+    return 1;
+}
+
+/* after the texts and states are set: shortcuts and the 3D look */
+void dlg_tree_end(DLG *g)
+{
+    g->w = g->o[0].ob_width;
+    g->h = g->o[0].ob_height;
+    dlg_style(g);
+}
+
+void dlg_set(DLG *g, short obj, int on)
+{
+    if (obj <= 0 || obj >= g->n) return;
+    if (on) g->o[obj].ob_state |= OS_SELECTED;
+    else g->o[obj].ob_state &= ~OS_SELECTED;
+}
+
+/* a text that changes: cut to the room the object has */
+void dlg_str(DLG *g, short obj, char *s)
+{
+    int room;
+    if (obj <= 0 || obj >= g->n) return;
+    room = g->o[obj].ob_width / wchar - (g->o[obj].ob_type == G_BUTTON ? 1 : 0);
+    if (room < 1) room = 1;
+    if ((int)strlen(s) > room) s[room] = 0;
+    g->o[obj].ob_spec.free_string = s;
+    g->it[obj].s = s;
+}
+
+/* an edit field's text: buf as long as the field's valid string, and one more */
+void dlg_edtext(DLG *g, short obj, char *buf)
+{
+    if (obj <= 0 || obj >= g->n || (g->o[obj].ob_type != G_FTEXT && g->o[obj].ob_type != G_FBOXTEXT)) return;
+    g->o[obj].ob_spec.tedinfo->te_ptext = buf;
+    g->it[obj].buf = buf;
 }
 
 /* lay out the items and build the object tree */
@@ -498,6 +584,7 @@ static short dlg_shortcut(DLG *g, int c)
 static short dlg_cancel_obj(DLG *g)
 {
     short i;
+    if (g->cancel > 0) return g->cancel;
     for (i = 0; i < g->nit; i++)
         if ((g->it[i].type == T_BUTTON || g->it[i].type == T_BIG) && g->it[i].s == L(S_CANCEL)) return g->it[i].obj;
     return -1;
@@ -743,6 +830,46 @@ static int aes_popup(const char **items, int n, int cur, int cur2, short x, shor
 }
 
 int popup(const char **items, int n, int cur, short x, short y) { return popup2(items, n, cur, -1, x, y); }
+
+/* a popup from the resource file: the AES's own popup with the tree as
+ * it is, or EdWord's with its texts; -3 without the file */
+int popup_rsc(int tree, int cur, short x, short y)
+{
+    static char txt[24][40];
+    const char *items[24];
+    OBJECT *t = rsc_tree(tree);
+    short n, i;
+    if (!t) return -3;
+    n = t[0].ob_tail;
+    if (n > 24) n = 24;
+#ifdef EDDEMO
+    if (!demo_on)
+#endif
+    if (aes_popups()) {
+        MENU mn, out;
+        for (i = 1; i <= n; i++) {
+            t[i].ob_state &= ~OS_CHECKED;
+            if (i - 1 == cur) t[i].ob_state |= OS_CHECKED;
+        }
+        if (x + t[0].ob_width > scr_w - 2) x = (short)(scr_w - 2 - t[0].ob_width);
+        if (x < 1) x = 1;
+        mn.mn_tree = t;
+        mn.mn_menu = 0;
+        mn.mn_item = 1;
+        mn.mn_scroll = 0;
+        mn.mn_keystate = 0;
+        memset(&out, 0, sizeof out);
+        if (!menu_popup(&mn, x, y, &out) || out.mn_tree != t || out.mn_item < 1 || out.mn_item > n) return -1;
+        return out.mn_item - 1;
+    }
+    for (i = 0; i < n; i++) {
+        int k;
+        sprintf(txt[i], "%.39s", rsc_entry(tree, (short)(i + 1)));
+        for (k = (int)strlen(txt[i]); k > 0 && txt[i][k - 1] == ' '; k--) txt[i][k - 1] = 0;
+        items[i] = txt[i];
+    }
+    return popup2(items, n, cur, -1, x, y);
+}
 
 /* a popup with two items checked (cur2 < 0: one) */
 int popup2(const char **items, int n, int cur, int cur2, short x, short y)
@@ -1053,7 +1180,7 @@ int dlg_size(int *size)
 
 #define GAUGEW 36
 static DLG   gg;
-static short g_bar, g_fill, g_txt, g_open;
+static short g_bar, g_fill, g_txt, g_open, g_btn = -1, g_want_cancel, g_stop;
 static int   g_last;
 static char  g_text[32];
 
@@ -1114,7 +1241,11 @@ void gauge_open(const char *title, const GRECT *over)
     dlg_row(&gg);
     strcpy(g_text, "  0%");
     g_txt = dlg_text(&gg, g_text);
+    g_btn = g_want_cancel ? dlg_button(&gg, L(S_CANCEL), OF_EXIT) : -1;
+    g_want_cancel = 0;
+    g_stop = 0;
     dlg_end(&gg);
+    if (g_btn >= 0) g_btn = gg.it[g_btn].obj;
     root = 0;
     /* turn the spacer into the bar, with a filled box inside */
     g_bar = gg.it[g_bar].obj;
@@ -1202,6 +1333,31 @@ void gauge_set(long done, long total)
 #ifdef EDDEMO
     if (demo_on && pct >= 40 && pct < 60) demo_dialog(gg.o, gg.x, gg.y, gg.w, gg.h);
 #endif
+}
+
+/* the next gauge has a Cancel button (see gauge_cancelled) */
+void gauge_cancelable(void) { g_want_cancel = 1; }
+
+/* has Cancel been clicked (or Esc or Undo pressed) since the gauge opened?
+ * Called between pieces of the work; it doesn't wait. */
+int gauge_cancelled(void)
+{
+    short mx, my, mb, ks, key, br, ev, msg[8];
+    if (!g_open || g_btn < 0) return 0;
+    if (g_stop) return 1;
+    ev = evnt_multi(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    msg, 0L, &mx, &my, &mb, &ks, &key, &br);
+    if ((ev & MU_KEYBD) && ((key & 0xFF) == 27 || (key >> 8) == 0x61)) g_stop = 1;
+    if ((ev & MU_BUTTON) && objc_find(gg.o, g_btn, 0, mx, my) == g_btn) g_stop = 1;
+    if (g_stop) {
+        GRECT a;
+        gg.o[g_btn].ob_state |= OS_SELECTED;
+        a.g_x = gg.x; a.g_y = gg.y; a.g_w = gg.w; a.g_h = gg.h;
+        if (g_wh >= 0) gauge_draw(&a);
+        else { graf_mouse(M_OFF, NULL); objc_draw(gg.o, 0, 8, gg.x, gg.y, gg.w, gg.h); graf_mouse(M_ON, NULL); }
+        edlog("gauge: cancelled");
+    }
+    return g_stop;
 }
 
 void gauge_close(void)
@@ -1313,6 +1469,13 @@ static void prefs_more(void)
     int i;
     strncpy(dd, pref_docdir, 40);
     dd[40] = 0;
+    if (dlg_tree(&g, RT_PREFS2)) {
+        for (i = 0; i < 3; i++) { kp[i] = (short)(PF2_KEEP0 + i); dlg_set(&g, kp[i], lay_keep == i); }
+        dlg_edtext(&g, PF2_DOCDIR, dd);
+        g.cancel = PF2_CANCEL;
+        ok = PF2_OK;
+        dlg_tree_end(&g);
+    } else {
     dlg_begin(&g, L(S_PREFS_TITLE));
     dlg_label(&g, L(S_KEEP));
     for (i = 0; i < 3; i++) kp[i] = dlg_radio(&g, 1, L(S_KEEP_ANY + i), lay_keep == i);
@@ -1322,6 +1485,7 @@ static void prefs_more(void)
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
+    }
     if (dlg_run(&g) != ok) return;
     for (i = 0; i < 3; i++) if (dlg_on(&g, kp[i])) lay_keep = i;
     if (strncmp(dd, pref_docdir, 40)) {
@@ -1340,6 +1504,28 @@ int dlg_prefs(void)
 
     for (i = 0; i < NDATEFMT; i++) fmt_now(dl[i], order[i]);
     sprintf(mins, "%d", pref_asmin);
+    if (dlg_tree(&g, RT_PREFS)) {
+        for (i = 0; i < NLANG; i++) {
+            lang[i] = (short)(PF_LANG0 + i); dlg_set(&g, lang[i], ui_lang == i);
+            dict[i] = (short)(PF_DICT0 + i); dlg_set(&g, dict[i], spell_lang == i);
+        }
+        for (i = 0; i < NDATEFMT; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
+        for (i = 0; i < NPAPER; i++) { pp[i] = (short)(PF_PAPER0 + i); dlg_set(&g, pp[i], pref_paper == i); }
+        dlg_set(&g, PF_PORTRAIT, !pref_land);
+        dlg_set(&g, land = PF_LAND, pref_land);
+        dlg_set(&g, tbar = PF_TOOLBAR, pref_toolbar);
+        dlg_set(&g, live = PF_LIVE, pref_live);
+        dlg_set(&g, col = PF_COLOURS, colour_on);
+        for (i = 0; i < 3; i++) { ps[i] = (short)(PF_PDF1 + i); dlg_set(&g, ps[i], pdf_scale == i + 1); }
+        for (i = 0; i < 4; i++) { dm[i] = (short)(PF_DISP0 + i); dlg_set(&g, dm[i], pref_display == i); }
+        dlg_set(&g, ason = PF_ASON, pref_autosave);
+        dlg_edtext(&g, PF_ASMIN, mins);
+        dlg_set(&g, PF_ASCOPY, !pref_asmode);
+        dlg_set(&g, asm1 = PF_ASDOC, pref_asmode);
+        more = PF_MORE; ok = PF_OK;
+        g.cancel = PF_CANCEL;
+        dlg_tree_end(&g);
+    } else {
     dlg_begin(&g, L(S_PREFS_TITLE));
     dlg_label(&g, L(S_LANGUAGE));
     for (i = 0; i < NLANG; i++) lang[i] = dlg_radio(&g, 1, lang_name[i], ui_lang == i);
@@ -1384,6 +1570,7 @@ int dlg_prefs(void)
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
+    }
     r = dlg_run(&g);
     if (r != ok && r != more) return 0;
 
@@ -1554,8 +1741,10 @@ int dlg_objprops(DOC *d, OBJ *o)
     DLG g;
     short ok, del, edt = -1, wr[3], frame, i;
     int v;
-    sprintf(xb, "%d", pt2mm(o->x)); sprintf(yb, "%d", pt2mm(o->y));
-    sprintf(wb, "%d", pt2mm(o->w)); sprintf(hb, "%d", pt2mm(o->h));
+    char x0[5], y0[5], w0[5], h0[5];
+    sprintf(xb, "%d", pt2mm(o->x / TWIPS)); sprintf(yb, "%d", pt2mm(o->y / TWIPS));
+    sprintf(wb, "%d", pt2mm(o->w / TWIPS)); sprintf(hb, "%d", pt2mm(o->h / TWIPS));
+    strcpy(x0, xb); strcpy(y0, yb); strcpy(w0, wb); strcpy(h0, hb);
     sprintf(pb, "%d", o->page + 1);
     dlg_begin(&g, L(o->type == OB_IMG ? S_PIC_TITLE : S_DRAW_TITLE));
     dlg_label(&g, L(S_POSITION_MM));
@@ -1584,9 +1773,11 @@ int dlg_objprops(DOC *d, OBJ *o)
     i = dlg_run(&g);
     if (i == del) return 2;
     if (i != ok && i != edt) return 0;
-    o->x = (short)field_pt(xb, o->x); o->y = (short)field_pt(yb, o->y);
-    v = field_pt(wb, o->w); o->w = (short)(v < 6 ? 6 : v);
-    v = field_pt(hb, o->h); o->h = (short)(v < 6 ? 6 : v);
+    /* only what was changed: the rest keeps its exact position */
+    if (strcmp(xb, x0)) o->x = field_pt(xb, o->x / TWIPS) * (long)TWIPS;
+    if (strcmp(yb, y0)) o->y = field_pt(yb, o->y / TWIPS) * (long)TWIPS;
+    if (strcmp(wb, w0)) { v = field_pt(wb, o->w / TWIPS); o->w = (v < 6 ? 6 : v) * (long)TWIPS; }
+    if (strcmp(hb, h0)) { v = field_pt(hb, o->h / TWIPS); o->h = (v < 6 ? 6 : v) * (long)TWIPS; }
     v = atoi(pb) - 1;
     o->page = (short)(v < 0 ? 0 : v > doc_npages(d) ? doc_npages(d) : v);
     o->wrap = dlg_on(&g, wr[0]) ? WR_NONE : wr[2] >= 0 && dlg_on(&g, wr[2]) ? WR_SHAPE : WR_BOX;
@@ -1754,6 +1945,18 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
     sprintf(cb, "%d", *copies > 0 ? *copies : 1);
     sprintf(pr, "%.56s", printer);
     sprintf(cur, "%s (%d)", L(S_CUR_PAGE), page + 1);
+    if (dlg_tree(&g, RT_PRINT)) {
+        dlg_str(&g, PR_PRINTER, pr);
+        dlg_str(&g, PR_CUR, cur);
+        dlg_edtext(&g, PR_FROM, fb);
+        dlg_edtext(&g, PR_TO, tb);
+        dlg_edtext(&g, PR_LISTED, lb);
+        dlg_edtext(&g, PR_COPIES, cb);
+        dlg_set(&g, PR_ALL, 1);
+        g.cancel = PR_CANCEL;
+        dlg_tree_end(&g);
+        all = PR_ALL; now = PR_CUR; rng = PR_RANGE; lst = PR_LIST; ok = PR_OK;
+    } else {
     dlg_begin(&g, L(S_PRINT_TITLE));
     dlg_label(&g, L(S_PRINTER));
     dlg_text(&g, pr);
@@ -1777,6 +1980,7 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies)
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_PRINT_BTN), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
+    }
     (void)rng;
     for (;;) {
         if (dlg_run(&g) != ok) return 0;

@@ -14,20 +14,30 @@
 
 static void glyph_at(BAND *b, const GLYPHBM *g, long px, long base)
 {
-    long r, x, grb;
+    long r, i, grb, dx0, db, lim;
+    int sh;
     if (!g || !g->bits) return;
     grb = (g->w + 7) / 8;
+    dx0 = px + g->ox;
+    db = dx0 >> 3;                                  /* a byte at a time, shifted into place */
+    sh = (int)(dx0 & 7);
+    lim = (b->w + 7) >> 3;
     for (r = 0; r < g->h; r++) {
         long y = base + g->oy + r;
         const unsigned char *src = g->bits + r * grb;
         unsigned char *dst;
         if (y < b->y0 || y >= b->y0 + b->h) continue;
         dst = b->bits + (y - b->y0) * b->rb;
-        for (x = 0; x < g->w; x++)
-            if (src[x >> 3] & (0x80 >> (x & 7))) {
-                long dx = px + g->ox + x;
-                if (dx >= 0 && dx < b->w) dst[dx >> 3] |= (unsigned char)(0x80 >> (dx & 7));
-            }
+        for (i = 0; i < grb; i++) {
+            unsigned v = src[i], t = 0;
+            long k = db + i;
+            if (!v) continue;
+            if (i == grb - 1 && (g->w & 7)) v &= 0xFF00u >> (g->w & 7);
+            if (k >= 0 && k < lim) dst[k] |= (unsigned char)(v >> sh);
+            if (sh && k + 1 >= 0 && k + 1 < lim) { t = (v << (8 - sh)) & 0xFF; dst[k + 1] |= (unsigned char)t; }
+        }
+        /* nothing past the band's right edge */
+        if ((b->w & 7) && lim > 0) dst[lim - 1] &= (unsigned char)(0xFF00u >> (b->w & 7));
     }
 }
 

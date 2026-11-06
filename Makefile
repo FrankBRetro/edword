@@ -74,7 +74,7 @@ LDLIBS  = -lgem
 
 CORE    = doc.o layout.o edit.o undo.o docops.o rtf.o pdf.o pagedraw.o raster.o img.o thes.o \
           charset.o text.o codes.o spell.o md.o fwp.o protext.o chart.o prt.o
-GEMOBJ  = gem.o gemwin.o gemdlg.o gemrend.o gemicon.o gemtool.o gemtwin.o gemobj.o gemclip.o \
+GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemicon.o gemtool.o gemtwin.o gemobj.o gemclip.o \
           demo.o lang.o cpucheck.o
 OBJS    = $(addprefix $(OBJDIR)/,$(GEMOBJ) $(CORE))
 
@@ -92,7 +92,12 @@ cpus:
 lang.c lang.h: lang/strings.txt tools/mklang.py
 	$(PYTHON) tools/mklang.py lang/strings.txt lang.h lang.c
 
-$(addprefix $(OBJDIR)/,$(GEMOBJ)): lang.h gemui.h
+$(addprefix $(OBJDIR)/,$(GEMOBJ)): lang.h gemui.h edrsc.h
+
+# the resource files, one per language, and their object numbers
+RSCS    = EDWORD.RSC EDWORDDE.RSC EDWORDES.RSC EDWORDIT.RSC EDWORDFR.RSC
+rsc edrsc.h $(RSCS): lang/strings.txt tools/mkrsc.py tools/mklang.py gemicon.c
+	$(PYTHON) tools/mkrsc.py lang/strings.txt .
 # the version and About text change with the command line
 $(OBJDIR)/gemdlg.o: FORCE
 FORCE:

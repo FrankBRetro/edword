@@ -100,6 +100,37 @@ static void put_px(BAND *b, long x, long y, int pattern)
     if (pattern == FL_WHITE) *p &= (unsigned char)~m; else *p |= m;
 }
 
+/* pixels x0 .. x1-1 of band row y in a pattern; solid black and white a
+ * byte at a time */
+static void put_span(BAND *b, long x0, long x1, long y, int pattern)
+{
+    unsigned char *row, m0, m1;
+    long b0, b1, x;
+    if (y < b->y0 || y >= b->y0 + b->h) return;
+    if (x0 < 0) x0 = 0;
+    if (x1 > b->w) x1 = b->w;
+    if (x1 <= x0) return;
+    if (pattern != FL_SOLID && pattern != FL_WHITE) {
+        for (x = x0; x < x1; x++) put_px(b, x, y, pattern);
+        return;
+    }
+    row = b->bits + (y - b->y0) * b->rb;
+    b0 = x0 >> 3; b1 = (x1 - 1) >> 3;
+    m0 = (unsigned char)(0xFF >> (x0 & 7));
+    m1 = (unsigned char)(0xFF << (7 - ((x1 - 1) & 7)));
+    if (pattern == FL_SOLID) {
+        if (b0 == b1) { row[b0] |= (unsigned char)(m0 & m1); return; }
+        row[b0] |= m0;
+        if (b1 > b0 + 1) memset(row + b0 + 1, 0xFF, (size_t)(b1 - b0 - 1));
+        row[b1] |= m1;
+    } else {
+        if (b0 == b1) { row[b0] &= (unsigned char)~(m0 & m1); return; }
+        row[b0] &= (unsigned char)~m0;
+        if (b1 > b0 + 1) memset(row + b0 + 1, 0, (size_t)(b1 - b0 - 1));
+        row[b1] &= (unsigned char)~m1;
+    }
+}
+
 /* fill the collected edges into the band; pattern FL_SOLID, FL_GREY or
  * FL_WHITE (clears) */
 void rs_fill(BAND *b, int pattern)
@@ -127,10 +158,8 @@ void rs_fill(BAND *b, int pattern)
         for (k = 0; k + 1 < nx; k++) {
             wind += ds[k];
             if (wind) {
-                long a = fdiv16(xs[k] + 7), e2 = fdiv16(xs[k + 1] + 7), x;
-                if (a < 0) a = 0;
-                if (e2 > b->w) e2 = b->w;
-                for (x = a; x < e2; x++) put_px(b, x, b->y0 + r, pattern);
+                long a = fdiv16(xs[k] + 7), e2 = fdiv16(xs[k + 1] + 7);
+                put_span(b, a, e2, b->y0 + r, pattern);
             }
         }
     }
@@ -138,13 +167,10 @@ void rs_fill(BAND *b, int pattern)
 
 void rs_rect(BAND *b, long x0, long y0, long x1, long y1, int pattern)
 {
-    long x, y;
+    long y;
     if (y0 < b->y0) y0 = b->y0;
     if (y1 > b->y0 + b->h) y1 = b->y0 + b->h;
-    if (x0 < 0) x0 = 0;
-    if (x1 > b->w) x1 = b->w;
-    for (y = y0; y < y1; y++)
-        for (x = x0; x < x1; x++) put_px(b, x, y, pattern);
+    for (y = y0; y < y1; y++) put_span(b, x0, x1, y, pattern);
 }
 
 /* sine table in 1/1024, a quarter circle in 12 steps */
@@ -190,6 +216,28 @@ void rs_rrect_path(long x0, long y0, long x1, long y1, long r)
 }
 
 /* OR a picture (already at its final size) in at pixel x, y */
+/* a picture scaled to w x h at x, y: only the band's rows, a run of ink
+ * at a time (the same pixels as img_scale() and rs_blit()) */
+void rs_img(BAND *b, const IMG *im, long x, long y, long w, long h)
+{
+    long yy, ya, yb;
+    if (w < 1 || h < 1 || !im->bits || im->w < 1 || im->h < 1) return;
+    ya = y > b->y0 ? y : b->y0;
+    yb = y + h < b->y0 + b->h ? y + h : b->y0 + b->h;
+    for (yy = ya; yy < yb; yy++) {
+        const unsigned char *src = im->bits + ((yy - y) * im->h / h) * im->rb;
+        long sx = 0, a;
+        while (sx < im->w) {
+            if (!src[sx >> 3] && !(sx & 7)) { sx += 8; continue; }
+            if (!(src[sx >> 3] & (0x80 >> (sx & 7)))) { sx++; continue; }
+            a = sx;
+            while (sx < im->w && (src[sx >> 3] & (0x80 >> (sx & 7)))) sx++;
+            /* printer x shows source floor(x * im->w / w): the x for a..sx-1 */
+            put_span(b, x + (a * w + im->w - 1) / im->w, x + (sx * w + im->w - 1) / im->w, yy, FL_SOLID);
+        }
+    }
+}
+
 void rs_blit(BAND *b, const IMG *im, long x, long y)
 {
     long r, c;
@@ -247,13 +295,32 @@ int shape_pts(int type, long x0, long y0, long x1, long y1, long *xy)
 
 /* Draw a shape of a drawing whose box starts at page pixel (ox, oy);
  * shape points are converted from points and multiplied by num/den. */
-void rs_shape(BAND *b, const SHAPE *s, long ox, long oy, long num, long den, int fill_only)
+void rs_shape(BAND *b, const DOC *d, const SHAPE *s, long ox, long oy, long num, long den, int fill_only)
 {
     long x0 = (ox + pt2px_x(s->x1) * num / den) * 16, y0 = (oy + pt2px_y(s->y1) * num / den) * 16;
     long x1 = (ox + pt2px_x(s->x2) * num / den) * 16, y1 = (oy + pt2px_y(s->y2) * num / den) * 16;
     long lw = (long)s->lw * num / den * 16, xy[2 * 56];
     int n, i;
     if (lw < 16 && s->lw) lw = 16;
+    if (s->type == SH_FREE) {
+        /* a polyline through its points; a few segments at a time, so the
+         * edge list stays short and overlaps can't cancel out */
+        const short *p = free_pts(d, s);
+        long px = 0, py = 0, qx, qy, top, bot;
+        if (!p || fill_only || !s->lw) return;
+        top = (y0 < y1 ? y0 : y1) - lw; bot = (y0 < y1 ? y1 : y0) + lw;
+        if (bot / 16 < b->y0 || top / 16 > b->y0 + b->h) return;
+        rs_begin();
+        for (i = 0, n = 0; i < s->np; i++) {
+            qx = x0 + (x1 - x0) * p[2 * i] / FREE_ONE;
+            qy = y0 + (y1 - y0) * p[2 * i + 1] / FREE_ONE;
+            if (i) { rs_thick(px, py, qx, qy, lw); n++; }
+            if (n == 12) { rs_fill(b, FL_SOLID); rs_begin(); n = 0; }
+            px = qx; py = qy;
+        }
+        if (n) rs_fill(b, FL_SOLID);
+        return;
+    }
     if (s->type == SH_LINE) {
         if (!fill_only && s->lw) { rs_begin(); rs_thick(x0, y0, x1, y1, lw); rs_fill(b, FL_SOLID); }
         return;
@@ -279,21 +346,17 @@ int rs_skip_rgb;            /* leave out colour pictures: the PDF has them */
 
 void rs_obj(BAND *b, DOC *d, const OBJ *o, int color, long num, long den)
 {
-    long ox = pt2px_x(o->x) * num / den, oy = pt2px_y(o->y) * num / den;
-    long ow = pt2px_x(o->w) * num / den, oh = pt2px_y(o->h) * num / den;
+    long ox = tw2px_xs(o->x, num, den), oy = tw2px_ys(o->y, num, den);
+    long ow = tw2px_xs(o->x + o->w, num, den) - ox, oh = tw2px_ys(o->y + o->h, num, den) - oy;
     int k;
     if (oy + oh < b->y0 || oy > b->y0 + b->h) return;
     if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg && color <= 0 && !(rs_skip_rgb && d->imgs[o->img].rgb)) {
-        IMG sc;
-        if (img_scale(&d->imgs[o->img], ow, oh, &sc)) {
-            rs_blit(b, &sc, ox, oy);
-            img_free(&sc);
-        }
+        rs_img(b, &d->imgs[o->img], ox, oy, ow > 4000 ? 4000 : ow, oh > 4000 ? 4000 : oh);
     }
     if (o->type == OB_DRAW)
         for (k = 0; k < o->nsh; k++)
             if (color < 0 || o->sh[k].color == color || (o->sh[k].fill == FL_WHITE && color <= 0))
-                rs_shape(b, &o->sh[k], ox, oy, num, den, color >= 0 && o->sh[k].color != color);
+                rs_shape(b, d, &o->sh[k], ox, oy, num, den, color >= 0 && o->sh[k].color != color);
     if (o->border && color <= 0) {
         long t = num / den > 0 ? num / den : 1;
         rs_rect(b, ox, oy, ox + ow, oy + t, FL_SOLID);

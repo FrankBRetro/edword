@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "gemui.h"
 
 static short speedo_err;
@@ -627,7 +628,7 @@ void draw_page(DOC *d, int page, long ox, long oy, long n, long den, const GRECT
     for (i = 0; i < d->a.nobj; i++)
         if (d->a.objs[i].page == page) {
             const OBJ *o = &d->a.objs[i];
-            long y0 = oy + pt2px_y(o->y) * n / den - 4, y1 = oy + pt2px_y(o->y + o->h) * n / den + 4;
+            long y0 = oy + tw2px_ys(o->y, n, den) - 4, y1 = oy + tw2px_ys(o->y + o->h, n, den) + 4;
             if (clip && (y0 > clip->g_y + clip->g_h || y1 < clip->g_y)) continue;
             draw_vdi_obj(d, o, ox, oy, n, den);
         }
@@ -725,12 +726,17 @@ typedef struct {
     short font, size, attr, scale, ch;
     short w, h, ox, oy;             /* bitmap size; offset from the pen   */
     unsigned char *bits;            /* rows of (w + 7) / 8 bytes          */
+    short next;                     /* the next in its hash chain, or -1  */
 } GLYPH;
 
 #define NGLYPH  384
 #define MAXVERT 1500
 static GLYPH gcache[NGLYPH];
 static int   ngc;
+#define GHASH 256                        /* glyphs are found by a hash, not a search */
+static short ghead[GHASH];
+static int   ghash_ok;
+#define GKEY(f, s, a, c, sc) ((unsigned)((c) * 7 + (f) * 31 + (s) * 13 + (a) * 3 + (sc)) & (GHASH - 1))
 static short oxy[4 * MAXVERT];           /* twice what GDOS is told  */
 static char  obez[2 * MAXVERT];
 
@@ -748,6 +754,8 @@ static void glyph_cache_free(void)
     int i;
     for (i = 0; i < ngc; i++) free(gcache[i].bits);
     ngc = 0;
+    for (i = 0; i < GHASH; i++) ghead[i] = -1;
+    ghash_ok = 1;
 }
 
 /* PDF trace in EDWORD.LOG: everything up to the first few hundred glyphs */
@@ -974,6 +982,34 @@ static void build_edges(int n, int ori, long base_off, int italic)
 static long fdiv16(long v) { return v >= 0 ? v / 16 : -((15 - v) / 16); }
 
 /* fill the edges (non-zero winding) into a new glyph bitmap */
+/* set bits x0 .. x1-1 of a bitmap row (MSB first) */
+static void bits_span(unsigned char *row, long x0, long x1)
+{
+    long b0, b1;
+    unsigned char m0, m1;
+    if (x1 <= x0) return;
+    b0 = x0 >> 3; b1 = (x1 - 1) >> 3;
+    m0 = (unsigned char)(0xFF >> (x0 & 7));
+    m1 = (unsigned char)(0xFF << (7 - ((x1 - 1) & 7)));
+    if (b0 == b1) { row[b0] |= (unsigned char)(m0 & m1); return; }
+    row[b0] |= m0;
+    if (b1 > b0 + 1) memset(row + b0 + 1, 0xFF, (size_t)(b1 - b0 - 1));
+    row[b1] |= m1;
+}
+
+/* OR a row of n bytes into dst moved right by sh bits (dst has room for it) */
+static void or_shifted(unsigned char *dst, long dbytes, const unsigned char *src, long n, int sh)
+{
+    long i, bo = sh >> 3;
+    int bit = sh & 7;
+    for (i = 0; i < n; i++) {
+        unsigned v = src[i];
+        if (!v) continue;
+        if (i + bo < dbytes) dst[i + bo] |= (unsigned char)(v >> bit);
+        if (bit && i + bo + 1 < dbytes) dst[i + bo + 1] |= (unsigned char)(v << (8 - bit));
+    }
+}
+
 static int scan_fill(GLYPH *g)
 {
     long minx = 0x7fffffffL, maxx = -0x7fffffffL, miny = 0x7fffffffL, maxy = -0x7fffffffL;
@@ -1003,6 +1039,7 @@ static int scan_fill(GLYPH *g)
     for (r = 0; r < g->h; r++) {
         long yc = (g->oy + r) * 16L + 8;               /* pixel centre */
         int nx = 0, wind = 0, k;
+        unsigned char *row = g->bits + r * rb;
         for (i = 0; i < nedge && nx < 64; i++) {
             EDGE *e = &edges[i];
             long ya = e->y0 < e->y1 ? e->y0 : e->y1, yb = e->y0 < e->y1 ? e->y1 : e->y0;
@@ -1019,11 +1056,10 @@ static int scan_fill(GLYPH *g)
         for (k = 0; k + 1 < nx; k++) {
             wind += ds[k];
             if (wind) {
-                long a = fdiv16(xs[k] - 8 + 15), b = fdiv16(xs[k + 1] - 8 + 15), x;  /* centres inside */
-                for (x = a; x < b; x++) {
-                    long bx = x - g->ox;
-                    if (bx >= 0 && bx < g->w) g->bits[r * rb + (bx >> 3)] |= (unsigned char)(0x80 >> (bx & 7));
-                }
+                long a = fdiv16(xs[k] - 8 + 15) - g->ox, b = fdiv16(xs[k + 1] - 8 + 15) - g->ox;  /* centres inside */
+                if (a < 0) a = 0;
+                if (b > g->w) b = g->w;
+                bits_span(row, a, b);
             }
         }
     }
@@ -1123,15 +1159,21 @@ static int bitmap_glyph(GLYPH *g, int font, int size, int ch, int scale)
     rb = (g->w + 7) / 8;
     g->bits = (unsigned char *)calloc(rb, g->h);
     if (!g->bits) { edlog("    out of memory for a %dx%d glyph", g->w, g->h); return 0; }
-    for (r = 0; r < lg.rows; r++)
-        for (c = 0; c < lg.cols; c++) {
-            if (!(lg.bits[r * LG_RB + (c >> 3)] & (0x80 >> (c & 7)))) continue;
-            for (sy = 0; sy < scale; sy++)
-                for (sx = 0; sx < scale; sx++) {
-                    long bx = c * scale + sx, by = r * scale + sy;
-                    g->bits[by * rb + (bx >> 3)] |= (unsigned char)(0x80 >> (bx & 7));
-                }
+    /* each run of the font's pixels becomes a span scale times as wide,
+     * and each row is copied to the scale-1 rows under it */
+    for (r = 0; r < lg.rows; r++) {
+        const unsigned char *src = lg.bits + r * LG_RB;
+        unsigned char *row = g->bits + r * scale * rb;
+        for (c = 0; c < lg.cols; ) {
+            long a;
+            if (!(src[c >> 3] & (0x80 >> (c & 7)))) { c++; continue; }
+            a = c;
+            while (c < lg.cols && (src[c >> 3] & (0x80 >> (c & 7)))) c++;
+            bits_span(row, a * scale, c * scale);
         }
+        for (sy = 1; sy < scale; sy++) memcpy(row + sy * rb, row, (size_t)rb);
+    }
+    (void)sx;
     return 1;
 }
 
@@ -1146,10 +1188,9 @@ static void embolden(GLYPH *g, int t)
     nb = (unsigned char *)calloc(nrb, g->h);
     if (!nb) { g->w = (short)ow; return; }
     for (r = 0; r < g->h; r++)
-        for (x = 0; x < ow; x++)
-            if (g->bits[r * orb + (x >> 3)] & (0x80 >> (x & 7)))
-                for (k = 0; k <= t; k++)
-                    nb[r * nrb + ((x + k) >> 3)] |= (unsigned char)(0x80 >> ((x + k) & 7));
+        for (k = 0; k <= t; k++)                  /* the row OR-ed in at each offset */
+            or_shifted(nb + (long)r * nrb, nrb, g->bits + (long)r * orb, orb, k);
+    (void)x;
     free(g->bits);
     g->bits = nb;
 }
@@ -1166,11 +1207,8 @@ static void slant(GLYPH *g)
         int off = (int)((-(long)(g->oy + r)) * 13 / 64) + (g->oy < 0 ? 0 : 0);
         off += sh / 2;
         if (off < 0) off = 0;
-        for (x = 0; x < g->w; x++)
-            if (g->bits[r * rb + (x >> 3)] & (0x80 >> (x & 7))) {
-                int nx = x + off;
-                if (nx < nw) nb[r * nrb + (nx >> 3)] |= (unsigned char)(0x80 >> (nx & 7));
-            }
+        or_shifted(nb + (long)r * nrb, nrb, g->bits + (long)r * rb, rb, off);
+        (void)x;
     }
     free(g->bits);
     g->bits = nb;
@@ -1178,16 +1216,35 @@ static void slant(GLYPH *g)
     g->ox = (short)(g->ox - sh / 2);
 }
 
+#ifdef EDDEMO
+static clock_t tm_glyph, tm_look;
+#endif
+#ifdef EDDEMO
+static GLYPH *get_glyph2(int font, int size, int attr, int ch, int scale);
+#endif
 static GLYPH *get_glyph(int font, int size, int attr, int ch, int scale)
+#ifdef EDDEMO
+{
+    clock_t t = clock();
+    GLYPH *g = get_glyph2(font, size, attr, ch, scale);
+    tm_look += clock() - t;
+    return g;
+}
+static GLYPH *get_glyph2(int font, int size, int attr, int ch, int scale)
+#endif
 {
     int i, ori;
     GLYPH *g;
     attr &= A_BOLD | A_ITALIC;
     if (font >= nfonts) font = 0;
-    for (i = 0; i < ngc; i++) {
+    if (!ghash_ok) glyph_cache_free();
+    for (i = ghead[GKEY(font, size, attr, ch, scale)]; i >= 0; i = g->next) {
         g = &gcache[i];
         if (g->ch == ch && g->font == font && g->size == size && g->attr == attr && g->scale == scale) return g;
     }
+#ifdef EDDEMO
+    { clock_t t0 = clock(); GLYPH *r;
+#endif
     if (ngc >= NGLYPH) glyph_cache_free();
     g = &gcache[ngc];
     memset(g, 0, sizeof *g);
@@ -1220,7 +1277,15 @@ static GLYPH *get_glyph(int font, int size, int attr, int ch, int scale)
 #ifdef EDLOG
     nglog++;
 #endif
+    {   /* into its hash chain */
+        unsigned k = GKEY(font, size, attr, ch, scale);
+        g->next = ghead[k];
+        ghead[k] = (short)ngc;
+    }
     ngc++;
+#ifdef EDDEMO
+    r = g; tm_glyph += clock() - t0; return r; }
+#endif
     return g;
 }
 
@@ -1329,19 +1394,20 @@ int printer_name(char *out)
     return 1;
 }
 
-typedef struct { PRTOUT o; short ph; int page, npg, done; } PCTX;
+typedef struct { PRTOUT o; short ph, npens; int page, npg, done, stop; } PCTX;
 
 static int prt_render(void *ctx, DOC *d, int page, int color, long y0, long h, long w,
                       unsigned char *bits, long rb)
 {
     PCTX *c = (PCTX *)ctx;
     BAND b;
+    busy_ptr_track();
     b.bits = bits; b.rb = rb; b.w = w; b.y0 = y0; b.h = h;
     page_render(d, page, color, &b, c->o.scale, pdf_glyph, NULL, pref_date);
     return 1;
 }
 
-static int prt_out(void *ctx, long y0, long h, long w, const unsigned char *bits, long rb)
+static int prt_out(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rb)
 {
     PCTX *c = (PCTX *)ctx;
     MFDB src, dst;
@@ -1353,8 +1419,12 @@ static int prt_out(void *ctx, long y0, long h, long w, const unsigned char *bits
     src.fd_stand = 0; src.fd_nplanes = 1;
     pxy[0] = 0; pxy[1] = 0; pxy[2] = (short)(w - 1); pxy[3] = (short)(h - 1);
     pxy[4] = 0; pxy[5] = (short)y0; pxy[6] = (short)(w - 1); pxy[7] = (short)(y0 + h - 1);
-    col[0] = 1; col[1] = 0;
+    /* the ink in the printer's pen for this colour (black: pen 1) */
+    col[0] = (short)(color > 0 && color < NCOLORS ? pen_of[color] : 1);
+    if (col[0] >= c->npens) col[0] = 1;
+    col[1] = 0;
     vrt_cpyfm(c->ph, MD_TRANS, pxy, &src, &dst, col);
+    if (gauge_cancelled()) { c->stop = 1; return 0; }
     return 1;
 }
 
@@ -1363,6 +1433,53 @@ static void prt_progress(void *ctx, int done, int total)
     PCTX *c = (PCTX *)ctx;
     gauge_set((long)c->done * total + done, (long)c->npg * total);
 }
+
+#ifdef EDDEMO
+/* demo command PRTIME: page 1 to a 300 dpi printer that throws it away,
+ * with the time spent drawing and in total in the log (200ths of a second) */
+static clock_t tm_render;
+static int tm_rend(void *ctx, DOC *d, int page, int color, long y0, long h, long w, unsigned char *bits, long rb)
+{
+    clock_t t = clock();
+    int r = prt_render(ctx, d, page, color, y0, h, w, bits, rb);
+    tm_render += clock() - t;
+    return r;
+}
+static int tm_out(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rb)
+{
+    (void)ctx; (void)color; (void)y0; (void)h; (void)w; (void)bits; (void)rb;
+    return 1;
+}
+void print_timing(DOC *d, int colour)
+{
+    PCTX c;
+    clock_t t0;
+    memset(&c, 0, sizeof c);
+    c.o.pixw = c.o.pixh = 85; c.o.band = 128;
+    c.o.render = tm_rend; c.o.out = tm_out; c.o.ctx = &c; c.o.colour = colour;
+    c.o.progress = prt_progress; c.npg = 1;
+    doc_layout(d);
+    tm_render = tm_glyph = tm_look = 0;
+    gauge_cancelable();
+    gauge_open(L(S_PRINTING), NULL);
+    t0 = clock();
+    print_page(d, 0, &c.o);
+    gauge_close();
+    {
+        char path[300];
+        FILE *f;
+        sprintf(path, "%sPRTIME.TXT", progdir);
+        f = fopen(path, "a");
+        if (f) {
+            fprintf(f, "page 1 at 300 dpi%s, scale %d: %ld ticks in all, %ld drawing (%ld getting glyphs, %ld of it making them), %ld resampling; %d glyphs cached\r\n",
+                    colour ? " in colour" : "", c.o.scale, (long)(clock() - t0), (long)tm_render, (long)tm_look, (long)tm_glyph,
+                    (long)(clock() - t0 - tm_render), ngc);
+            fclose(f);
+        }
+    }
+    glyph_cache_free();
+}
+#endif
 
 int print_doc(DOC *d, const unsigned char *sel, int copies)
 {
@@ -1385,6 +1502,21 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
     edlog("print: vq_extnd -> %dx%d pixels of %dx%d microns", work_out[0] + 1,
           work_out[1] + 1, work_out[3], work_out[4]);
     if (work_out[3] <= 0 || work_out[4] <= 0) { v_clswk(c.ph); return 0; }
+    /* a colour printer: each colour in its own pen, set to EdWord's colour */
+    c.npens = work_out[13];
+    c.o.colour = colour_on && c.npens >= 8;
+    edlog("print: %d pens, %s", c.npens, c.o.colour ? "colour" : "black and white");
+    if (c.o.colour) {
+        int k;
+        for (k = 1; k < NCOLORS; k++)
+            if (pen_of[k] < c.npens) {
+                short rgb[3];
+                rgb[0] = (short)(color_rgb[k][0] * 1000L / 255);
+                rgb[1] = (short)(color_rgb[k][1] * 1000L / 255);
+                rgb[2] = (short)(color_rgb[k][2] * 1000L / 255);
+                vs_color(c.ph, pen_of[k], rgb);
+            }
+    }
     c.o.w = work_out[0] + 1L; c.o.h = work_out[1] + 1L;
     c.o.pixw = work_out[3]; c.o.pixh = work_out[4];
     c.o.band = 128;
@@ -1394,21 +1526,29 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
     c.o.ctx = &c;
     np = doc_npages(d);
     for (p = 0, k = 0; p < np; p++) if (!sel || sel[p]) k++;
-    if (!k) return 0;
+    if (!k) { v_clswk(c.ph); return 0; }       /* nothing to print: close the printer again */
     c.npg = k * copies;
     memset(orient, 0, sizeof orient);
     ncal = 0;
+    gauge_cancelable();
     gauge_open(L(S_PRINTING), NULL);
     doc_layout(d);
     for (k = 0; k < copies && ok; k++)
         for (p = 0; p < np && ok; p++) {
             if (sel && !sel[p]) continue;
             ok = print_page(d, p, &c.o);
+            if (!ok) break;
+            /* the driver sends the page now, and doesn't come back until it
+             * has: the arrow, so no busy bee is left over other programs */
+            busy_ptr(0);
             v_updwk(c.ph);                      /* print the page ... */
             v_clrwk(c.ph);                      /* ... and feed it out */
+            busy_ptr(1);
             c.done++;
+            if (gauge_cancelled()) { c.stop = 1; ok = 0; }
         }
     gauge_close();
+    if (c.stop) edlog("print: cancelled after %d pages", c.done);
     v_clswk(c.ph);
     glyph_cache_free();
     free(edges);
@@ -1416,5 +1556,5 @@ int print_doc(DOC *d, const unsigned char *sel, int copies)
     nedge = edgecap = 0;
     rs_end();
     style_reset();
-    return ok;
+    return c.stop ? -1 : ok;
 }

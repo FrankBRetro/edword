@@ -11,8 +11,9 @@ The full user documentation, with screenshots, is in `manual/MANUALEN.PDF`
 (also `MANUALDE`, `MANUALES`, `MANUALIT` and `MANUALFR`).
 
 ## Installing
-Copy `EDWORD.PRG`, `dict/EDWORD.DIC`, `dict/EDWORD.THS` and the manuals into
-one folder, with the spelling dictionaries for the other languages you want
+Copy `EDWORD.PRG`, its resource files (`EDWORD.RSC`, `EDWORDDE.RSC`,
+`EDWORDES.RSC`, `EDWORDIT.RSC`, `EDWORDFR.RSC`), `dict/EDWORD.DIC`,
+`dict/EDWORD.THS` and the manuals into one folder, with the spelling dictionaries for the other languages you want
 (`EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC`). Load GDOS first (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS or
 G+Plus); without it you only get the system font.
 
@@ -70,8 +71,18 @@ FPU.
 - **Five languages** for the user interface and the manual: English, German,
   Spanish, Italian, French. The TOS language is used at first; Preferences
   changes it. Spelling and thesaurus stay British English.
-- **Drawings**: boxes, rounded boxes, ellipses, lines and triangles in a
-  drawing window, with fill, line width and colour; the text flows around the
+- **Resource files (ST)**: the menu bar, the Print and Preferences
+  dialogs, the font selector, the toolbar with its icons and the size,
+  colour and zoom popups come from `EDWORD.RSC` (one file per language,
+  `EDWORDDE.RSC` and so on), so they can be changed with a resource editor
+  and are drawn and handled by the AES. With an AES that has 3D objects
+  (TOS 4, MultiTOS, MagiC, XaAES, MyAES) the dialogs, the font selector and
+  the toolbar take the 3D look. Without the files EdWord builds them itself.
+- **Pictures placed to the pixel**: positions and sizes are kept in twips
+  (1/20 point), so a picture or drawing lands on the screen pixel you drop
+  it on at any zoom; Shift+arrow keys move a selected one by one pixel.
+- **Drawings**: boxes, rounded boxes, ellipses, lines, triangles and
+  freehand strokes in a drawing window, with fill, line width and colour; the text flows around the
   box or around the shapes themselves.
 - **Pictures**: GEM IMG (mono, colour, XIMG, and true colour: 16, 24 and
   32 planes), PNG (every kind, interlaced too; transparent parts on white)
@@ -127,7 +138,10 @@ FPU.
   breaks, stretch spaces and soft line ends.
 - **Printing** from the print preview's new Print button (and File ▸ Print):
   page range and copies. On the ST it prints through the GDOS printer driver
-  (device 21); on the Mac through the standard print dialog; on the Amiga
+  (device 21), about eight times faster than before, with a Cancel button in
+  the progress window (or Esc/Undo), the busy bee only over EdWord's
+  windows, and in colour on a GDOS colour printer driver (8 pens or more)
+  when Preferences ▸ Show colours is on; on the Mac through the standard print dialog; on the Amiga
   through `printer.device` with the Preferences printer; on Windows through
   the Windows Print dialog.
 - **Page navigation**: Previous page, Next page and Go to page… in the Edit
@@ -396,6 +410,8 @@ make ED_VERSION=3.1 ED_ABOUT="Built for our club"
 make EDDEMO=1                # ... that runs DEMO.SCR (manual screenshots)
 make CPU=030                 # EDW030.PRG; also CPU=030F, CPU=040, CPU=CF
 make cpus                    # all four (objects in build/<cpu>)
+make rsc                     # EDWORD*.RSC and edrsc.h from lang/strings.txt
+                             #   (tools/mkrsc.py; needs Python 3)
 make MKDIC.TTP               # dictionary builder for the ST
 make hosttest                # PC: tests the portable core (layout, codes,
 ./hosttest test/sample.rtf /tmp dict/EDWORD.DIC dict/EDWORD.THS

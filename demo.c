@@ -32,6 +32,8 @@
  *   CLICK x y n          a click at screen x y
  *   REDRAW               redraw the whole screen
  *   WAIT n               do nothing for n ticks
+ *   PRTIME c             time printing page 1 at 300 dpi (c: in colour), in the log
+ *   STROKE x y x y ...   a freehand stroke through those screen points (drawing window)
  *   QUIT
  */
 #ifdef EDDEMO
@@ -223,6 +225,7 @@ static void run_line(char *s)
     else if (!strcmp(cmd, "DFILE")) { strncpy(dfile, s, 39); dfile[39] = 0; }
     else if (!strcmp(cmd, "MENU")) { int i = atoi(next_word(&s)); menu_shot(i, s); }
     else if (!strcmp(cmd, "WAIT")) wait_ticks = atoi(s);
+    else if (!strcmp(cmd, "PRTIME")) { void print_timing(DOC *, int); print_timing(d, atoi(s)); }
     else if (!strcmp(cmd, "QUIT")) {
         char path[300];
         long fh;
@@ -288,6 +291,12 @@ static void run_line(char *s)
             doc_changed(d);
             form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
         }
+    } else if (!strcmp(cmd, "STROKE")) {          /* STROKE x y x y ...: freehand in the drawing window */
+        static short xy[200];
+        void draw_demo_stroke(int t, const short *xy, int n);
+        int n = 0;
+        while (*s && n < 100) { xy[2 * n] = (short)atoi(next_word(&s)); xy[2 * n + 1] = (short)atoi(next_word(&s)); n++; }
+        draw_demo_stroke(6, xy, n);
     } else if (!strcmp(cmd, "FINDSET")) {
         char *bar = strchr(s, '|');
         if (bar) *bar++ = 0;

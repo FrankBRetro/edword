@@ -1524,6 +1524,12 @@ de: Dreieck
 es: Triángulo
 it: Triangolo
 fr: Triangle
+@S_DT_FREE
+en: Freehand
+de: Freihand
+es: A mano
+it: A mano
+fr: Main levée
 @S_DT_FILL
 en: Fill
 de: Füllung

@@ -37,6 +37,28 @@ void page_default(PAGESET *p)
 }
 
 long pt2px_x(long pt) { return pt * 25400L / (72L * dev_pixw); }
+
+/* Objects are placed in twips, so every screen pixel at every zoom has its
+ * own position: pixels from twips round down, twips from pixels round up,
+ * and a twip being much smaller than a pixel, a pixel comes back as itself. */
+static long tw2px(long tw, long num, long den, long pix)
+{
+    long long v = (long long)tw * num * 25400;
+    long long q = (long long)den * 1440 * pix;
+    return (long)(v >= 0 ? v / q : -((-v + q - 1) / q));
+}
+static long px2tw(long px, long num, long den, long pix)
+{
+    long long v = (long long)px * 1440 * pix * den;
+    long long q = (long long)num * 25400;
+    return (long)(v >= 0 ? (v + q - 1) / q : -((-v) / q));
+}
+long tw2px_x(long tw) { return tw2px(tw, 1, 1, dev_pixw); }
+long tw2px_y(long tw) { return tw2px(tw, 1, 1, dev_pixh); }
+long tw2px_xs(long tw, long num, long den) { return tw2px(tw, num, den, dev_pixw); }
+long tw2px_ys(long tw, long num, long den) { return tw2px(tw, num, den, dev_pixh); }
+long px2tw_xs(long px, long num, long den) { return px2tw(px, num, den, dev_pixw); }
+long px2tw_ys(long px, long num, long den) { return px2tw(px, num, den, dev_pixh); }
 long pt2px_y(long pt) { return pt * 25400L / (72L * dev_pixh); }
 long px2pt_x(long px) { return (px * 72L * dev_pixw + 12700L) / 25400L; }
 long px2pt_y(long px) { return (px * 72L * dev_pixh + 12700L) / 25400L; }
@@ -162,6 +184,9 @@ void doc_free(DOC *d)
     free(d->pgline);
     codes_free(&d->cv);
     for (i = 0; i < d->nimg; i++) img_free(&d->imgs[i]);
+    free(d->fpts);
+    d->fpts = NULL;
+    d->nfpts = d->capfpts = 0;
     undo_free(d);
     free(d->lay_aux);
     d->lay_aux = NULL;
@@ -411,6 +436,32 @@ int doc_tbl_new(DOC *d, int ncols, const short *w, int border)
 }
 
 /* ---- pictures and drawings ---------------------------------------------- */
+
+/* a freehand stroke's n points (x, y pairs, 0..FREE_ONE across its box)
+ * into the document's pool; returns where they start, or -1 */
+int free_add(DOC *d, const short *xy, int n)
+{
+    long at = d->nfpts;
+    if (n < 2 || n > MAX_FREEPTS) return -1;
+    if (d->nfpts + n > d->capfpts) {
+        long nc = d->capfpts ? d->capfpts * 2 : 1024;
+        short *np;
+        while (nc < d->nfpts + n) nc *= 2;
+        np = (short *)realloc(d->fpts, (size_t)nc * 2 * sizeof(short));
+        if (!np) return -1;
+        d->fpts = np;
+        d->capfpts = nc;
+    }
+    memcpy(d->fpts + 2 * at, xy, (size_t)n * 2 * sizeof(short));
+    d->nfpts += n;
+    return (int)at;
+}
+
+const short *free_pts(const DOC *d, const SHAPE *s)
+{
+    if (s->type != SH_FREE || s->np < 2 || s->p0 < 0 || s->p0 + s->np > d->nfpts) return NULL;
+    return d->fpts + 2 * s->p0;
+}
 
 int doc_obj_add(DOC *d, const OBJ *o)
 {

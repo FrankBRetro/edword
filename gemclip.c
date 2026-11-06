@@ -85,7 +85,7 @@ static int copy_object(DOC *d, const OBJ *o)
     else if (o->type == OB_DRAW) {
         OBJ c = *o;
         BAND b;
-        long w = pt2px_x(o->w) + 1, h = pt2px_y(o->h) + 1;
+        long w = tw2px_x(o->w) + 1, h = tw2px_y(o->h) + 1;
         im.w = (short)w; im.h = (short)h; im.rb = (short)((w + 7) / 8);
         im.bits = (unsigned char *)calloc((size_t)im.rb, (size_t)h);
         if (!im.bits) return 0;

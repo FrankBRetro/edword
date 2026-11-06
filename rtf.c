@@ -54,6 +54,8 @@ static int  curtbl, lastrow_tbl;
 static PGOVR  eo;
 static OBJ    eob;
 static SHAPE  esh;
+static short  epts[2 * MAX_FREEPTS];   /* a freehand stroke's points as read */
+static int    enpt;
 static IMG    eim;
 static long   eimpos;
 static int    eimhi, eimnib;
@@ -365,14 +367,18 @@ static int ed_control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
     if (s->dest == D_EDOBJ) {
         if (!strcmp(w, "edot")) eob.type = (short)clampi(p, 0, 2);
         else if (!strcmp(w, "edop")) eob.page = (short)clampi(p, 0, 9999);
-        else if (!strcmp(w, "edox")) eob.x = (short)clampi(p, -2000, 4000);
-        else if (!strcmp(w, "edoy")) eob.y = (short)clampi(p, -2000, 4000);
-        else if (!strcmp(w, "edow")) eob.w = (short)clampi(p, 4, 4000);
-        else if (!strcmp(w, "edoh")) eob.h = (short)clampi(p, 4, 4000);
+        else if (!strcmp(w, "edox")) eob.x = clampi(p, -2000, 4000) * (long)TWIPS;
+        else if (!strcmp(w, "edoy")) eob.y = clampi(p, -2000, 4000) * (long)TWIPS;
+        else if (!strcmp(w, "edoxt")) eob.x = clampi(p, -2000L * TWIPS, 4000L * TWIPS);   /* twips, after the points */
+        else if (!strcmp(w, "edoyt")) eob.y = clampi(p, -2000L * TWIPS, 4000L * TWIPS);
+        else if (!strcmp(w, "edowt")) eob.w = clampi(p, 4L * TWIPS, 4000L * TWIPS);
+        else if (!strcmp(w, "edoht")) eob.h = clampi(p, 4L * TWIPS, 4000L * TWIPS);
+        else if (!strcmp(w, "edow")) eob.w = clampi(p, 4, 4000) * (long)TWIPS;
+        else if (!strcmp(w, "edoh")) eob.h = clampi(p, 4, 4000) * (long)TWIPS;
         else if (!strcmp(w, "edowr")) eob.wrap = (short)clampi(p, 0, 2);
         else if (!strcmp(w, "edobr")) eob.border = (short)(p != 0);
         else if (!strcmp(w, "edsh")) {
-            s->dest = D_EDSH; memset(&esh, 0, sizeof esh); esh.lw = 1;
+            s->dest = D_EDSH; memset(&esh, 0, sizeof esh); esh.lw = 1; enpt = 0;
         } else if (!strcmp(w, "edimg")) {
             s->dest = D_EDIMG;
             img_free(&eim);
@@ -391,6 +397,8 @@ static int ed_control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
         else if (!strcmp(w, "edsya")) esh.y1 = (short)clampi(p, -4000, 4000);
         else if (!strcmp(w, "edsxb")) esh.x2 = (short)clampi(p, -4000, 4000);
         else if (!strcmp(w, "edsyb")) esh.y2 = (short)clampi(p, -4000, 4000);
+        else if (!strcmp(w, "edpx") && enpt < MAX_FREEPTS) epts[2 * enpt] = (short)clampi(p, 0, FREE_ONE);
+        else if (!strcmp(w, "edpy") && enpt < MAX_FREEPTS) epts[2 * enpt++ + 1] = (short)clampi(p, 0, FREE_ONE);
         return 1;
     }
     if (s->dest == D_EDIMG) {
@@ -416,6 +424,11 @@ static void ed_close(DOC *d, RSTATE *s)
         break;
     }
     case D_EDSH:
+        if (esh.type == SH_FREE) {                  /* its points into the pool */
+            int at = free_add(d, epts, enpt);
+            if (at < 0) break;
+            esh.p0 = at; esh.np = (short)enpt;
+        } else { esh.p0 = 0; esh.np = 0; }
         if (eob.nsh < MAX_SHAPES) eob.sh[eob.nsh++] = esh;
         break;
     case D_EDIMG:
@@ -745,12 +758,21 @@ static void write_objects(FILE *f, DOC *d)
     long r, c;
     for (i = 0; i < d->a.nobj; i++) {
         OBJ *o = &d->a.objs[i];
-        fprintf(f, "{\\*\\edobj\\edot%d\\edop%d\\edox%d\\edoy%d\\edow%d\\edoh%d\\edowr%d\\edobr%d\r\n",
-                o->type, o->page, o->x, o->y, o->w, o->h, o->wrap, o->border);
+        /* points for older readers, then the twips the position really is */
+        fprintf(f, "{\\*\\edobj\\edot%d\\edop%d\\edox%ld\\edoy%ld\\edow%ld\\edoh%ld\\edowr%d\\edobr%d"
+                   "\\edoxt%ld\\edoyt%ld\\edowt%ld\\edoht%ld\r\n",
+                o->type, o->page, (o->x + TWIPS / 2) / TWIPS, (o->y + TWIPS / 2) / TWIPS, (o->w + TWIPS / 2) / TWIPS,
+                (o->h + TWIPS / 2) / TWIPS, o->wrap, o->border, o->x, o->y, o->w, o->h);
         for (k = 0; k < o->nsh && o->type == OB_DRAW; k++) {
             SHAPE *s = &o->sh[k];
-            fprintf(f, "{\\*\\edsh\\edst%d\\edsf%d\\edsc%d\\edsl%d\\edsxa%d\\edsya%d\\edsxb%d\\edsyb%d}\r\n",
+            const short *p = free_pts(d, s);
+            fprintf(f, "{\\*\\edsh\\edst%d\\edsf%d\\edsc%d\\edsl%d\\edsxa%d\\edsya%d\\edsxb%d\\edsyb%d",
                     s->type, s->fill, s->color, s->lw, s->x1, s->y1, s->x2, s->y2);
+            if (p) {                             /* a freehand stroke's points */
+                int j;
+                for (j = 0; j < s->np; j++) fprintf(f, "%s\\edpx%d\\edpy%d", j % 6 ? "" : "\r\n", p[2 * j], p[2 * j + 1]);
+            }
+            fputs("}\r\n", f);
         }
         if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg) {
             IMG *im = &d->imgs[o->img];

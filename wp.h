@@ -105,7 +105,7 @@ typedef struct { short ml, mr, mt, mb, cols, colgap; } PGFMT;
 
 enum { OB_NONE, OB_IMG, OB_DRAW };
 enum { WR_NONE, WR_BOX, WR_SHAPE };
-enum { SH_RECT, SH_RRECT, SH_ELLIPSE, SH_LINE, SH_TRI, NSHAPES };
+enum { SH_RECT, SH_RRECT, SH_ELLIPSE, SH_LINE, SH_TRI, SH_FREE, NSHAPES };
 enum { FL_NONE, FL_WHITE, FL_GREY, FL_SOLID, NFILLS };
 /* more fill patterns, for charts in black and white */
 enum { FP_DIAG1 = 8, FP_HLINE, FP_DIAG2, FP_CROSS, FP_DOTS, FP_VLINE };
@@ -113,12 +113,20 @@ enum { FP_DIAG1 = 8, FP_HLINE, FP_DIAG2, FP_CROSS, FP_DOTS, FP_VLINE };
 typedef struct {
     unsigned char type, fill, color, lw;    /* lw: line width in pixels, 0 none */
     short x1, y1, x2, y2;                   /* points, inside the drawing box  */
+    long  p0;                               /* SH_FREE: its points in the     */
+    short np;                               /*   document's pool (free_add)   */
 } SHAPE;
+/* A freehand stroke's points are kept once in the document (they never
+ * change, so undo needn't copy them), each as x, y from 0 to FREE_ONE
+ * across the shape's box: moving or sizing the stroke changes the box. */
+#define FREE_ONE    4096
+#define MAX_FREEPTS 500         /* points in one stroke                    */
 #define MAX_SHAPES 16
 
 typedef struct {
     short type, page;           /* OB_*, 0-based page                      */
-    short x, y, w, h;           /* points from the page's top left corner  */
+    long  x, y, w, h;           /* twips (1/20 point) from the page's top  */
+                                /* left corner: placed to the pixel        */
     short wrap, border;         /* WR_*; frame around the object           */
     short img;                  /* picture: index into the image list      */
     short nsh;
@@ -236,6 +244,7 @@ typedef struct {
     DOCAUX a;                   /* page set-up, header/footer, paragraphs,
                                    tables, page formats, objects            */
     IMG   imgs[MAX_IMGS];  short nimg;
+    short *fpts;  long nfpts, capfpts;  /* freehand points, x y pairs (SHAPE.p0) */
     CHBOX cbox[MAX_TBLS];       /* the tables' charts, as laid out         */
     long  ch_lo, ch_hi;         /* range changed since the last undo step  */
     UNDO  u;
@@ -291,6 +300,13 @@ extern short   nfonts;
 const METRICS *get_metrics(int font, int size, int attr);
 
 /* doc.c - storage, paragraph formats, tables, page formats */
+#define TWIPS 20                /* twips in a point                         */
+long tw2px_x(long tw);          /* twips to screen pixels at 100%, down     */
+long tw2px_y(long tw);
+long tw2px_xs(long tw, long num, long den);     /* ... at num/den of that  */
+long tw2px_ys(long tw, long num, long den);
+long px2tw_xs(long px, long num, long den);     /* and back: the twips that */
+long px2tw_ys(long px, long num, long den);     /* come back to the same px */
 long pt2px_x(long pt);
 long pt2px_y(long pt);
 long px2pt_x(long px);
@@ -319,6 +335,8 @@ void page_ovr_clear(DOC *d);
 long page_w_px(DOC *d);
 long page_h_px(DOC *d);
 long text_w_px(DOC *d, int page);
+int  free_add(DOC *d, const short *xy, int n);   /* a stroke's points: its p0, or -1 */
+const short *free_pts(const DOC *d, const SHAPE *s); /* NULL: none */
 int  doc_obj_add(DOC *d, const OBJ *o);
 void doc_obj_delete(DOC *d, int i);
 int  doc_img_add(DOC *d, const IMG *im);
@@ -545,8 +563,9 @@ void rs_end(void);
 void rs_rect(BAND *b, long x0, long y0, long x1, long y1, int pattern);
 void rs_ellipse_path(long cx, long cy, long rx, long ry);
 void rs_rrect_path(long x0, long y0, long x1, long y1, long r);
+void rs_img(BAND *b, const IMG *im, long x, long y, long w, long h);
 void rs_blit(BAND *b, const IMG *im, long x, long y);
-void rs_shape(BAND *b, const SHAPE *s, long ox, long oy, long num, long den, int fill_only);
+void rs_shape(BAND *b, const DOC *d, const SHAPE *s, long ox, long oy, long num, long den, int fill_only);
 void rs_obj(BAND *b, DOC *d, const OBJ *o, int color, long num, long den);
 extern int rs_skip_rgb;
 void shape_extent(const SHAPE *s, long y0, long y1, long *x0, long *x1);
@@ -583,9 +602,12 @@ typedef struct {
     long band;                  /* printer rows at a time                  */
     int (*render)(void *ctx, DOC *d, int page, int color,
                   long y0, long h, long w, unsigned char *bits, long rowbytes);
-    int (*out)(void *ctx, long y0, long h, long w, const unsigned char *bits, long rowbytes);
+    /* a finished band in one colour: color < 0 everything in black, else
+     * the ink of colour 'color' (with o->colour set, a pass per colour) */
+    int (*out)(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rowbytes);
     void (*progress)(void *ctx, int done, int total);   /* rows of the page */
     void *ctx;
+    int  colour;                /* print each colour the page uses separately */
     int  scale;                 /* set by print_page: render at this scale */
 } PRTOUT;
 int  print_page(DOC *d, int page, PRTOUT *o);

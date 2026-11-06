@@ -3,6 +3,7 @@
  * usage: hosttest sample.rtf outdir dictfile thesaurus */
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include "wp.h"
 
@@ -61,13 +62,19 @@ static int prt_render(void *ctx, DOC *dd, int page, int color, long y0, long h, 
 {
     return fake_render(&((PRTOUT *)ctx)->scale, dd, page, color, y0, h, w, bits, rb);
 }
-static int prt_out(void *ctx, long y0, long h, long w, const unsigned char *bits, long rb)
+/* the printed page, collected band by band (colour passes OR-ed) */
+static unsigned char *prt_page;
+static long prt_prb, prt_passes[NCOLORS + 1];
+static int prt_out(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rb)
 {
     long k;
-    (void)ctx; (void)y0;
-    rows_out += h;
+    (void)ctx;
+    if (y0 == 0) prt_passes[color + 1]++;
+    if (color <= 0) rows_out += h;
     width_out = w;
     for (k = 0; k < h * rb; k++) if (bits[k]) ink_out++;
+    if (prt_page) for (k = 0; k < h * rb; k++) prt_page[(y0 * rb) + k] |= bits[k];
+    prt_prb = rb;
     return 1;
 }
 
@@ -542,7 +549,7 @@ int main(int argc, char **argv)
         OBJ o;
         long top, bot, bx0, bx1, ok = 1, beside = 0, lx;
         memset(&o, 0, sizeof o);
-        o.type = OB_DRAW; o.page = 0; o.x = 56; o.y = 100; o.w = 150; o.h = 100; o.wrap = WR_BOX; o.img = -1;
+        o.type = OB_DRAW; o.page = 0; o.x = 56 * TWIPS; o.y = 100 * TWIPS; o.w = 150 * TWIPS; o.h = 100 * TWIPS; o.wrap = WR_BOX; o.img = -1;
         o.nsh = 1;
         o.sh[0].type = SH_ELLIPSE; o.sh[0].fill = FL_GREY; o.sh[0].lw = 2; o.sh[0].x2 = 150; o.sh[0].y2 = 100;
         doc_obj_add(&d, &o);
@@ -579,7 +586,7 @@ int main(int argc, char **argv)
             CHECK(img_load(path, &im) && im.w == 16 && im.h == 4, "IMG header");
             CHECK(im.bits[0] == 0xF0 && im.bits[1] == 0x0F && im.bits[2] == 0xFF && im.bits[3] == 0xFF &&
                   im.bits[4] == 0xAA && im.bits[5] == 0xAA && im.bits[6] == 0 && im.bits[7] == 0, "IMG runs decoded");
-            o.type = OB_IMG; o.img = (short)doc_img_add(&d, &im); o.nsh = 0; o.x = 300; o.y = 400; o.w = 64; o.h = 16;
+            o.type = OB_IMG; o.img = (short)doc_img_add(&d, &im); o.nsh = 0; o.x = 300 * TWIPS; o.y = 400 * TWIPS; o.w = 64 * TWIPS; o.h = 16 * TWIPS;
             doc_obj_add(&d, &o);
         }
         write_img(path, 1);
@@ -615,6 +622,69 @@ int main(int argc, char **argv)
             CHECK(ink && !out, "a drawing renders into the page");
             rs_end();
         }
+    }
+
+    /* --- objects are placed to the pixel at any zoom --- */
+    {
+        static const int zooms[6] = { 50, 75, 100, 150, 200, 400 };
+        int zi, bad = 0;
+        long px;
+        for (zi = 0; zi < 6; zi++)
+            for (px = 0; px < 3000; px++) {
+                long tx = px2tw_xs(px, zooms[zi], 100), ty = px2tw_ys(px, zooms[zi], 100);
+                if (tw2px_xs(tx, zooms[zi], 100) != px || tw2px_ys(ty, zooms[zi], 100) != px) bad++;
+            }
+        CHECK(bad == 0, "every screen pixel is a position of its own, at every zoom");
+    }
+
+    /* --- freehand strokes --- */
+    {
+        OBJ o;
+        static short pts[2 * 40];
+        static unsigned char band[4000 * 2];
+        BAND bd;
+        long w, rb, cy, x, hit;
+        int at, k;
+        DOC d3;
+        doc_init(&d3);
+        import_str(&d3, "Freehand.", CS_AUTO, 0);
+        for (k = 0; k < 40; k++) {               /* a zigzag across its box */
+            pts[2 * k] = (short)((long)k * FREE_ONE / 39);
+            pts[2 * k + 1] = (short)(k & 1 ? FREE_ONE : 0);
+        }
+        at = free_add(&d3, pts, 40);
+        memset(&o, 0, sizeof o);
+        o.type = OB_DRAW; o.page = 0; o.x = 100 * TWIPS; o.y = 200 * TWIPS; o.w = 200 * TWIPS; o.h = 100 * TWIPS; o.img = -1; o.nsh = 1;
+        o.sh[0].type = SH_FREE; o.sh[0].lw = 2; o.sh[0].x1 = 0; o.sh[0].y1 = 0; o.sh[0].x2 = 200; o.sh[0].y2 = 100;
+        o.sh[0].p0 = at; o.sh[0].np = 40;
+        doc_obj_add(&d3, &o);
+        doc_layout(&d3);
+        CHECK(at == 0 && free_pts(&d3, &d3.a.objs[0].sh[0]) != NULL && free_add(&d3, pts, 1) < 0, "a stroke's points in the pool");
+        /* it renders: ink along the middle row, where the zigzag crosses */
+        w = page_w_px(&d3); rb = (w + 7) / 8; cy = pt2px_y(250);
+        bd.bits = band; bd.rb = rb; bd.w = w; bd.y0 = cy; bd.h = 1;
+        memset(band, 0, sizeof band);
+        rs_obj(&bd, &d3, &d3.a.objs[0], -1, 1, 1);
+        for (x = 0, hit = 0; x < w; x++) if (band[x >> 3] & (0x80 >> (x & 7))) hit++;
+        CHECK(hit >= 30, "a freehand stroke renders");
+        rs_end();
+        sprintf(path, "%s/free.rtf", argv[2]);
+        rtf_export(&d3, path);
+        doc_init(&d2); rtf_import(&d2, path);
+        {
+            const SHAPE *sh = d2.a.nobj == 1 ? &d2.a.objs[0].sh[0] : NULL;
+            const short *p = sh ? free_pts(&d2, sh) : NULL;
+            CHECK(sh && sh->type == SH_FREE && sh->np == 40 && p && p[2] == pts[2] && p[3] == FREE_ONE &&
+                  p[78] == FREE_ONE, "RTF keeps a freehand stroke's points");
+        }
+        doc_free(&d2);
+        /* moving or sizing it is only its box; undo leaves the points alone */
+        undo_reset(&d3);
+        d3.a.objs[0].sh[0].x2 = 100;
+        undo_commit(&d3, 0);
+        undo_do(&d3);
+        CHECK(d3.a.objs[0].sh[0].x2 == 200 && free_pts(&d3, &d3.a.objs[0].sh[0]) != NULL, "undo a stroke's resize");
+        doc_free(&d3);
     }
 
     /* --- undo and redo --- */
@@ -778,7 +848,7 @@ int main(int argc, char **argv)
             doc_init(&d);
             import_str(&d, "Picture", CS_AUTO, 0);
             memset(&o, 0, sizeof o);
-            o.type = OB_IMG; o.w = 100; o.h = 75; o.wrap = WR_BOX;
+            o.type = OB_IMG; o.w = 100 * TWIPS; o.h = 75 * TWIPS; o.wrap = WR_BOX;
             o.img = (short)doc_img_add(&d, &im);
             doc_obj_add(&d, &o);
             sprintf(path, "%s/pic.rtf", argv[2]);
@@ -1067,10 +1137,57 @@ int main(int argc, char **argv)
         pr.render = prt_render;
         pr.out = prt_out;
         pr.ctx = &pr;
-        CHECK(print_page(&d, 0, &pr), "print a page at 300 dpi");
-        printf("  print: scale %d, %ld rows of %ld dots, %ld inked bytes\n", pr.scale, rows_out, width_out, ink_out);
-        CHECK(rows_out == (long)PS(&d).h * 25400L / 72L / 85, "the page's height in printer dots");
-        CHECK(width_out == (long)PS(&d).w * 25400L / 72L / 85 && ink_out > 1000, "the page's width, with ink");
+        static const long dpis[3] = { 85, 169, 21 };
+        int di;
+        for (di = 0; di < 3; di++) {
+            /* against the slow way: every printer pixel that any inked source
+             * pixel covers, worked out pixel by pixel from the whole page */
+            long pp = dpis[di], pw, ph;
+            pr.pixw = pr.pixh = pp; pr.w = 0; rows_out = 0; width_out = 0; ink_out = 0;
+            pw = (long)PS(&d).w * 25400L / 72L / pp; ph = (long)PS(&d).h * 25400L / 72L / pp;
+            long prb = ((pw + 31) / 32) * 4, sw, sh, srb, sx, sy, x, yy, bad = 0;
+            unsigned char *full, *want;
+            clock_t t0;
+            prt_page = (unsigned char *)calloc((size_t)(prb * (ph + 1)), 1);
+            t0 = clock();
+            CHECK(print_page(&d, 0, &pr), "print a page");
+            printf("  print: %ld microns, scale %d, %ld rows of %ld dots, %ld inked bytes, %ld ms\n", pp, pr.scale, rows_out, width_out, ink_out,
+                   (long)((clock() - t0) * 1000 / CLOCKS_PER_SEC));
+            CHECK(rows_out == ph, "the page's height in printer dots");
+            CHECK(width_out == pw && ink_out > 1000, "the page's width, with ink");
+            sw = pt2px_x(PS(&d).w) * pr.scale; sh = pt2px_y(PS(&d).h) * pr.scale; srb = ((sw + 31) / 32) * 4;
+            full = (unsigned char *)calloc((size_t)(srb * sh), 1);
+            want = (unsigned char *)calloc((size_t)(prb * (ph + 1)), 1);
+            prt_render(&pr, &d, 0, -1, 0, sh, sw, full, srb);
+            for (sy = 0; sy < sh; sy++)
+                for (sx = 0; sx < sw; sx++)
+                    if (full[sy * srb + (sx >> 3)] & (0x80 >> (sx & 7))) {
+                        long x0 = sx * dev_pixw / (pr.scale * pp), x1 = (sx + 1) * dev_pixw / (pr.scale * pp);
+                        long y0 = sy * dev_pixh / (pr.scale * pp), y1 = (sy + 1) * dev_pixh / (pr.scale * pp);
+                        if (x1 <= x0) x1 = x0 + 1;
+                        if (y1 <= y0) y1 = y0 + 1;
+                        for (yy = y0; yy < y1 && yy < ph; yy++)
+                            for (x = x0; x < x1 && x < pw; x++) want[yy * prb + (x >> 3)] |= (unsigned char)(0x80 >> (x & 7));
+                    }
+            for (x = 0; x < prb * ph; x++) if (want[x] != prt_page[x]) bad++;
+            printf("  print: %ld bytes differ from the pixel-by-pixel page\n", bad);
+            CHECK(bad == 0, "printed page = every source pixel's printer pixels");
+            free(full); free(want); free(prt_page); prt_page = NULL;
+        }
+        {
+            long pw = (long)PS(&d).w * 25400L / 72L / 85, ph = (long)PS(&d).h * 25400L / 72L / 85, prb = ((pw + 31) / 32) * 4;
+            unsigned char *full = NULL, *want = NULL;
+            prt_page = (unsigned char *)calloc((size_t)(prb * (ph + 1)), 1);
+            pr.pixw = pr.pixh = 85;
+            /* colour: a pass for each colour the page uses */
+            memset(prt_passes, 0, sizeof prt_passes);
+            pr.colour = 1;
+            CHECK(print_page(&d, 0, &pr), "print a page in colour");
+            printf("  print: colour passes per colour %ld %ld %ld %ld (mask %x)\n", prt_passes[0], prt_passes[1], prt_passes[2],
+                   prt_passes[3], page_colours(&d, 0));
+            CHECK(prt_passes[0] == ((page_colours(&d, 0) & ~1u) ? 0 : 1), "one pass for each colour, or one in black");
+            free(full); free(want); free(prt_page); prt_page = NULL;
+        }
     }
 
     /* --- bitmap PDF --- */
@@ -1194,7 +1311,7 @@ int main(int argc, char **argv)
         sprintf(path, "%s/rgb.png", argv[2]);
         img_load(path, &im);
         memset(&o, 0, sizeof o);
-        o.type = OB_IMG; o.x = 200; o.y = 300; o.w = 160; o.h = 120;
+        o.type = OB_IMG; o.x = 200 * TWIPS; o.y = 300 * TWIPS; o.w = 160 * TWIPS; o.h = 120 * TWIPS;
         o.img = (short)doc_img_add(&d, &im);
         doc_obj_add(&d, &o);
         for (i = 0; i < 2; i++) {

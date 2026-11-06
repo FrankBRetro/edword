@@ -194,6 +194,13 @@ int   icon_h(void);
 void  draw_tbicon(int ic, short x, short y);
 short tb_item_x(DOC *d, int cmd);
 
+/* gemrsc.c: the resource files */
+int   rsc_load(int lang, int force);
+void  rsc_free(void);
+OBJECT *rsc_tree(int tree);
+short rsc_title(int tree);
+const char *rsc_entry(int tree, short obj);
+
 /* gemrend.c */
 void  fonts_load(void);
 void  fonts_unload(void);
@@ -229,6 +236,7 @@ typedef struct {
     DITEM   it[MAXDITEM];
     short   nit, row, nrows, cols, framed, edit1;
     short   x, y, w, h;             /* on screen                                    */
+    short   cancel;                 /* from a resource file: the Cancel button      */
     char    tx[MAXTED][3][48];      /* edit fields split for the 3D look            */
 } DLG;
 void  dlg_begin(DLG *g, const char *title);
@@ -243,6 +251,12 @@ short dlg_bigbutton(DLG *g, const char *s, int wc, int flags);
 void  dlg_end(DLG *g);
 short dlg_run(DLG *g);
 int   dlg_on(DLG *g, short item);
+int   dlg_tree(DLG *g, int tree);   /* a dialog from the resource file: items are objects */
+void  dlg_tree_end(DLG *g);
+void  dlg_set(DLG *g, short obj, int on);
+void  dlg_str(DLG *g, short obj, char *s);
+void  dlg_edtext(DLG *g, short obj, char *buf);
+int   popup_rsc(int tree, int cur, short x, short y);
 short dlg_obj(DLG *g, short item);
 int   popup(const char **items, int n, int cur, short x, short y);
 int   popup2(const char **items, int n, int cur, int cur2, short x, short y);
@@ -275,6 +289,8 @@ int   gauge_msg(short *msg);
 void  gauge_open(const char *title, const GRECT *over);
 void  gauge_set(long done, long total);
 void  gauge_close(void);
+void  gauge_cancelable(void);           /* the next gauge has a Cancel button */
+int   gauge_cancelled(void);
 void  blink_wake(void);                /* the blinking caret: show it again  */
 long  blink_wait(void);                /* ms to the next blink, -1: none      */
 void  blink_tick(void);

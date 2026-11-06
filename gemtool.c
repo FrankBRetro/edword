@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gemui.h"
+#include "edrsc.h"
 
 /* ================================================================= */
 /*  Shared drawing helpers                                            */
@@ -235,12 +236,59 @@ static void fs_thumb(const GRECT *trk, GRECT *th)
 
 /* the tree, laid out for the window where it is now, with the current
  * font, size and styles */
+typedef char fs_rsc_check[FS_COUNT == FO_N && FS_FUP == FO_FUP && FS_SROW0 == FO_SROW0 && FS_CLOSE == FO_CLOSE ? 1 : -1];
+
+/* the tree from the resource file: the texts that change and the states */
+static int fs_tree_rsc(void)
+{
+    OBJECT *t = rsc_tree(RT_FONTSEL);
+    GRECT trk, z;
+    int i, k;
+    if (!t) return 0;
+    memcpy(ft, t, sizeof ft);
+    wind_get(fs.wh, WF_WORKXYWH, &ft[FO_ROOT].ob_x, &ft[FO_ROOT].ob_y, &z.g_w, &z.g_h);
+    sprintf(slabel, "%s %d", L(S_SIZE), fs.size);
+    ft[FO_LSIZE].ob_spec.free_string = slabel;
+    ft[FO_LSIZE].ob_width = (short)(strlen(slabel) * wchar);
+    for (i = 0; i < FROWS; i++) {
+        int f = fs.ftop + i;
+        if (f < nfonts) sprintf(frow[i], " %.25s", fonts[f].name); else frow[i][0] = 0;
+        ft[FO_FROW0 + i].ob_spec.free_string = frow[i];
+        if (f == fs.font) ft[FO_FROW0 + i].ob_state |= OS_SELECTED;
+        k = fs.stop + i;
+        if (k < NFSZ) sprintf(srow[i], " %3d", fsz[k]); else srow[i][0] = 0;
+        ft[FO_SROW0 + i].ob_spec.free_string = srow[i];
+        if (k < NFSZ && fsz[k] == fs.size) ft[FO_SROW0 + i].ob_state |= OS_SELECTED;
+    }
+    /* the scroll bar between its arrows, whatever the font */
+    ft[FO_FTRK].ob_y = (short)(ft[FO_FUP].ob_y + ft[FO_FUP].ob_height + 1);
+    ft[FO_FTRK].ob_height = (short)(ft[FO_FDN].ob_y - 1 - ft[FO_FTRK].ob_y);
+    setr(&trk, 0, 0, ft[FO_FTRK].ob_width, ft[FO_FTRK].ob_height);
+    fs_thumb(&trk, &z);
+    ft[FO_FTHUMB].ob_y = z.g_y; ft[FO_FTHUMB].ob_height = z.g_h; ft[FO_FTHUMB].ob_width = z.g_w;
+    for (i = 0; i < 3; i++) {
+        if (fs.attr & (1 << i)) ft[FO_ST0 + i].ob_state |= OS_SELECTED;
+        if (aes_magic) ft[FO_ST0 + i].ob_state |= (short)(OS_WHITEBAK | 0x8000 | (0x7F << 8));
+        else if (aes_3d) ft[FO_ST0 + i].ob_flags |= OF_FL3DIND;
+    }
+    if (aes_3d) {
+        ft[FO_ROOT].ob_flags |= OF_FL3DBAK;
+        for (i = FO_LFONT; i <= FO_LSTYLE; i++) ft[i].ob_flags |= OF_FL3DBAK;
+        ft[FO_FUP].ob_flags |= OF_FL3DACT; ft[FO_FDN].ob_flags |= OF_FL3DACT;
+        ft[FO_SUP].ob_flags |= OF_FL3DACT; ft[FO_SDN].ob_flags |= OF_FL3DACT;
+        ft[FO_FTHUMB].ob_flags |= OF_FL3DACT; ft[FO_FTRK].ob_flags |= OF_FL3DBAK;
+        ft[FO_APPLY].ob_flags |= OF_FL3DACT; ft[FO_CLOSE].ob_flags |= OF_FL3DACT;
+    }
+    return 1;
+}
+
 static void fs_tree(void)
 {
     static const int sty[3] = { S_BOLD, S_ITALIC, S_UNDERLINE };
     FSLAY Y;
     GRECT r, z;
     int i, k;
+    if (fs_tree_rsc()) return;
     fs_layout(&Y);
     memset(ft, 0, sizeof ft);
     fo_set(FO_ROOT, G_BOX, 0x00001170L, 0, &Y.w, &Y.w);
@@ -315,7 +363,8 @@ static void fs_draw(const GRECT *clip)
     FSLAY FL;
     GRECT r;
     fs_tree();
-    fs_layout(&FL);
+    objc_offset(ft, FO_PV, &FL.pv.g_x, &FL.pv.g_y);
+    FL.pv.g_w = ft[FO_PV].ob_width; FL.pv.g_h = ft[FO_PV].ob_height;
     objc_draw(ft, FO_ROOT, 8, clip->g_x, clip->g_y, clip->g_w, clip->g_h);
 
     /* the sample in the chosen font */
@@ -382,6 +431,7 @@ void fontsel_open(void)
     if (fs.open) { wind_set(fs.wh, WF_TOP, 0, 0, 0, 0); fs.font = -1; fontsel_sync(); return; }
     ww = 60L * wchar;
     wh = hchar + 6 + FROWS * hchar + 8 + pv_h() + 6 + hchar + 4 + 8;
+    if (rsc_tree(RT_FONTSEL)) { ww = rsc_tree(RT_FONTSEL)->ob_width; wh = rsc_tree(RT_FONTSEL)->ob_height; }
     wind_calc(WC_BORDER, FSKIND, 0, 0, (short)ww, (short)wh, &x, &y, &w, &h);
     x = (short)(desk.g_x + desk.g_w - w - 8);
     y = (short)(desk.g_y + 8);

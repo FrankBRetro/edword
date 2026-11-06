@@ -252,6 +252,7 @@ enum {
     S_DT_ELLIPSE,
     S_DT_LINE,
     S_DT_TRI,
+    S_DT_FREE,
     S_DT_FILL,
     S_DT_WIDTH,
     S_DT_COLOUR,

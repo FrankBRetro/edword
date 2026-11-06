@@ -7,3 +7,4 @@ MKDIC.TTP
 amiga/build/
 win/build/
 .DS_Store
+tools/__pycache__/

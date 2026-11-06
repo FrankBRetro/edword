@@ -13,6 +13,7 @@
 #include <string.h>
 #include <time.h>
 #include "gemui.h"
+#include "edrsc.h"
 
 short vhandle, phys_handle, wchar, hchar, wbox, hbox, scr_w, scr_h, npens, sys_asc;
 GRECT desk;
@@ -165,7 +166,7 @@ typedef struct { int text; const char *key; short cmd; } MI;    /* text < 0: sep
 #define SEP { -1, NULL, -1 }
 #define DYN 0x4000                     /* text is an index into dyn[] */
 
-static OBJECT mtree[MAXOBJ];
+static OBJECT mtree_own[MAXOBJ], *mtree = mtree_own;   /* the resource file's, or built here */
 static short  mcmd[MAXOBJ], cmdobj[NCMD];
 static short  nobj;
 static char   items[MAXOBJ][44];
@@ -315,12 +316,78 @@ static void build_style_menu(void)
     m_style[n].text = 0; m_style[n].cmd = 0;
 }
 
+/* the menu bar from the resource file: the fonts and windows that fit,
+ * the screen's width; 0 without the file */
+static void set_item(int cmd, const char *text);
+static int build_menu_rsc(void)
+{
+    static const short cm[][2] = { RSC_MENU_CMDS };
+    OBJECT *t;
+    int i, rows = (scr_h - hchar - 4) / hchar - 1, room, nfix;
+    short b;
+    if (!rsc_load(ui_lang, 1) || !(t = rsc_tree(RT_MENU))) return 0;
+    mtree = t;
+    nobj = MN_COUNT;
+    memset(mcmd, 0, sizeof mcmd);
+    memset(cmdobj, 0, sizeof cmdobj);
+    for (i = 0; i < (int)(sizeof cm / sizeof cm[0]); i++) {
+        mcmd[cm[i][0]] = cm[i][1];
+        if (cm[i][1] > 0 && cm[i][1] < NCMD) cmdobj[cm[i][1]] = cm[i][0];
+    }
+    t[MN_ROOT].ob_width = t[MN_BAR].ob_width = t[MN_SCREEN].ob_width = scr_w;
+    t[MN_ROOT].ob_height = scr_h;
+    t[MN_SCREEN].ob_height = (short)(scr_h - t[MN_SCREEN].ob_y);
+    /* the fonts: as many as fit, then "More fonts..." */
+    nfix = MN_FONT0 - (t[MN_BOX4].ob_head);
+    room = rows - nfix;
+    if (room > MAXFONTMENU) room = MAXFONTMENU;
+    font_items = nfonts <= room ? nfonts : room - 1;
+    if (font_items < 1) font_items = 1;
+    for (i = 0; i < MAXFONTMENU; i++) {
+        if (i < font_items) {
+            char n[40];
+            sprintf(n, "%.24s", i < nfonts ? fonts[i].name : "-");
+            set_item(C_FONT0 + i, n);
+        } else {
+            t[MN_FONT0 + i].ob_flags |= OF_HIDETREE;
+            mcmd[MN_FONT0 + i] = 0;
+            cmdobj[C_FONT0 + i] = 0;
+        }
+    }
+    if (font_items < nfonts) t[MN_MOREFONTS].ob_y = (short)(t[MN_FONT0].ob_y + font_items * hchar);
+    else { t[MN_MOREFONTS].ob_flags |= OF_HIDETREE; cmdobj[C_MOREFONTS] = 0; }
+    t[MN_BOX4].ob_height = (short)((nfix + font_items + (font_items < nfonts)) * hchar);
+    /* the windows */
+    nfix = MN_WIN0 - (t[MN_BOX8].ob_head);
+    room = rows - nfix;
+    if (room > MAX_DOCS) room = MAX_DOCS;
+    if (room > 24) room = 24;
+    win_items = room >= MAX_DOCS ? MAX_DOCS : room - 1;
+    if (win_items < 1) win_items = 1;
+    for (i = win_items; i < 24; i++) {
+        t[MN_WIN0 + i].ob_flags |= OF_HIDETREE;
+        mcmd[MN_WIN0 + i] = 0;
+        if (C_WIN0 + i < NCMD) cmdobj[C_WIN0 + i] = 0;
+    }
+    if (win_items < MAX_DOCS) t[MN_WINMORE].ob_y = (short)(t[MN_WIN0].ob_y + win_items * hchar);
+    else { t[MN_WINMORE].ob_flags |= OF_HIDETREE; cmdobj[C_WINMORE] = 0; }
+    t[MN_BOX8].ob_height = (short)((nfix + win_items + (win_items < MAX_DOCS)) * hchar);
+    for (i = 0; i < win_items; i++) set_item(C_WIN0 + i, "-");
+    for (i = 0; i < MAX_UDICT; i++) set_item(C_UD0 + i, L(S_NO_UDICT));
+    /* each menu on the screen */
+    for (b = t[MN_SCREEN].ob_head; b > MN_SCREEN; b = t[b].ob_next)
+        if (t[b].ob_x + t[b].ob_width > scr_w - 2) t[b].ob_x = (short)(scr_w - 2 - t[b].ob_width);
+    return 1;
+}
+
 static void build_menu(void)
 {
     static const int tid[NMENU] = { MT_DESK, MT_FILE, MT_EDIT, MT_INSERT, MT_FONT, MT_STYLE, MT_PARA, MT_TOOLS, MT_WINDOW };
     const MI *menus[NMENU];
     short root, bar, active, screen, tx[NMENU], x = 0, i, k, total = 0;
 
+    if (build_menu_rsc()) return;
+    mtree = mtree_own;
     build_font_menu();
     build_style_menu();
     build_window_menu();
@@ -405,7 +472,7 @@ static void set_item(int cmd, const char *text)
     char *s;
     int w;
     if (cmd <= 0 || cmd >= NCMD || !(o = cmdobj[cmd])) return;
-    s = items[o];
+    s = mtree[o].ob_spec.free_string;
     w = (int)strlen(s);
     s[0] = s[1] = ' ';
     pad_item(s + 2, text, w - 2);
@@ -898,7 +965,7 @@ void cmd_print(DOC *d)
     if (!printer_name(name)) { alert(1, 3, AL_NO_PRINTER, AB_OK); return; }
     sel = (unsigned char *)malloc((size_t)doc_npages(d) + 1);
     if (!sel) { alert(1, 3, AL_NO_MEMORY, AB_OK); return; }
-    if (dlg_print(d, name, sel, &copies) && d->used && !print_doc(d, sel, copies))
+    if (dlg_print(d, name, sel, &copies) && d->used && !print_doc(d, sel, copies))   /* -1: cancelled */
         alert(1, 3, AL_PRINT_FAILED, AB_OK);
     free(sel);
 }
@@ -1783,6 +1850,7 @@ int main(int argc, char *argv[])
     tools_close_all();
     display_restore();
     menu_bar(mtree, 0);
+    rsc_free();
     spell_free_all();
     thes_close();
     doc_clip_free();

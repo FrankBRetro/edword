@@ -14,6 +14,7 @@
 #include <string.h>
 #include <time.h>
 #include "gemui.h"
+#include "edrsc.h"
 
 static long  tb_state[MAX_DOCS], rul_state[MAX_DOCS];
 static void  draw_guides(DOC *d, int page, long x, long y, const GRECT *clip);
@@ -455,13 +456,50 @@ static long tb_key(DOC *d)
            ((long)pref_rulers << 26) ^ ((long)pref_guides << 27);
 }
 
+/* ---- the toolbar from the resource file: a box for each button with
+ * its icon (and the popup mark) as images, drawn and found by the AES */
+static const short tbcmd[][2] = { RSC_TB_CMDS };
+#define NTBC ((int)(sizeof tbcmd / sizeof tbcmd[0]))
+
+static OBJECT *tb_tree(const GRECT *tb)
+{
+    OBJECT *t = rsc_tree(hchar >= 16 ? RT_TOOLBAR : RT_TOOLBAR8);
+    if (!t || t[0].ob_height != tb->g_h) return NULL;
+    t[0].ob_x = tb->g_x; t[0].ob_y = tb->g_y;
+    t[0].ob_width = t[TBO_LINE].ob_width = tb->g_w;
+    return t;
+}
+
+/* the states for this document: on, greyed, the 3D look */
+static void tb_states(DOC *d, OBJECT *t)
+{
+    int i;
+    if (aes_3d) t[0].ob_flags |= OF_FL3DBAK;
+    for (i = 0; i < NTBC; i++) {
+        short o = tbcmd[i][0], c, on = (short)tb_active(d, tbcmd[i][1]);
+        short off = (short)((tbcmd[i][1] == TB_COLOR && !colour_on) || tb_disabled(d, tbcmd[i][1]));
+        t[o].ob_state = (short)((on ? OS_SELECTED : 0) | (off ? OS_DISABLED : 0));
+        if (aes_3d) t[o].ob_flags |= OF_FL3DACT;
+        for (c = t[o].ob_head; c > o; c = t[c].ob_next) {
+            /* white on the black of a selected button, without 3D */
+            t[c].ob_spec.bitblk->bi_color = (short)(on && !aes_3d ? 0 : 1);
+            t[c].ob_state = (short)(off ? OS_DISABLED : 0);
+        }
+    }
+}
+
 /* left edge of the toolbar button for cmd (also used by the tests) */
 short tb_item_x(DOC *d, int cmd)
 {
     GRECT tb, tp, cp;
     long x;
     int i;
+    OBJECT *t;
     get_panes(d, &tb, &tp, &cp);
+    if ((t = tb_tree(&tb)) != NULL) {
+        for (i = 0; i < NTBC; i++) if (tbcmd[i][1] == cmd) return (short)(tb.g_x + t[tbcmd[i][0]].ob_x);
+        return -1;
+    }
     x = tb.g_x + 4;
     for (i = 0; tbi[i].w; i++) {
         if (tbi[i].icon >= 0 && tbi[i].cmd == cmd) return (short)x;
@@ -476,8 +514,15 @@ static void draw_toolbar(DOC *d, const GRECT *tb, GRECT *clip)
     short pxy[4], pl[10];
     long x = tb->g_x + 4, by = tb->g_y + 2, bh = tb->g_h - 5;
     int i, ih = icon_h();
+    OBJECT *t;
 
     if (!rc_inter(tb, &r)) return;
+    if ((t = tb_tree(tb)) != NULL) {
+        tb_states(d, t);
+        objc_draw(t, 0, 8, r.g_x, r.g_y, r.g_w, r.g_h);
+        tb_state[d->slot] = tb_key(d);
+        return;
+    }
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
     fill(&r, 0, 0);
@@ -530,16 +575,29 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
     static const char *items[MAX_FONTS + 2];
     static char sz[NSIZES + 1][16], zm[NZOOM][8];
     long x = tb->g_x + 4;
-    int i, k, n, sel;
+    int i, k, n, sel, cmd = 0;
     short px, py;
+    OBJECT *t = tb_tree(tb);
 
-    for (i = 0; tbi[i].w; i++) {
-        if (tbi[i].icon >= 0 && mx >= x && mx < x + tbi[i].w - 2) break;
-        x += tbi[i].w;
+    if (t) {
+        short o = objc_find(t, 0, 8, mx, (short)(tb->g_y + tb->g_h / 2)), dummy;
+        if (o > 0 && t[o].ob_type == G_IMAGE) o = t[o].ob_next;      /* the button it's in */
+        while (o > 0 && t[o].ob_type == G_IMAGE) o = t[o].ob_next;
+        for (i = 0; i < NTBC && tbcmd[i][0] != o; i++) ;
+        if (i == NTBC) return;
+        cmd = tbcmd[i][1];
+        objc_offset(t, o, &px, &dummy);
+    } else {
+        for (i = 0; tbi[i].w; i++) {
+            if (tbi[i].icon >= 0 && mx >= x && mx < x + tbi[i].w - 2) break;
+            x += tbi[i].w;
+        }
+        if (!tbi[i].w) return;
+        cmd = tbi[i].cmd;
+        px = (short)x;
     }
-    if (!tbi[i].w) return;
-    px = (short)x; py = (short)(tb->g_y + tb->g_h);
-    switch (tbi[i].cmd) {
+    py = (short)(tb->g_y + tb->g_h);
+    switch (cmd) {
     case TB_FONT: {
         /* as many as a popup can hold; the rest are in the font selector */
         int nshow = nfonts, rows = (scr_h - py) / hchar - 1;
@@ -558,24 +616,27 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
         items[NSIZES] = L(M_SIZEOTHER);
         n = -1;
         for (k = 0; k < NSIZES; k++) if (sizes[k] == d->ins.size) n = k;
-        sel = popup(items, NSIZES + 1, n, px, py);
+        sel = popup_rsc(RT_POPSIZE, n, px, py);
+        if (sel == -3) sel = popup(items, NSIZES + 1, n, px, py);
         if (sel >= 0 && sel < NSIZES) apply_style(d, AP_SIZE, sizes[sel]);
         else if (sel == NSIZES) do_cmd(C_SIZEOTHER);
         break;
     case TB_COLOR:
         if (!colour_on) { alert(1, 1, AL_COLOUR_OFF, AB_OK); break; }
         for (k = 0; k < NCOLORS; k++) items[k] = L(S_COL_BLACK + k);
-        sel = popup(items, NCOLORS, d->ins.color, px, py);
+        sel = popup_rsc(RT_POPCOLOUR, d->ins.color, px, py);
+        if (sel == -3) sel = popup(items, NCOLORS, d->ins.color, px, py);
         if (sel >= 0) apply_style(d, AP_COLOR, sel);
         break;
     case TB_ZOOM:
         n = -1;
         for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (zooms[k] == d->zoom) n = k; }
-        sel = popup(items, NZOOM, n, px, py);
+        sel = popup_rsc(RT_POPZOOM, n, px, py);
+        if (sel == -3) sel = popup(items, NZOOM, n, px, py);
         if (sel >= 0) set_zoom(d, zooms[sel]);
         break;
     default:
-        if (!tb_disabled(d, tbi[i].cmd)) do_cmd(tbi[i].cmd);
+        if (!tb_disabled(d, cmd)) do_cmd(cmd);
     }
 }
 

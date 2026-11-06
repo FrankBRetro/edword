@@ -163,8 +163,17 @@ int pdf_export(DOC *d, const char *path, PDFOUT *o)
             const OBJ *pob = &d->a.objs[i];
             if (pob->page != p || !rgb_obj(d, pob) || strlen(cs) > sizeof cs - 80) continue;
             sprintf(xo + strlen(xo), " /Pc%d %d 0 R", k, first + 2 * k);
-            sprintf(cs + strlen(cs), "q %d 0 0 %d %d %d cm /Pc%d Do Q\n", pob->w, pob->h, pob->x,
-                    PS(d).h - pob->y - pob->h, k);
+            {   /* points with two decimals, from twips */
+                long v[4];
+                int j;
+                v[0] = pob->w; v[1] = pob->h; v[2] = pob->x; v[3] = (long)PS(d).h * TWIPS - pob->y - pob->h;
+                strcat(cs, "q");
+                for (j = 0; j < 4; j++) {
+                    long t = v[j] < 0 ? 0 : v[j];
+                    sprintf(cs + strlen(cs), " %ld.%02ld%s", t / TWIPS, (t % TWIPS) * 5, j == 0 ? " 0 0" : "");
+                }
+                sprintf(cs + strlen(cs), " cm /Pc%d Do Q\n", k);
+            }
             k++;
             haspics = 1;
         }

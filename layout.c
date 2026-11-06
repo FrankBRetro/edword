@@ -105,23 +105,23 @@ static int free_span(LS *s, long y0, long y1, long L, long R, long *sx, long *sw
         OBJ *o = &d->a.objs[i];
         long oy0, oy1, ox0, ox1;
         if (o->page != s->page || o->wrap == WR_NONE || o->type == OB_NONE) continue;
-        oy0 = pt2px_y(o->y) - OBJGAP;
-        oy1 = pt2px_y(o->y + o->h) + OBJGAP;
+        oy0 = tw2px_y(o->y) - OBJGAP;
+        oy1 = tw2px_y(o->y + o->h) + OBJGAP;
         if (oy1 <= y0 || oy0 >= y1) continue;
         if (o->type == OB_DRAW && o->wrap == WR_SHAPE) {
             /* around each shape: its width within this band */
-            long by0 = px2pt_y(y0) - o->y - 4, by1 = px2pt_y(y1) - o->y + 4;
+            long by0 = px2pt_y(y0) - o->y / TWIPS - 4, by1 = px2pt_y(y1) - o->y / TWIPS + 4;
             for (k = 0; k < o->nsh; k++) {
                 long sx0, sx1;
                 shape_extent(&o->sh[k], by0, by1, &sx0, &sx1);
                 if (sx1 <= sx0) continue;
-                iv[n++] = pt2px_x(o->x + sx0) - OBJGAP;
-                iv[n++] = pt2px_x(o->x + sx1) + OBJGAP;
+                iv[n++] = tw2px_x(o->x + sx0 * TWIPS) - OBJGAP;
+                iv[n++] = tw2px_x(o->x + sx1 * TWIPS) + OBJGAP;
                 if (oy1 < low) low = oy1;
             }
         } else {
-            ox0 = pt2px_x(o->x) - OBJGAP;
-            ox1 = pt2px_x(o->x + o->w) + OBJGAP;
+            ox0 = tw2px_x(o->x) - OBJGAP;
+            ox1 = tw2px_x(o->x + o->w) + OBJGAP;
             iv[n++] = ox0; iv[n++] = ox1;
             if (oy1 < low) low = oy1;
         }
@@ -159,8 +159,8 @@ static long obj_below(LS *s, long y0, long y1, long L, long R)
         OBJ *o = &d->a.objs[i];
         long oy0, oy1, ox0, ox1;
         if (o->page != s->page || o->wrap == WR_NONE || o->type == OB_NONE) continue;
-        oy0 = pt2px_y(o->y) - OBJGAP; oy1 = pt2px_y(o->y + o->h) + OBJGAP;
-        ox0 = pt2px_x(o->x) - OBJGAP; ox1 = pt2px_x(o->x + o->w) + OBJGAP;
+        oy0 = tw2px_y(o->y) - OBJGAP; oy1 = tw2px_y(o->y + o->h) + OBJGAP;
+        ox0 = tw2px_x(o->x) - OBJGAP; ox1 = tw2px_x(o->x + o->w) + OBJGAP;
         if (oy1 <= y0 || oy0 >= y1 || ox1 <= L || ox0 >= R) continue;
         if (oy1 > low) low = oy1;
     }
