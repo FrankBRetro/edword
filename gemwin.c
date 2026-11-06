@@ -705,6 +705,30 @@ static void tri(long x, long y, int up)
     v_fillarea(vhandle, 3, p);
 }
 
+/* the rulers' backgrounds are drawn without painting any pixel twice:
+ * on a screen of several planes the VDI fills a plane at a time, and
+ * white over the desk's pattern, then grey over that, showed colours */
+static void fill_span(long x, long y, long w, long h, int col, int pat)
+{
+    GRECT g;
+    if (w <= 0 || h <= 0) return;
+    g.g_x = (short)x; g.g_y = (short)y; g.g_w = (short)w; g.g_h = (short)h;
+    fill(&g, col, pat);
+}
+
+/* a margin: grey, with a white line along both long edges */
+static void fill_margin(long x, long y, long w, long h, int across)
+{
+    if (w <= 0 || h <= 0) return;
+    if (across) {               /* a horizontal ruler: lines top and bottom */
+        fill_span(x, y, w, 1, 0, 0); fill_span(x, y + h - 1, w, 1, 0, 0);
+        fill_span(x, y + 1, w, h - 2, 1, 2);
+    } else {
+        fill_span(x, y, 1, h, 0, 0); fill_span(x + w - 1, y, 1, h, 0, 0);
+        fill_span(x + 1, y, w - 2, h, 1, 2);
+    }
+}
+
 /* mm from the page edge to page pixels at 100% */
 static long mm_x(long mm) { return pt2px_x(mm * 720L / 254); }
 static long mm_y(long mm) { return pt2px_y(mm * 720L / 254); }
@@ -720,7 +744,7 @@ static long label_step(DOC *d, long (*mm)(long), long room)
 
 static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
 {
-    GRECT r = *clip, g;
+    GRECT r = *clip;
     short pxy[4];
     LINE *ln = &d->lines[doc_find_line(d, d->cursor)];
     PARA *p = doc_para_at(d, d->cursor);
@@ -732,14 +756,22 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
     if (!rc_inter(hr, &r)) return;
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
-    fill(hr, 0, 0);
     page_fmt(d, ln->page, &f);
-    /* off the page: the desk; the margins: grey */
-    g = *hr; g.g_w = (short)(x0 - hr->g_x); if (g.g_w > 0) fill(&g, 1, 4);
-    g = *hr; g.g_x = (short)(x0 + pw); g.g_w = (short)(hr->g_x + hr->g_w - g.g_x); if (g.g_w > 0) fill(&g, 1, 4);
-    g = *hr; g.g_y += 1; g.g_h -= 2;
-    g.g_x = (short)x0; g.g_w = (short)zx(d, pt2px_x(f.ml)); fill(&g, 1, 2);
-    g.g_w = (short)zx(d, pt2px_x(f.mr)); g.g_x = (short)(x0 + pw - g.g_w); fill(&g, 1, 2);
+    /* off the page: the desk; the margins: grey; between: white */
+    {
+        long L = hr->g_x, R = (long)hr->g_x + hr->g_w, pl = x0 > L ? x0 : L, pr = x0 + pw < R ? x0 + pw : R;
+        long ml = x0 + zx(d, pt2px_x(f.ml)), mr = x0 + pw - zx(d, pt2px_x(f.mr));
+        if (ml < pl) ml = pl;
+        if (ml > pr) ml = pr;
+        if (mr > pr) mr = pr;
+        if (mr < ml) mr = ml;
+        if (pl > pr) pl = pr = R;
+        fill_span(L, hr->g_y, pl - L, hr->g_h, 1, 4);
+        fill_span(pr, hr->g_y, R - pr, hr->g_h, 1, 4);
+        fill_margin(pl, hr->g_y, ml - pl, hr->g_h, 1);
+        fill_span(ml, hr->g_y, mr - ml, hr->g_h, 0, 0);
+        fill_margin(mr, hr->g_y, pr - mr, hr->g_h, 1);
+    }
     /* the marks, every millimetre when there's room */
     vsl_color(vhandle, 1); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
     vswr_mode(vhandle, MD_TRANS);
@@ -793,30 +825,39 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
 
 static void draw_vruler(DOC *d, const GRECT *vr, const GRECT *tp, GRECT *clip)
 {
-    GRECT r = *clip, g;
+    GRECT r = *clip;
     short pxy[4];
     int pg, np = doc_npages(d);
     long ph = page_h_view(d), hmm = (long)PS(d).h * 254 / 720, step, right = vr->g_x + vr->g_w - 1;
+    long cur, bottom = (long)vr->g_y + vr->g_h;
     char s[8];
 
     if (!rc_inter(vr, &r)) return;
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
-    fill(vr, 1, 4);
     vsl_color(vhandle, 1); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
     set_sys_font();
     step = label_step(d, mm_y, hchar + 2);
+    cur = vr->g_y;                         /* drawn down to here */
     for (pg = 0; pg < np; pg++) {
-        long y0 = scr_y(d, (GRECT *)tp, pg, 0), mm;
+        long y0 = scr_y(d, (GRECT *)tp, pg, 0), mm, mt, mb, top, bot;
         PGFMT f;
         if (y0 > r.g_y + r.g_h) break;
         if (y0 + ph < r.g_y) continue;
         page_fmt(d, pg, &f);
-        g.g_x = vr->g_x; g.g_w = vr->g_w; g.g_y = (short)y0; g.g_h = (short)ph;
-        fill(&g, 0, 0);
-        g.g_x += 1; g.g_w -= 2;
-        g.g_h = (short)zx(d, pt2px_y(f.mt)); fill(&g, 1, 2);
-        g.g_h = (short)zx(d, pt2px_y(f.mb)); g.g_y = (short)(y0 + ph - g.g_h); fill(&g, 1, 2);
+        /* the desk above the page, the page's margins and middle */
+        top = y0 > cur ? y0 : cur;
+        bot = y0 + ph < bottom ? y0 + ph : bottom;
+        fill_span(vr->g_x, cur, vr->g_w, top - cur, 1, 4);
+        mt = y0 + zx(d, pt2px_y(f.mt)); mb = y0 + ph - zx(d, pt2px_y(f.mb));
+        if (mt < top) mt = top;
+        if (mt > bot) mt = bot;
+        if (mb > bot) mb = bot;
+        if (mb < mt) mb = mt;
+        fill_margin(vr->g_x, top, vr->g_w, mt - top, 0);
+        fill_span(vr->g_x, mt, vr->g_w, mb - mt, 0, 0);
+        fill_margin(vr->g_x, mb, vr->g_w, bot - mb, 0);
+        if (bot > cur) cur = bot;
         vswr_mode(vhandle, MD_TRANS);
         for (mm = 0; mm <= hmm; mm++) {
             long y = y0 + zx(d, mm_y(mm)), w;
@@ -833,6 +874,7 @@ static void draw_vruler(DOC *d, const GRECT *vr, const GRECT *tp, GRECT *clip)
         }
         vswr_mode(vhandle, MD_REPLACE);
     }
+    fill_span(vr->g_x, cur, vr->g_w, bottom - cur, 1, 4);   /* the desk below the last page */
     vline2(right, vr->g_y, vr->g_y + vr->g_h - 1);
     vs_clip(vhandle, 0, pxy);
     style_reset();

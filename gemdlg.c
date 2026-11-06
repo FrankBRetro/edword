@@ -1276,6 +1276,7 @@ void gauge_open(const char *title, const GRECT *over)
     g_stop = 0;
     dlg_end(&gg);
     if (g_btn >= 0) g_btn = gg.it[g_btn].obj;
+    g_txt = gg.it[g_txt].obj;
     root = 0;
     /* turn the spacer into the bar, with a filled box inside */
     g_bar = gg.it[g_bar].obj;
@@ -1349,16 +1350,30 @@ void gauge_set(long done, long total)
     if (pct == g_last) return;
     g_last = pct;
     edlog("gauge: %d%% (%ld of %ld)", pct, done, total);
-    gg.o[g_fill].ob_width = (short)((long)GAUGEW * wchar * pct / 100);
-    sprintf(g_text, "%3d%%", pct);
-    if (g_wh >= 0) {
-        GRECT a;
-        a.g_x = gg.x; a.g_y = gg.y; a.g_w = gg.w; a.g_h = gg.h;
-        gauge_draw(&a);
-    } else {
-        graf_mouse(M_OFF, NULL);
-        objc_draw(gg.o, 0, 8, gg.x, gg.y, gg.w, gg.h);
-        graf_mouse(M_ON, NULL);
+    {
+        /* only what changed: the new piece of the bar and the
+         * percentage. Drawing the whole gauge again cleared the bar to
+         * white and filled it black each time, and with a screen of
+         * several planes drawn a plane at a time that flashed colours. */
+        GRECT a[2];
+        short ow = gg.o[g_fill].ob_width, nw = (short)((long)GAUGEW * wchar * pct / 100), fx, fy, i;
+        gg.o[g_fill].ob_width = nw;
+        sprintf(g_text, "%3d%%", pct);
+        objc_offset(gg.o, g_fill, &fx, &fy);
+        if (nw >= ow) { a[0].g_x = (short)(fx + ow); a[0].g_w = (short)(nw - ow); }
+        else { a[0].g_x = (short)(fx + nw); a[0].g_w = (short)(ow - nw); }
+        a[0].g_y = fy; a[0].g_h = gg.o[g_fill].ob_height;
+        objc_offset(gg.o, g_txt, &a[1].g_x, &a[1].g_y);
+        a[1].g_w = gg.o[g_txt].ob_width; a[1].g_h = gg.o[g_txt].ob_height;
+        for (i = 0; i < 2; i++) {
+            if (a[i].g_w <= 0 || a[i].g_h <= 0) continue;
+            if (g_wh >= 0) gauge_draw(&a[i]);
+            else {
+                graf_mouse(M_OFF, NULL);
+                objc_draw(gg.o, 0, 8, a[i].g_x, a[i].g_y, a[i].g_w, a[i].g_h);
+                graf_mouse(M_ON, NULL);
+            }
+        }
     }
 #ifdef EDDEMO
     if (demo_on && pct >= 40 && pct < 60) demo_dialog(gg.o, gg.x, gg.y, gg.w, gg.h);
