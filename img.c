@@ -19,7 +19,11 @@
  *
  * PNG: all colour types and bit depths, interlaced or not; transparent
  * parts are put on white. IFF: ILBM with 1-8 planes, Extra Half-Brite,
- * HAM6/HAM8, 24-bit, and the chunky PBM of Deluxe Paint.
+ * HAM6/HAM8, 24-bit, and the chunky PBM of Deluxe Paint; and the Atari
+ * ST's: Deluxe Paint ST's vertical compression (VDAT chunks, a column of
+ * words at a time), its RAST chunks (a new palette from a given line,
+ * for pictures with more than 16 colours), and colour maps that only
+ * use the ST's 3 (or the STE's 4) bits a colour.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -613,12 +617,54 @@ static long byterun(const unsigned char *s, long n, unsigned char *d, long rb, i
     return i;
 }
 
+/* Deluxe Paint ST's compression: each plane in a VDAT chunk, its words
+ * column by column, top to bottom. A command byte < 0: that many literal
+ * words; 0: a count word, then that many words; 1: a count word, then a
+ * word repeated; > 1: the next word repeated that many times. */
+static int vdat_plane(const unsigned char *c, long sz, unsigned char *pl, long rb, long h)
+{
+    long nc, ci, di, x = 0, y = 0;
+    if (sz < 2) return 0;
+    nc = (long)rd16(c) - 2;
+    if (nc < 0 || 2 + nc > sz) return 0;
+    di = 2 + nc;
+    for (ci = 0; ci < nc && x < rb; ci++) {
+        int cmd = (signed char)c[2 + ci];
+        long cnt, k;
+        int lit;
+        unsigned w = 0;
+        if (cmd == 0 || cmd == 1) { if (di + 2 > sz) return 0; cnt = rd16(c + di); di += 2; }
+        else cnt = cmd < 0 ? -cmd : cmd;
+        lit = cmd <= 0;
+        if (!lit) { if (di + 2 > sz) return 0; w = rd16(c + di); di += 2; }
+        for (k = 0; k < cnt && x < rb; k++) {
+            if (lit) { if (di + 2 > sz) return 0; w = rd16(c + di); di += 2; }
+            pl[y * rb + x] = (unsigned char)(w >> 8);
+            pl[y * rb + x + 1] = (unsigned char)w;
+            if (++y >= h) { y = 0; x += 2; }
+        }
+    }
+    return 1;
+}
+
+/* an ST palette word (0RGB, the STE's extra bit lowest) to 0-255 */
+static void st_colour(unsigned v, unsigned char *rgb)
+{
+    int k;
+    for (k = 0; k < 3; k++) {
+        unsigned nib = (v >> (8 - 4 * k)) & 15;
+        rgb[k] = (unsigned char)((((nib & 7) << 1) | (nib >> 3)) * 17);
+    }
+}
+
+#define MAXRAST 400
 static int iff_img(const unsigned char *buf, long n, IMG *im)
 {
     long p, body = -1, bodylen = 0, camg = 0;
     unsigned w = 0, h = 0, planes = 0, comp = 0, masking = 0, i;
-    unsigned char cmap[256][3], *row = NULL, *rgb = NULL;
+    unsigned char cmap[256][3], *row = NULL, *rgb = NULL, *planes2 = NULL;
     int ncol = 0, ham, ehb, pbm = !memcmp(buf + 8, "PBM ", 4), ok = 0;
+    long rast[MAXRAST], nrast = 0, ri = 0;          /* RAST records: their offsets */
     SINK s;
 
     for (p = 12; p + 8 <= n;) {
@@ -633,9 +679,30 @@ static int iff_img(const unsigned char *buf, long n, IMG *im)
             memcpy(cmap, c, (size_t)ncol * 3);
         } else if (!memcmp(buf + p, "CAMG", 4) && sz >= 4) camg = (long)rd32(c);
         else if (!memcmp(buf + p, "BODY", 4)) { body = p + 8; bodylen = sz; }
+        else if (!memcmp(buf + p, "RAST", 4)) {
+            long k;
+            for (k = 0; k + 34 <= sz && nrast < MAXRAST; k += 34) rast[nrast++] = p + 8 + k;
+        }
         p += 8 + sz + (sz & 1);
     }
-    if (!w || !h || !planes || body < 0 || comp > 1) return 0;
+    if (!w || !h || !planes || body < 0 || comp > 2 || (comp == 2 && (pbm || planes > 8))) return 0;
+    /* an ST colour map: only the top 3 or 4 bits of each value used */
+    if (ncol) {
+        int lo = 0, k;
+        for (i = 0; i < (unsigned)ncol; i++) for (k = 0; k < 3; k++) lo |= cmap[i][k];
+        if (!(lo & 0x1F)) {
+            for (i = 0; i < (unsigned)ncol; i++) for (k = 0; k < 3; k++)
+                cmap[i][k] = (unsigned char)(cmap[i][k] | cmap[i][k] >> 3 | cmap[i][k] >> 6);
+        } else if (!(lo & 0x0F)) {
+            for (i = 0; i < (unsigned)ncol; i++) for (k = 0; k < 3; k++) cmap[i][k] = (unsigned char)(cmap[i][k] | cmap[i][k] >> 4);
+        }
+    }
+    /* RAST records in line order */
+    {
+        long a, b;
+        for (a = 1; a < nrast; a++)
+            for (b = a; b > 0 && rd16(buf + rast[b]) < rd16(buf + rast[b - 1]); b--) { long t = rast[b]; rast[b] = rast[b - 1]; rast[b - 1] = t; }
+    }
     if (pbm ? planes != 8 : (planes != 24 && planes > 8)) return 0;
     ham = !pbm && (camg & 0x800) != 0 && (planes == 6 || planes == 8);
     ehb = !pbm && (camg & 0x80) != 0 && planes == 6;
@@ -655,15 +722,42 @@ static int iff_img(const unsigned char *buf, long n, IMG *im)
         long left = bodylen;
         row = (unsigned char *)malloc((size_t)(rb * nplanes));
         rgb = (unsigned char *)malloc((size_t)w * 3);
-        if (!row || !rgb || !sink_begin(&s, im, w, h, 1)) goto out;
+        if (!row || !rgb) goto out;
+        if (comp == 2) {
+            /* the whole picture first: the data runs down the columns */
+            long q = 0;
+            planes2 = (unsigned char *)calloc((size_t)(rb * h), (size_t)planes);
+            if (!planes2) goto out;
+            for (k = 0; k < (long)planes; k++) {
+                long sz;
+                while (q + 8 <= bodylen && memcmp(src + q, "VDAT", 4)) q += 2;
+                if (q + 8 > bodylen) break;
+                sz = (long)rd32(src + q + 4);
+                if (sz < 0 || q + 8 + sz > bodylen) sz = bodylen - q - 8;
+                if (!vdat_plane(src + q + 8, sz, planes2 + k * rb * h, rb, h)) break;
+                q += 8 + sz + (sz & 1);
+            }
+            if (k < (long)planes) goto out;
+        }
+        if (!sink_begin(&s, im, w, h, 1)) goto out;
         for (y = 0; y < (long)h; y++) {
             unsigned r = 0, g = 0, b = 0;
-            for (k = 0; k < nplanes; k++) {
-                used = byterun(src, left, row + k * rb, rb, (int)comp);
-                if (used < 0) break;
-                src += used; left -= used;
+            if (comp == 2) {
+                for (k = 0; k < (long)planes; k++) memcpy(row + k * rb, planes2 + (k * h + y) * rb, (size_t)rb);
+            } else {
+                for (k = 0; k < nplanes; k++) {
+                    used = byterun(src, left, row + k * rb, rb, (int)comp);
+                    if (used < 0) break;
+                    src += used; left -= used;
+                }
+                if (k < nplanes) break;
             }
-            if (k < nplanes) break;
+            /* a palette that starts on this line */
+            while (ri < nrast && (long)rd16(buf + rast[ri]) <= y) {
+                for (k = 0; k < 16; k++) st_colour(rd16(buf + rast[ri] + 2 + 2 * k), cmap[k]);
+                if (ncol < 16) ncol = 16;
+                ri++;
+            }
             for (x = 0; x < (long)w; x++) {
                 unsigned v = 0, byte = (unsigned)(x >> 3), bit = 0x80 >> (x & 7);
                 if (pbm) v = row[x];
@@ -686,7 +780,7 @@ static int iff_img(const unsigned char *buf, long n, IMG *im)
         ok = sink_end(&s, y > 0);
     }
 out:
-    free(row); free(rgb);
+    free(row); free(rgb); free(planes2);
     return ok;
 }
 

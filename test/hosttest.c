@@ -817,6 +817,18 @@ int main(int argc, char **argv)
             CHECK(okp, files[f]);
             img_free(&im);
         }
+        /* Atari ST Deluxe Paint: VDAT columns, 3-bit colour map, RAST palette from line 3 */
+        sprintf(path, "%s/st.iff", argv[2]);
+        okp = img_load(path, &im) && im.w == 48 && im.h == 6 && im.rgb;
+        CHECK(okp, "ST IFF: VDAT compression read");
+        if (okp) {
+            /* line 0, x 15: value 5 -> CMAP (5<<5, 2<<5, 0) stretched to 8 bits */
+            CHECK(PX(im, 15, 0, 0) == 182 && PX(im, 15, 0, 1) == 73 && PX(im, 15, 0, 2) == 0, "ST IFF: 3-bit colour map scaled");
+            CHECK(PX(im, 30, 2, 0) == 73 && PX(im, 30, 2, 1) == 182 && PX(im, 30, 2, 2) == 255, "ST IFF: every column");
+            CHECK(PX(im, 15, 4, 0) == 255 && PX(im, 15, 4, 1) == 255 && PX(im, 15, 4, 2) == 0 &&
+                  PX(im, 0, 4, 0) == 238 && PX(im, 0, 4, 2) == 238, "ST IFF: RAST palette from its line");
+        }
+        img_free(&im);
         sprintf(path, "%s/rgba.png", argv[2]);
         CHECK(img_load(path, &im) && PX(im, 2, 3, 0) == 255 && PX(im, 2, 3, 2) == 255 && PX(im, 30, 3, 0) == 180,
               "PNG with alpha on white");

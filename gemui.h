@@ -181,6 +181,7 @@ char *clip_get_text(long *n);
 int   insert_file(DOC *d, const char *path);
 int   insert_loaded(DOC *d, DOC *t);
 int   tc_init(void);                 /* gemobj.c: full colour pictures */
+int   pal_init(void);                /* gemobj.c: colour pictures on 4-256 pens */
 void  autosave_tick(void);
 void  autosave_reset(void);
 void  autosave_force(void);

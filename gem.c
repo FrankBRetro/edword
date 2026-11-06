@@ -1783,7 +1783,13 @@ int main(int argc, char *argv[])
     if (tc_init()) {
         long fr = (long)Malloc(-1L);
         img_rgb_max = fr / 3 > 8000000L ? 8000000L : fr / 3;
-    } else img_rgb_max = 0;
+    } else {
+        /* a screen with a palette: colour when there's memory to spare
+         * (2 MB free or more), black and white on smaller machines */
+        long fr = (long)Malloc(-1L);
+        img_rgb_max = 0;
+        if (fr >= 2000000L && pal_init()) img_rgb_max = fr / 4 > 8000000L ? 8000000L : fr / 4;
+    }
     edlog("colour pictures: up to %ld bytes", img_rgb_max);
     sys_asc = hchar >= 16 ? 13 : 6;
 

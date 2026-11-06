@@ -86,10 +86,15 @@ FPU.
   box or around the shapes themselves.
 - **Pictures**: GEM IMG (mono, colour, XIMG, and true colour: 16, 24 and
   32 planes), PNG (every kind, interlaced too; transparent parts on white)
-  and IFF ILBM/PBM (1-8 planes, EHB, HAM6/HAM8, 24-bit). Move, resize and
-  flow text around them. On screens of 15 bits or more (Falcon high colour,
-  NVDI/fVDI graphics cards) and on the Mac they show in full colour, and
-  colour PDFs carry them in full colour; elsewhere they are dithered.
+  and IFF ILBM/PBM (1-8 planes, EHB, HAM6/HAM8, 24-bit), including Atari ST
+  IFF files from Deluxe Paint ST (its vertical VDAT compression and RAST
+  palette changes) and colour maps that use only the ST's 3 or 4 bits a
+  colour. Move, resize and flow text around them. On screens of 15 bits or
+  more (Falcon high colour, NVDI/fVDI graphics cards) and on the Mac they
+  show in full colour; on 4, 16 and 256-colour screens (ST medium, TT,
+  Falcon) they are dithered to the screen's colours when there are 2 MB or
+  more free, and shown in black and white on smaller machines. Colour PDFs
+  carry them in full colour.
   Colours are kept in the RTF.
 - **Charts** of a table's numbers: pie, bar, 3D pie and 3D bar, above,
   below, left or right of the table. Click the chart (or use Insert ▸

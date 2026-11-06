@@ -403,6 +403,117 @@ int tc_init(void)
     return 1;
 }
 
+/* ---- colour pictures on screens with a palette (4, 16 or 256 colours) ---
+ * The pens' colours come from the VDI, and the pixel value of each pen
+ * from drawing it into a little memory form. Pictures are dithered to
+ * the pens (error diffusion), with a 15-bit colour cube that remembers
+ * the nearest pen of each colour once it has been looked for. */
+static int   pal_ok, pal_planes, pal_n;
+static short pal_rgb[256][3];                  /* each pen, 0-255 */
+static unsigned char pal_px[256];              /* each pen's pixel value */
+static unsigned short *pal_cube;               /* 32768: pen + 1, 0 not known yet */
+static int   pal_skip = -1;                    /* a pen the display mode changed */
+
+int pal_init(void)
+{
+    short ext[57], rgb[3], pxy[8], col[2], i, k;
+    unsigned short one[1], dev[8], std[8];
+    MFDB src, dm, sm;
+    vq_extnd(vhandle, 1, ext);
+    if (ext[4] < 2 || ext[4] > 8) return 0;
+    pal_planes = ext[4];
+    pal_n = 1 << pal_planes;
+    pal_cube = (unsigned short *)calloc(32768, sizeof(unsigned short));
+    if (!pal_cube) return 0;
+    memset(&src, 0, sizeof src); memset(&dm, 0, sizeof dm); memset(&sm, 0, sizeof sm);
+    one[0] = 0x8000;
+    src.fd_addr = one; src.fd_w = 16; src.fd_h = 1; src.fd_wdwidth = 1; src.fd_nplanes = 1;
+    dm.fd_addr = dev; dm.fd_w = 16; dm.fd_h = 1; dm.fd_wdwidth = 1; dm.fd_nplanes = (short)pal_planes;
+    sm = dm; sm.fd_addr = std; sm.fd_stand = 1;
+    pxy[0] = pxy[1] = pxy[2] = pxy[3] = 0;
+    pxy[4] = pxy[5] = pxy[6] = pxy[7] = 0;
+    for (i = 0; i < pal_n; i++) {
+        vq_color(vhandle, i, 1, rgb);
+        for (k = 0; k < 3; k++) pal_rgb[i][k] = (short)((rgb[k] < 0 ? 0 : rgb[k] > 1000 ? 1000 : rgb[k]) * 255L / 1000);
+        /* the pen's pixel value: drawn into memory, then read plane by plane */
+        memset(dev, 0, sizeof dev);
+        col[0] = i; col[1] = 0;
+        vrt_cpyfm(vhandle, MD_REPLACE, pxy, &src, &dm, col);
+        vr_trnfm(vhandle, &dm, &sm);
+        pal_px[i] = 0;
+        for (k = 0; k < pal_planes; k++) if (std[k] & 0x8000) pal_px[i] |= (unsigned char)(1 << k);
+    }
+    /* every pen the same pixel: the VDI didn't draw into memory */
+    for (i = 1; i < pal_n && pal_px[i] == pal_px[0]; i++) ;
+    if (i == pal_n) { free(pal_cube); pal_cube = NULL; return 0; }
+    edlog("colour pictures on %d pens, pen 1 is pixel %d", pal_n, pal_px[1]);
+    pal_ok = 1;
+    return 1;
+}
+
+static int pal_nearest(int r, int g, int b)
+{
+    unsigned idx = (unsigned)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+    int skip = pref_display == DISP_AMBER && pal_n >= 16 ? 6 : -1;
+    if (skip != pal_skip) { memset(pal_cube, 0, 32768 * sizeof(unsigned short)); pal_skip = skip; }
+    if (!pal_cube[idx]) {
+        long best = 0x7fffffffL;
+        int i, bi = 0, cr = (r & ~7) | 4, cg = (g & ~7) | 4, cb = (b & ~7) | 4;
+        for (i = 0; i < pal_n; i++) {
+            long dr = cr - pal_rgb[i][0], dg = cg - pal_rgb[i][1], db = cb - pal_rgb[i][2];
+            long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+            if (i == skip) continue;
+            if (dd < best) { best = dd; bi = i; }
+        }
+        pal_cube[idx] = (unsigned short)(bi + 1);
+    }
+    return pal_cube[idx] - 1;
+}
+
+/* w x h pixels of R G B, dithered to the pens, in the screen's format */
+static unsigned char *pal_form(const unsigned char *rgb, long w, long h, MFDB *out)
+{
+    long wd = (w + 15) / 16, pl = wd * 2 * h, x, y;
+    unsigned char *std = (unsigned char *)calloc((size_t)(pl * pal_planes), 1), *dev;
+    short *e0 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short)), *e1 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short)), *t;
+    MFDB sm;
+    if (!std || !e0 || !e1) { free(std); free(e0); free(e1); return NULL; }
+    for (y = 0; y < h; y++) {
+        const unsigned char *s = rgb + y * w * 3;
+        memset(e1, 0, (size_t)(w + 2) * 3 * sizeof(short));
+        for (x = 0; x < w; x++) {
+            int c[3], k, pen, px;
+            for (k = 0; k < 3; k++) {
+                int v = s[x * 3 + k] + e0[(x + 1) * 3 + k] / 16;
+                c[k] = v < 0 ? 0 : v > 255 ? 255 : v;
+            }
+            pen = pal_nearest(c[0], c[1], c[2]);
+            for (k = 0; k < 3; k++) {
+                int err = c[k] - pal_rgb[pen][k];
+                e0[(x + 2) * 3 + k] += (short)(err * 7);
+                e1[x * 3 + k] += (short)(err * 3);
+                e1[(x + 1) * 3 + k] += (short)(err * 5);
+                e1[(x + 2) * 3 + k] += (short)err;
+            }
+            px = pal_px[pen];
+            for (k = 0; k < pal_planes; k++)
+                if (px & (1 << k)) std[k * pl + y * wd * 2 + (x >> 3)] |= (unsigned char)(0x80 >> (x & 7));
+        }
+        t = e0; e0 = e1; e1 = t;
+    }
+    free(e0); free(e1);
+    dev = (unsigned char *)malloc((size_t)(pl * pal_planes));
+    if (!dev) { free(std); return NULL; }
+    memset(&sm, 0, sizeof sm);
+    sm.fd_addr = std; sm.fd_w = (short)(wd * 16); sm.fd_h = (short)h; sm.fd_wdwidth = (short)wd;
+    sm.fd_stand = 1; sm.fd_nplanes = (short)pal_planes;
+    *out = sm;
+    out->fd_addr = dev; out->fd_stand = 0;
+    vr_trnfm(vhandle, &sm, out);
+    free(std);
+    return dev;
+}
+
 /* the last few pictures scaled for the screen */
 #define NCACHE 6
 static struct {
@@ -441,6 +552,16 @@ static MFDB *scaled(DOC *d, const IMG *im, long w, long h, int colour)
         if (!cache[i].d || cache[i].use < cache[lru].use) lru = i;
     if (!cache[lru].d) for (i = 0; i < NCACHE; i++) if (!cache[i].d) { lru = i; break; }
     if (cache[lru].d) { free(cache[lru].m.fd_addr); cache[lru].d = NULL; }
+    if (colour && pal_ok) {
+        unsigned char *rgb = img_scale_rgb(im, w, h);
+        if (!rgb) return NULL;
+        buf = pal_form(rgb, w, h, &cache[lru].m);
+        free(rgb);
+        if (!buf) return NULL;
+        cache[lru].d = d; cache[lru].src = im->bits; cache[lru].w = w; cache[lru].h = h; cache[lru].colour = 1;
+        cache[lru].use = ++cache_clock;
+        return &cache[lru].m;
+    }
     if (colour) {
         unsigned char *rgb = img_scale_rgb(im, w, h), *o;
         long x;
@@ -563,7 +684,7 @@ void draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
     long w = ox + tw2px_xs(o->x + o->w, n, den) - x, h = oy + tw2px_ys(o->y + o->h, n, den) - y;
     int k;
     if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg) {
-        int colour = tc_ok && d->imgs[o->img].rgb != NULL;
+        int colour = (tc_ok || pal_ok) && d->imgs[o->img].rgb != NULL;
         MFDB *m = scaled(d, &d->imgs[o->img], w, h, colour), scr;
         if (!m && colour) m = scaled(d, &d->imgs[o->img], w, h, colour = 0);
         if (m) {

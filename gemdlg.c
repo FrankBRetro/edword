@@ -1011,6 +1011,9 @@ int ask_file(const char *title, const char *pattern, const char *defname, char *
     name[sizeof name - 1] = 0;
     if (aes_global[0] >= 0x0140) ok = fsel_exinput(seldir, name, &btn, title);
     else ok = fsel_input(seldir, name, &btn);
+    /* the windows under the selector are drawn again now, before a long
+     * load or save starts, so the selector isn't left on the screen */
+    pump_redraws();
     if (!ok || !btn || !name[0]) return 0;
     strcpy(out, seldir);
     s = strrchr(out, '\\');

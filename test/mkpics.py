@@ -114,6 +114,49 @@ def main(d):
             i += n
     open(d + '/rgb16.img', 'wb').write(out)
 
+    st_iff(d)
+
+
+def st_iff(d):
+    """An Atari ST Deluxe Paint picture: 48 x 6, 4 planes, VDAT compression,
+    a colour map in the ST's 3 bits, and a RAST palette from line 3."""
+    w, h, np = 48, 6, 4
+    rbw = (w + 15) // 16
+    def val(x, y): return (x // 3) % 16 if y != 1 else 5
+    planes = []
+    for k in range(np):
+        words = [[0] * rbw for _ in range(h)]
+        for y in range(h):
+            for x in range(w):
+                if val(x, y) & (1 << k):
+                    words[y][x // 16] |= 0x8000 >> (x & 15)
+        col = [words[y][c] for c in range(rbw) for y in range(h)]      # down each column
+        cmds, data, i = bytearray(), bytearray(), 0
+        while i < len(col):
+            r = 1
+            while i + r < len(col) and col[i + r] == col[i] and r < 127: r += 1
+            if r >= 3:
+                if r % 2: cmds.append(r); data += struct.pack('>H', col[i])                 # > 1: repeat
+                else: cmds.append(1); data += struct.pack('>HH', r, col[i])                 # 1: count, repeat
+                i += r
+            else:
+                n = 1
+                while i + n < len(col) and n < 3: n += 1
+                if n == 2: cmds.append(256 - 2); data += struct.pack('>2H', *col[i:i + 2])   # < 0: literal
+                else: cmds.append(0); data += struct.pack('>H', n) + struct.pack('>%dH' % n, *col[i:i + n])
+                i += n
+        v = struct.pack('>H', len(cmds) + 2) + bytes(cmds) + bytes(data)
+        planes.append(b'VDAT' + struct.pack('>I', len(v)) + v + (b'\0' if len(v) & 1 else b''))
+    body = b''.join(planes)
+    cmap = b''.join(bytes(((i & 7) << 5, ((7 - (i & 7)) << 5), 0xE0 if i >= 8 else 0)) for i in range(16))
+    st = [0x777] * 16
+    st[5] = 0x700 | 0x8F0     # red 7, green 7 with the STE's extra bit (15)
+    rast = struct.pack('>H16H', 3, *st)
+    bmhd = struct.pack('>HHhhBBBBHBBhh', w, h, 0, 0, np, 0, 2, 0, 0, 10, 11, 320, 200)
+    form = b'ILBM' + b'BMHD' + struct.pack('>I', len(bmhd)) + bmhd + b'CMAP' + struct.pack('>I', len(cmap)) + cmap + \
+        b'RAST' + struct.pack('>I', len(rast)) + rast + b'BODY' + struct.pack('>I', len(body)) + body
+    open(d + '/st.iff', 'wb').write(b'FORM' + struct.pack('>I', len(form)) + form)
+
 
 if __name__ == '__main__':
     main(sys.argv[1])
