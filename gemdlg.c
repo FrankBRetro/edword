@@ -118,12 +118,15 @@ int aes_3d, aes_magic, win_dialogs = 1;
 void dlg_init(void)
 {
     short o1 = 0, o2 = 0, o3 = 0, o4 = 0;
-    if (aes_global[0] >= 0x0400 || appl_find("?AGI") >= 0) {
-        if (appl_getinfo(AES_OBJECT, &o1, &o2, &o3, &o4)) {
-            aes_3d = o1 != 0;
-            aes_magic = (o4 & 0x0004) != 0;            /* OS_WHITEBAK objects */
-        }
-    } else if (aes_global[0] >= 0x0340) aes_3d = 1;   /* TOS 4 / MultiTOS */
+    /* only an AES that has appl_getinfo is asked (GEMLib checks, with
+     * appl_find("?AGI") padded to the 8 characters the AES compares), and
+     * only an answer that says it worked is believed: TOS 4's AES 3.40
+     * hasn't the call, and what it left in intout from other calls turned
+     * 3D off and MagiC's object extensions on, which it can't draw */
+    if (appl_getinfo(AES_OBJECT, &o1, &o2, &o3, &o4) == 1) {
+        aes_3d = o1 != 0;
+        aes_magic = (o4 & 0x0004) != 0;                /* OS_WHITEBAK objects */
+    } else if (aes_global[0] >= 0x0340) aes_3d = 1;    /* TOS 4 */
     edlog("AES 3D objects %d, MagiC objects %d", aes_3d, aes_magic);
 }
 
@@ -771,7 +774,7 @@ static int aes_popups(void)
     short o1 = 0, o2 = 0, o3 = 0, o4 = 0;
     if (known >= 0) return known;
     known = 0;
-    if ((aes_global[0] >= 0x0400 || appl_find("?AGI") >= 0) && appl_getinfo(9, &o1, &o2, &o3, &o4)) known = o2 != 0;
+    if (appl_getinfo(9, &o1, &o2, &o3, &o4) == 1) known = o2 != 0;
     else if (aes_global[0] >= 0x0400) known = 1;
     edlog("AES popup menus: %d", known);
     return known;

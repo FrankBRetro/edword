@@ -1796,11 +1796,9 @@ int main(int argc, char *argv[])
     edlog("colour pictures: up to %ld bytes", img_rgb_max);
     sys_asc = hchar >= 16 ? 13 : 6;
 
-    if (aes_global[0] >= 0x0400 || appl_find("?AGI") >= 0) {
-        if (appl_getinfo(AES_WINDOW, &o1, &o2, &o3, &o4)) {
-            native_bottom = (o1 & 0x0040) != 0;
-            native_iconify = (o1 & 0x0080) && (o3 & 0x0001);
-        }
+    if (appl_getinfo(AES_WINDOW, &o1, &o2, &o3, &o4) == 1) {   /* GEMLib asks only an AES that has it */
+        native_bottom = (o1 & 0x0040) != 0;
+        native_iconify = (o1 & 0x0080) && (o3 & 0x0001);
     }
     edlog("AES iconify %d, AES bottom %d", native_iconify, native_bottom);
 
