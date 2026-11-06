@@ -35,6 +35,23 @@ long  _stksize = 65536L;
 /*  written and the file closed again, so it survives a crash.        */
 /* ================================================================= */
 
+#ifdef EDDIAG
+void eddiag(const char *fmt, ...)
+{
+    char path[300];
+    FILE *f;
+    va_list ap;
+    sprintf(path, "%sDIAG.TXT", progdir);
+    f = fopen(path, "a");
+    if (!f) return;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputs("\r\n", f);
+    fclose(f);
+}
+#endif
+
 #ifdef EDLOG
 static char logpath[300];
 static int  log_lines, log_max = 500;

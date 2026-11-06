@@ -58,6 +58,9 @@ endif
 
 CFLAGS  = -O2 $(CPUFLAGS) -fomit-frame-pointer -Wall -std=gnu89
 
+ifdef EDDIAG
+CFLAGS += -DEDDIAG
+endif
 ifdef EDLOG
 CFLAGS += -DEDLOG
 endif

@@ -127,6 +127,8 @@ void dlg_init(void)
         aes_3d = o1 != 0;
         aes_magic = (o4 & 0x0004) != 0;                /* OS_WHITEBAK objects */
     } else if (aes_global[0] >= 0x0340) aes_3d = 1;    /* TOS 4 */
+    eddiag("dlg_init: AES %04x, ?AGI %d, getinfo(13) %d: %d %d %d %d -> 3D %d, MagiC %d",
+           aes_global[0], appl_find("?AGI\0\0\0\0"), appl_getinfo(AES_OBJECT, &o1, &o2, &o3, &o4), o1, o2, o3, o4, aes_3d, aes_magic);
     edlog("AES 3D objects %d, MagiC objects %d", aes_3d, aes_magic);
 }
 
@@ -564,7 +566,11 @@ static void dlg_redraw(DLG *g, const GRECT *area, short edit, short idx, int cur
         y1 = r.g_y > a.g_y ? r.g_y : a.g_y;
         x2 = r.g_x + r.g_w < a.g_x + a.g_w ? r.g_x + r.g_w : a.g_x + a.g_w;
         y2 = r.g_y + r.g_h < a.g_y + a.g_h ? r.g_y + r.g_h : a.g_y + a.g_h;
-        if (x2 > x1 && y2 > y1) objc_draw(g->o, 0, 8, x1, y1, x2 - x1, y2 - y1);
+        if (x2 > x1 && y2 > y1) {
+            eddiag("  objc_draw %d,%d %dx%d", x1, y1, x2 - x1, y2 - y1);
+            objc_draw(g->o, 0, 8, x1, y1, x2 - x1, y2 - y1);
+            eddiag("  drawn");
+        }
         wind_get(dlg_wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     }
     graf_mouse(M_ON, NULL);
@@ -610,6 +616,14 @@ short dlg_run(DLG *g)
     const char *tname = NULL;
     static char wtitle[60];
 
+    eddiag("dlg_run: busy %d, windows %d, 3D %d, MagiC %d, %d objects, %d items, root %d,%d %dx%d",
+           dlg_busy, win_dialogs, aes_3d, aes_magic, g->n, g->nit, g->o[0].ob_x, g->o[0].ob_y, g->o[0].ob_width, g->o[0].ob_height);
+#ifdef EDDIAG
+    for (i = 0; i < g->n; i++)
+        eddiag("  obj %d: type %x flags %x state %x spec %lx next %d head %d tail %d at %d,%d %dx%d", i, g->o[i].ob_type,
+               g->o[i].ob_flags, g->o[i].ob_state, (long)g->o[i].ob_spec.index, g->o[i].ob_next, g->o[i].ob_head, g->o[i].ob_tail,
+               g->o[i].ob_x, g->o[i].ob_y, g->o[i].ob_width, g->o[i].ob_height);
+#endif
     if (dlg_busy) { dlg_front(); return -1; }
     if (!win_dialogs) return dlg_modal(g);
     /* the title goes into the window's title bar */
@@ -626,14 +640,18 @@ short dlg_run(DLG *g)
     for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y += hchar / 4;
     g->o[0].ob_height += hchar / 2 + hchar / 4;
     w = g->o[0].ob_width; h = g->o[0].ob_height;
+    eddiag("dlg_run: title %d, work %dx%d; wind_calc ...", title, w, h);
     wind_calc(WC_BORDER, kind, 0, 0, w, h, &wx, &wy, &ww, &wh);
+    eddiag("dlg_run: ... border %d,%d %dx%d", wx, wy, ww, wh);
     sprintf(wtitle, " %.50s ", tname ? tname : "EdWord");
     if (!winpos_get(wtitle, &x, &y, NULL, NULL)) {
         x = (short)(desk.g_x + (desk.g_w - ww) / 2);
         y = (short)(desk.g_y + (desk.g_h - wh) / 2);
     }
     winpos_clamp(&x, &y, ww, wh);
+    eddiag("dlg_run: at %d,%d (desk %d,%d %dx%d); wind_create ...", x, y, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
     dlg_wh = wind_create(kind, x, y, ww, wh);
+    eddiag("dlg_run: wind_create %d at %d,%d %dx%d", dlg_wh, x, y, ww, wh);
     if (dlg_wh < 0) {                                  /* no window to spare */
         for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
         g->o[0].ob_height -= hchar / 2 + hchar / 4;
@@ -648,6 +666,7 @@ short dlg_run(DLG *g)
     }
     wind_set_str(dlg_wh, WF_NAME, wtitle);
     wind_open(dlg_wh, x, y, ww, wh);
+    eddiag("dlg_run: opened");
     wind_get(dlg_wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
     g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
     open_dlg = g;
@@ -666,14 +685,17 @@ short dlg_run(DLG *g)
     if (edit) { objc_edit(g->o, edit, 0, &idx, ED_INIT); cur_on = 1; }
     next = edit;
     for (;;) {
+        eddiag("dlg_run: waiting");
         ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         msg, 0L, &mx, &my, &mb, &ks, &key, &br);
+        eddiag("dlg_run: event %x, message %d for %d", ev, msg[0], msg[3]);
         if (ev & MU_MESAG) {
             if (msg[3] == dlg_wh && msg[0] >= 20 && msg[0] < 40) {
                 GRECT a;
                 switch (msg[0]) {
                 case WM_REDRAW:
                     a.g_x = msg[4]; a.g_y = msg[5]; a.g_w = msg[6]; a.g_h = msg[7];
+                    eddiag("dlg_run: redraw %d,%d %dx%d", a.g_x, a.g_y, a.g_w, a.g_h);
                     /* the text cursor is drawn by XOR: take it off first */
                     if (edit && cur_on && dlg_is_top()) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 0; }
                     dlg_redraw(g, &a, edit, idx, 1);
@@ -1502,6 +1524,7 @@ static void prefs_more(void)
 
 int dlg_prefs(void)
 {
+    eddiag("prefs: 3D %d, MagiC %d, resource tree %p", aes_3d, aes_magic, (void *)rsc_tree(RT_PREFS));
     static const int order[NDATEFMT] = { DT_SHORT, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
     static char dl[NDATEFMT][32], mins[3];
     DLG g;

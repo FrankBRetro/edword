@@ -10,7 +10,7 @@
 #include "lang.h"
 
 #ifndef ED_VERSION
-#define ED_VERSION "3.0.2"   /* one more on every commit */
+#define ED_VERSION "3.0.3"   /* one more on every commit */
 #endif
 #ifndef ED_ABOUT
 #define ED_ABOUT ""
@@ -103,6 +103,14 @@ OBJECT *menu_tree(void);
 short menu_title_obj(int i);
 short menu_box_obj(int i);
 int   cmd_by_name(const char *s);
+
+/* a few facts to DIAG.TXT, only with "make EDDIAG=1" (no new variables:
+ * the program's memory is laid out as in the normal build) */
+#ifdef EDDIAG
+void  eddiag(const char *fmt, ...);
+#else
+#define eddiag(...) ((void)0)
+#endif
 
 /* start-up log, only with "make EDLOG=1" */
 #ifdef EDLOG
