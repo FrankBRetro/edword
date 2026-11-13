@@ -1,6 +1,6 @@
 # EdWord 3.0 - a GDOS word processor for the Atari ST
 
-(also for macOS, the Amiga and Windows: see below)
+(also for PC GEM on DOS, macOS, the Amiga and Windows: see below)
 
 Runs in ST medium and ST high resolution (and any mode 640 pixels wide or
 more). Written in C for `m68k-atari-mint-gcc` + gemlib. There is no resource
@@ -456,6 +456,33 @@ make icon                    # win/res/edword.ico (from mac/icon.py; Pillow)
 `win/sys` holds the start-up code and the small C library EdWord uses, on
 the Windows API (memory from HeapAlloc, files on CreateFile).
 
+## EdWord for PC GEM (`pcgem/`)
+EdWord for **FreeGEM and OpenGEM on DOS**: the Atari front end and core,
+compiled unchanged as a 32-bit DJGPP program, `pcgem/EDWORD.APP`. It needs
+a 386 or later, a 640-pixel-wide GEM screen and a DPMI host (CWSDPMI.EXE
+beside it or on the PATH). It reads the Atari resource files, dictionaries
+and thesaurus, so it has the same menus, dialogs and languages. With
+[XGDOS for PC GEM](https://github.com/FrankBRetro/xgdos) (started from
+GEM.BAT as `XGDOS GEMVDI`) it has Speedo outline fonts at any size;
+without it, GEM's bitmap fonts. `pcgem/README.TXT` is the user's guide and
+lists what isn't done yet.
+
+`pcgem/include` holds GEMLib-style `gem.h`, `vdi.h` and `osbind.h`. They
+are implemented by `pgaes.c` and `pgvdi.c` on John Elliott's GEM bindings
+for DJGPP (which run the 16-bit GEM from protected mode), `pgrsc.c` (reads
+the Atari `.RSC` files) and `pgtos.c` (the TOS calls EdWord makes, on DOS).
+The front end has a few `#ifdef PCGEM`s, mostly to keep drop-down menus
+within the size the PC AES can save the screen under. Fbench for PC GEM
+uses the same layer.
+
+```
+source ~/work/vibe/PC-GEM/scripts/djgppenv.sh   # DJGPP gcc and the GEM bindings
+make -C pcgem                 # pcgem/EDWORD.APP  (EDLOG=1: start-up log)
+make -C pcgem dist            # pcgem/EDWORD-<version>-PCGEM.zip
+```
+The build and test set-up for the Mac (DJGPP, Open Watcom, the bindings,
+DOSBox-X and OpenGEM) is in the PC-GEM project.
+
 ## Building
 ```
 make                         # every processor's version, then DIST: DIST/EDWORD ready
@@ -585,3 +612,8 @@ keep their own licences (SCOWL; the German, Spanish, French, Italian and
 Czech hunspell dictionaries under GPL, LGPL or MPL; Open English WordNet under
 CC BY 4.0). They are separate data files EdWord reads at run time, listed in
 `LICENSE` and given in full in `dict/COPYING.DIC` and `dict/COPYING.THS`.
+
+The PC GEM program (`pcgem/EDWORD.APP`) is linked with John Elliott's GEM
+bindings for DJGPP, based on Digital Research's GEM Programmer's Toolkit
+and under the GNU GPL version 2, so that binary as a whole is passed on
+under the GPL version 2; EdWord's own source stays MIT.

@@ -10,7 +10,7 @@
 #include "lang.h"
 
 #ifndef ED_VERSION
-#define ED_VERSION "3.0.13"   /* one more on every commit */
+#define ED_VERSION "3.0.14"   /* one more on every commit */
 #endif
 #ifndef ED_ABOUT
 #define ED_ABOUT ""

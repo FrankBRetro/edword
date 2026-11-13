@@ -201,7 +201,17 @@ static int menu_rows_fit(int wchars)
     int screen_rows = (scr_h - hchar - 4) / hchar - 1;
     if (aes_global[0] >= 0x0399) return screen_rows;
     w = ((long)wchars * wchar + 2 + 15) / 16 * 16 + 16;       /* word-aligned, wherever it lands */
+#ifdef PCGEM
+    w = ((long)wchars * wchar + 5 + 30) / 16 * 16;            /* box and shadow, worst alignment */
+    /* PC GEM (FreeGEM's GEMGSXIF.C) saves a drop-down in a buffer of
+     * 63 * wchar * hchar * planes bytes - 504 character cells - and
+     * doesn't check either; a bigger one corrupts DOS's memory */
+    lim = 63L * 8 * wchar * hchar;
+    rows = (lim / w - 5) / hchar;
+    return (int)(rows < screen_rows ? rows : screen_rows);
+#else
     lim = (long)scr_w * scr_h / 4;
+#endif
     rows = (lim / w - 2) / hchar;
     return (int)(rows < screen_rows ? rows : screen_rows);
 }
@@ -278,7 +288,59 @@ static int build_menu_rsc(void)
     return 1;
 }
 
-static void build_menu(void) { build_menu_rsc(); }
+#ifdef PCGEM
+/* PC GEM: a drop-down the screen under which won't fit the AES's buffer
+ * (see menu_rows_fit) is made narrower, a space at a time out of the gap
+ * in each item (between its text and its shortcut, or at its end), until
+ * it does; the fonts and windows menus are cut short by menu_rows_fit
+ * already. FreeGEM's menu_sr() saves the box and its shadow (5 pixels more
+ * each way) from the word boundary left of it. */
+static long menu_save_bytes(OBJECT *t, short b)    /* one plane, worst case */
+{
+    return ((long)15 + t[b].ob_width + 5 + 15) / 16 * 2L * (t[b].ob_height + 5);
+}
+
+/* where one space can go from an item: in its last run of two or more
+ * spaces after the text starts; -1 if none */
+static int item_gap(const char *s)
+{
+    int i = 0, best = -1;
+    while (s[i] == ' ') i++;                    /* the room for a tick */
+    for (; s[i]; i++)
+        if (s[i] == ' ' && s[i + 1] == ' ') best = i;
+    return best;
+}
+
+static void menu_fit_pcgem(OBJECT *t)
+{
+    long lim = 63L * wchar * hchar;                /* bytes in one plane */
+    short b, c;
+    for (b = t[MN_SCREEN].ob_head; b > MN_SCREEN; b = t[b].ob_next) {
+        int cut = 0;
+        while (menu_save_bytes(t, b) > lim && cut < 12) {
+            for (c = t[b].ob_head; c > b; c = t[c].ob_next) {
+                char *str = t[c].ob_spec.free_string;
+                int n = (int)strlen(str), g = str[0] == '-' ? n - 1 : item_gap(str);
+                if (g < 0 && n > 4) g = n - 2;      /* no gap: its last letter, rather than a crash */
+                if (g >= 0) memmove(str + g, str + g + 1, strlen(str + g));
+                t[c].ob_width -= wchar;
+            }
+            t[b].ob_width -= wchar;
+            cut++;
+        }
+        if (cut) edlog("menu %d narrowed by %d characters for the AES's buffer", b, cut);
+        if (menu_save_bytes(t, b) > lim) edlog("menu %d still too big for the AES's buffer: %ld bytes", b, menu_save_bytes(t, b));
+    }
+}
+#endif
+
+static void build_menu(void)
+{
+    build_menu_rsc();
+#ifdef PCGEM
+    if (mtree) menu_fit_pcgem(mtree);
+#endif
+}
 
 static void check(int cmd, int on)  { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_icheck(mtree, cmdobj[cmd], on ? 1 : 0); }
 static void enable(int cmd, int on) { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_ienable(mtree, cmdobj[cmd], on ? 1 : 0); }

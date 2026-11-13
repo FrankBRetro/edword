@@ -10,4 +10,12 @@ amiga/build/
 win/build/
 .DS_Store
 tools/__pycache__/
-manual/__pycache__/
+# PC GEM build output (pcgem/EDWORD.APP itself is committed)
+pcgem/obj/
+pcgem/dist/
+pcgem/build.log
+pcgem/edword.exe
+pcgem/rsctest
+# files set aside for deleting, and release notes (they go on GitHub)
+_to_delete/
+RELEASE-*.md
