@@ -7,8 +7,8 @@
  * The dialogs in the file are laid out on a grid of character rows; the
  * extended object types mark how each object sits in its row, and the
  * rows are spread to EdWord's row height (one and a half characters)
- * when the file is loaded. Without the file, or on a screen too narrow
- * for its dialogs, EdWord builds the same things itself.
+ * when the file is loaded. EdWord needs the file: every menu and dialog
+ * is in it.
  */
 #include <stdio.h>
 #include <string.h>
@@ -20,9 +20,8 @@ static int   rsc_lang = -1, rsc_loaded;
 static short title_obj[RT_COUNT];
 
 /* ext types from mkrsc.py */
-enum { X_ROW = 1, X_GROUP = 2, X_BUTTON = 3, X_TITLE = 4 };
+enum { X_ROW = 1, X_GROUP = 2, X_BUTTON = 3, X_TITLE = 4, X_DIALOG = 5, X_PANEL = 6 };   /* 5, 6: a dialog's box, with buttons and without */
 
-#ifdef ED_RSC
 static void spread(int tree)
 {
     OBJECT *t;
@@ -34,7 +33,9 @@ static void spread(int tree)
         int ext = (o->ob_type >> 8) & 0xff;
         if (i == 0 || ext == X_GROUP) {
             o->ob_y = (short)(o->ob_y / hchar * rh);
-            o->ob_height = (short)(o->ob_height / hchar * rh);
+            /* half a row under the buttons, so they and their 3D edges and
+             * the default button's frame stand clear of the bottom */
+            o->ob_height = (short)(o->ob_height / hchar * rh + (ext == X_DIALOG ? rh / 2 : 0));
         } else if (ext == X_ROW || ext == X_TITLE)
             o->ob_y = (short)(o->ob_y / hchar * rh + (rh - hchar) / 2);
         else if (ext == X_BUTTON)
@@ -56,17 +57,9 @@ static void clear_ext(int tree)
     }
 }
 
-#endif
-
 /* load the file for a language (again, with force: fresh trees) */
 int rsc_load(int lang, int force)
 {
-#ifndef ED_RSC
-    /* built without resource files ("make RSC=1" uses them): EdWord's own
-     * menus and dialogs, as everywhere a file isn't found */
-    (void)lang; (void)force;
-    return 0;
-#else
     char path[300];
     int i;
     if (lang < 0 || lang >= NLANG) lang = 0;
@@ -80,12 +73,13 @@ int rsc_load(int lang, int force)
     }
     rsc_loaded = 1;
     for (i = 0; i < RT_COUNT; i++) {
-        if (i == RT_PRINT || i == RT_PREFS || i == RT_PREFS2) spread(i);
+        OBJECT *t;
+        int ext = rsrc_gaddr(R_TREE, i, &t) && t ? (t[0].ob_type >> 8) & 0xff : 0;
+        if (ext == X_DIALOG || ext == X_PANEL) spread(i);     /* the dialogs */
         else clear_ext(i);
     }
     edlog("resource file %s", path);
     return 1;
-#endif
 }
 
 void rsc_free(void)

@@ -33,30 +33,97 @@ static unsigned short icon16[IC_COUNT][16] = {
 };
 static unsigned short icon8[IC_COUNT][8];
 
+/* colour layers for 16 colours and more :
+ * pixels drawn in a pen; those of the icon itself are taken from its
+ * black. Pens are the VDI's standard colours, 0 white. */
+static const struct { short ic, pen; unsigned short m[16]; } layer16[] = {
+    { IC_UNDO, 4, { 0x0000, 0x0000, 0x1000, 0x3000, 0x7FC0, 0xFFE0, 0x7FF0, 0x3038, 0x1018, 0x0018, 0x0018, 0x0030, 0x0060, 0x0000, 0x0000, 0x0000 } },
+    { IC_REDO, 4, { 0x0000, 0x0000, 0x0008, 0x000C, 0x03FE, 0x07FF, 0x0FFE, 0x1C0C, 0x1808, 0x1800, 0x1800, 0x0C00, 0x0600, 0x0000, 0x0000, 0x0000 } },
+    { IC_UNDER, 2, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000 } },
+    { IC_BULLETS, 2, { 0x0000, 0x0000, 0x6000, 0x6000, 0x0000, 0x0000, 0x6000, 0x6000, 0x0000, 0x0000, 0x6000, 0x6000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_NUMBERS, 4, { 0x4000, 0xC000, 0x4000, 0x4000, 0xE000, 0xE000, 0x2000, 0xE000, 0x8000, 0xE000, 0xE000, 0x2000, 0xE000, 0x2000, 0xE000, 0x0000 } },
+    { IC_TABLE, 5, { 0x0000, 0x0000, 0x7BDE, 0x7BDE, 0x7BDE, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_PGBRK, 2, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xE739, 0xE739, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_COLOUR, 2, { 0x0000, 0x0100, 0x0380, 0x0380, 0x07C0, 0x07C0, 0x0FE0, 0x0FE0, 0x1FF0, 0x1FB0, 0x1F70, 0x1EF0, 0x0FE0, 0x07C0, 0x0000, 0x0000 } },
+    { IC_ZOOM, 0, { 0x0000, 0x0000, 0x0F00, 0x3FC0, 0x3FC0, 0x7FE0, 0x7FE0, 0x7FE0, 0x3FC0, 0x3FC0, 0x0F00, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_ZOOM, 9, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0030, 0x0038, 0x001C, 0x000C, 0x0004 } },
+    { IC_SPELL, 3, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x000C, 0x0018, 0x0030, 0x3060, 0x18C0, 0x0D80, 0x0700, 0x0200, 0x0000, 0x0000, 0x0000 } },
+    { IC_RULER, 6, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x6DB6, 0x6DB6, 0x7DF6, 0x7FFE, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_GUIDES, 4, { 0x0000, 0x0000, 0x0000, 0x0AA0, 0x0000, 0x0820, 0x0000, 0x0820, 0x0000, 0x0820, 0x0000, 0x0AA0, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_FONT, 4, { 0x0000, 0x0180, 0x03C0, 0x03C0, 0x0660, 0x0660, 0x0C30, 0x0C30, 0x1FF8, 0x1FF8, 0x300C, 0x300C, 0x700E, 0x700E, 0x0000, 0x0000 } },
+    { IC_CODES, 6, { 0x0000, 0x7FFE, 0x4C1E, 0x7FFE, 0x4046, 0x7FFE, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
+    { IC_CODES, 0, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x7FFE, 0x4FF2, 0x5FFA, 0x5FFA, 0x4FF2, 0x7FFE, 0x0000, 0x0000 } },
+};
+
+#define NLAYER ((int)(sizeof layer16 / sizeof layer16[0]))
+static unsigned short layer8[NLAYER][8];
+/* each icon's black: all of it in fewer than 16 colours, without its
+ * coloured pixels in more */
+static unsigned short black16[IC_COUNT][16], black8[IC_COUNT][8];
+static int coloured;
+
 void icons_init(void)
 {
-    int i, r;
+    int i, r, k;
+    coloured = npens >= 16;
     for (i = 0; i < IC_COUNT; i++)
-        for (r = 0; r < 8; r++)
+        for (r = 0; r < 16; r++) {
+            unsigned short m = 0;
+            if (coloured) for (k = 0; k < NLAYER; k++) if (layer16[k].ic == i) m |= layer16[k].m[r];
+            black16[i][r] = (unsigned short)(icon16[i][r] & ~m);
+        }
+    for (i = 0; i < IC_COUNT; i++)
+        for (r = 0; r < 8; r++) {
             icon8[i][r] = (unsigned short)(icon16[i][2 * r] | icon16[i][2 * r + 1]);
+            black8[i][r] = (unsigned short)(black16[i][2 * r] | black16[i][2 * r + 1]);
+        }
+    for (k = 0; k < NLAYER; k++)
+        for (r = 0; r < 8; r++) {
+            layer8[k][r] = (unsigned short)(layer16[k].m[2 * r] | layer16[k].m[2 * r + 1]);
+            /* at half height a coloured pixel takes the place of a black one */
+            black8[layer16[k].ic][r] &= (unsigned short)~layer8[k][r];
+        }
 }
+
+int icons_coloured(void) { return coloured; }
+int icon_nlayers(void) { return coloured ? NLAYER : 0; }
+
+/* layer k: its icon, pen and pixels at the screen's icon height */
+const unsigned short *icon_layer(int k, int *ic, int *pen)
+{
+    *ic = layer16[k].ic; *pen = layer16[k].pen;
+    return icon_h() == 16 ? layer16[k].m : layer8[k];
+}
+
+/* an icon's black pixels (all of them without colour) */
+unsigned short *icon_black(int ic) { return icon_h() == 16 ? black16[ic] : black8[ic]; }
 
 int icon_h(void) { return hchar >= 16 ? 16 : 8; }
 
 /* draw an icon in pen 1 with its top left corner at x,y */
+static void blit_mask(const unsigned short *m, int pen, short x, short y);
+
 void draw_tbicon(int ic, short x, short y)
+{
+    int k;
+    for (k = 0; k < icon_nlayers(); k++)
+        if (layer16[k].ic == ic) blit_mask(icon_h() == 16 ? layer16[k].m : layer8[k], layer16[k].pen, x, y);
+    blit_mask(icon_black(ic), 1, x, y);
+}
+
+static void blit_mask(const unsigned short *m, int pen, short x, short y)
 {
     MFDB src, dst;
     short pxy[8], col[2];
     int h = icon_h();
 
-    src.fd_addr = h == 16 ? (void *)icon16[ic] : (void *)icon8[ic];
+    src.fd_addr = (void *)m;
     src.fd_w = 16; src.fd_h = (short)h; src.fd_wdwidth = 1;
     src.fd_stand = 0; src.fd_nplanes = 1;
     src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
     dst.fd_addr = 0;
     pxy[0] = 0; pxy[1] = 0; pxy[2] = 15; pxy[3] = (short)(h - 1);
     pxy[4] = x; pxy[5] = y; pxy[6] = (short)(x + 15); pxy[7] = (short)(y + h - 1);
-    col[0] = 1; col[1] = 0;
+    col[0] = (short)pen; col[1] = 0;
     vrt_cpyfm(vhandle, MD_TRANS, pxy, &src, &dst, col);
 }

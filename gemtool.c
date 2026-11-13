@@ -121,33 +121,6 @@ static const short fsz[] = { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32,
 
 static struct { int open; short wh; int font, size, attr, ftop, stop; char name[40]; } fs = { 0, -1, 0, 0, 0, 0, 0, "" };
 
-typedef struct { GRECT w, fl, fu, fd, fb, sl, su, sd, st[3], pv, ap, cl; } FSLAY;
-
-static short pv_h(void) { return (short)(hchar >= 16 ? 56 : 32); }
-
-static void fs_layout(FSLAY *Y)
-{
-    long top, lh = FROWS * hchar, bh = hchar + 2;
-    int i;
-    wind_get(fs.wh, WF_WORKXYWH, &Y->w.g_x, &Y->w.g_y, &Y->w.g_w, &Y->w.g_h);
-    top = Y->w.g_y + hchar + 6;
-    setr(&Y->fl, Y->w.g_x + wchar, top, 26 * wchar, lh);
-    setr(&Y->fu, Y->fl.g_x + Y->fl.g_w + 2, top, 2 * wchar + 2, bh);
-    setr(&Y->fd, Y->fu.g_x, top + lh - bh, 2 * wchar + 2, bh);
-    setr(&Y->fb, Y->fu.g_x, top + bh + 1, 2 * wchar + 2, lh - 2 * bh - 2);   /* scroll bar */
-    setr(&Y->sl, Y->fl.g_x + 30 * wchar, top, 6 * wchar, lh);
-    setr(&Y->su, Y->sl.g_x + Y->sl.g_w + 2, top, 2 * wchar + 2, bh);
-    setr(&Y->sd, Y->su.g_x, top + lh - bh, 2 * wchar + 2, bh);
-    for (i = 0; i < 3; i++)
-        setr(&Y->st[i], Y->sl.g_x + 10 * wchar, top + i * (hchar + 6), 13 * wchar, bh);
-    setr(&Y->pv, Y->w.g_x + wchar, top + lh + 8, Y->w.g_w - 2 * wchar, pv_h());
-    {
-        long cw = ((long)strlen(L(S_CLOSE)) + 2) * wchar, aw = ((long)strlen(L(S_APPLY)) + 2) * wchar;
-        setr(&Y->cl, Y->w.g_x + Y->w.g_w - wchar - cw, Y->pv.g_y + Y->pv.g_h + 10, cw, hchar + 4);
-        setr(&Y->ap, Y->cl.g_x - wchar - aw, Y->cl.g_y, aw, hchar + 4);
-    }
-}
-
 static void fs_scroll_into_view(void)
 {
     int i, si = -1;
@@ -174,24 +147,6 @@ enum { FO_ROOT, FO_LFONT, FO_LSIZE, FO_LSTYLE, FO_FBOX, FO_FROW0,
        FO_SUP = FO_SROW0 + FROWS, FO_SDN, FO_ST0, FO_PV = FO_ST0 + 3, FO_APPLY, FO_CLOSE, FO_N };
 static OBJECT ft[FO_N];
 static char frow[FROWS][30], srow[FROWS][8], slabel[40];
-
-static void fo_set(int i, int type, long spec, int flags, const GRECT *r, const GRECT *parent)
-{
-    OBJECT *o = &ft[i];
-    o->ob_next = o->ob_head = o->ob_tail = -1;
-    o->ob_type = (short)type;
-    o->ob_flags = (short)flags;
-    o->ob_state = 0;
-    o->ob_spec.index = spec;
-    o->ob_x = (short)(r->g_x - parent->g_x); o->ob_y = (short)(r->g_y - parent->g_y);
-    o->ob_width = r->g_w; o->ob_height = r->g_h;
-}
-
-static void fo_str(int i, char *str, int flags, const GRECT *r, const GRECT *parent)
-{
-    fo_set(i, G_STRING, 0, flags, r, parent);
-    ft[i].ob_spec.free_string = str;
-}
 
 /* the font list's scroll bar thumb (relative to the track) */
 static void fs_thumb(const GRECT *trk, GRECT *th)
@@ -284,78 +239,11 @@ static int fs_tree_rsc(void)
     return 1;
 }
 
-static void fs_tree(void)
-{
-    static const int sty[3] = { S_BOLD, S_ITALIC, S_UNDERLINE };
-    FSLAY Y;
-    GRECT r, z;
-    int i, k;
-    if (fs_tree_rsc()) return;
-    fs_layout(&Y);
-    memset(ft, 0, sizeof ft);
-    fo_set(FO_ROOT, G_BOX, 0x00001170L, 0, &Y.w, &Y.w);
-    ft[FO_ROOT].ob_x = Y.w.g_x; ft[FO_ROOT].ob_y = Y.w.g_y;
-    setr(&r, Y.fl.g_x, Y.w.g_y + 3, 20L * wchar, hchar);
-    fo_str(FO_LFONT, (char *)L(S_FONT), 0, &r, &Y.w);
-    sprintf(slabel, "%s %d", L(S_SIZE), fs.size);
-    setr(&r, Y.sl.g_x, Y.w.g_y + 3, (long)strlen(slabel) * wchar, hchar);
-    fo_str(FO_LSIZE, slabel, 0, &r, &Y.w);
-    setr(&r, Y.st[0].g_x, Y.w.g_y + 3, (long)strlen(L(S_STYLE)) * wchar, hchar);
-    fo_str(FO_LSTYLE, (char *)L(S_STYLE), 0, &r, &Y.w);
-
-    fo_set(FO_FBOX, G_BOX, 0x00FF1170L, 0, &Y.fl, &Y.w);
-    for (i = 0; i < FROWS; i++) {
-        int f = fs.ftop + i;
-        if (f < nfonts) sprintf(frow[i], " %.25s", fonts[f].name); else frow[i][0] = 0;
-        setr(&r, Y.fl.g_x + 1, Y.fl.g_y + 1 + i * hchar, Y.fl.g_w - 2, hchar);
-        if (r.g_y + r.g_h > Y.fl.g_y + Y.fl.g_h - 1) r.g_h = (short)(Y.fl.g_y + Y.fl.g_h - 1 - r.g_y);
-        fo_str(FO_FROW0 + i, frow[i], 0, &r, &Y.fl);
-        if (f == fs.font) ft[FO_FROW0 + i].ob_state = OS_SELECTED;
-    }
-    fo_set(FO_FUP, G_BOXCHAR, 0x01FF1170L, OF_TOUCHEXIT, &Y.fu, &Y.w);
-    fo_set(FO_FDN, G_BOXCHAR, 0x02FF1170L, OF_TOUCHEXIT, &Y.fd, &Y.w);
-    fo_set(FO_FTRK, G_BOX, 0x00FF1111L, OF_TOUCHEXIT, &Y.fb, &Y.w);
-    fs_thumb(&Y.fb, &z);
-    setr(&r, Y.fb.g_x + z.g_x, Y.fb.g_y + z.g_y, z.g_w, z.g_h);
-    fo_set(FO_FTHUMB, G_BOX, 0x00FF1170L, OF_TOUCHEXIT, &r, &Y.fb);
-
-    fo_set(FO_SBOX, G_BOX, 0x00FF1170L, 0, &Y.sl, &Y.w);
-    for (i = 0; i < FROWS; i++) {
-        k = fs.stop + i;
-        if (k < NFSZ) sprintf(srow[i], " %3d", fsz[k]); else srow[i][0] = 0;
-        setr(&r, Y.sl.g_x + 1, Y.sl.g_y + 1 + i * hchar, Y.sl.g_w - 2, hchar);
-        if (r.g_y + r.g_h > Y.sl.g_y + Y.sl.g_h - 1) r.g_h = (short)(Y.sl.g_y + Y.sl.g_h - 1 - r.g_y);
-        fo_str(FO_SROW0 + i, srow[i], 0, &r, &Y.sl);
-        if (k < NFSZ && fsz[k] == fs.size) ft[FO_SROW0 + i].ob_state = OS_SELECTED;
-    }
-    fo_set(FO_SUP, G_BOXCHAR, 0x01FF1170L, OF_TOUCHEXIT, &Y.su, &Y.w);
-    fo_set(FO_SDN, G_BOXCHAR, 0x02FF1170L, OF_TOUCHEXIT, &Y.sd, &Y.w);
-
-    for (i = 0; i < 3; i++) {
-        setr(&r, Y.st[i].g_x, Y.st[i].g_y, ((long)strlen(L(sty[i])) + 3) * wchar, Y.st[i].g_h);
-        fo_set(FO_ST0 + i, G_BUTTON, 0, OF_SELECTABLE, &r, &Y.w);
-        ft[FO_ST0 + i].ob_spec.free_string = (char *)L(sty[i]);
-        if (fs.attr & (1 << i)) ft[FO_ST0 + i].ob_state |= OS_SELECTED;
-        if (aes_magic) ft[FO_ST0 + i].ob_state |= (short)(OS_WHITEBAK | 0x8000 | (0x7F << 8));
-        else if (aes_3d) ft[FO_ST0 + i].ob_flags |= OF_FL3DIND;
-    }
-    fo_set(FO_PV, G_BOX, 0x00FF1170L, 0, &Y.pv, &Y.w);
-    fo_set(FO_APPLY, G_BUTTON, 0, OF_SELECTABLE | OF_EXIT | OF_DEFAULT, &Y.ap, &Y.w);
-    ft[FO_APPLY].ob_spec.free_string = (char *)L(S_APPLY);
-    fo_set(FO_CLOSE, G_BUTTON, 0, OF_SELECTABLE | OF_EXIT, &Y.cl, &Y.w);
-    ft[FO_CLOSE].ob_spec.free_string = (char *)L(S_CLOSE);
-    fs_3d();
-    /* the tree's links */
-    for (i = FO_LFONT; i < FO_N; i++)
-        if (!(i > FO_FBOX && i < FO_FUP) && !(i > FO_SBOX && i < FO_SUP) && i != FO_FTHUMB) objc_add(ft, FO_ROOT, (short)i);
-    for (i = 0; i < FROWS; i++) { objc_add(ft, FO_FBOX, (short)(FO_FROW0 + i)); objc_add(ft, FO_SBOX, (short)(FO_SROW0 + i)); }
-    objc_add(ft, FO_FTRK, FO_FTHUMB);
-    ft[FO_N - 1].ob_flags |= OF_LASTOB;
-}
+static void fs_tree(void) { fs_tree_rsc(); }
 
 static void fs_draw(const GRECT *clip)
 {
-    FSLAY FL;
+    struct { GRECT pv; } FL;
     GRECT r;
     fs_tree();
     objc_offset(ft, FO_PV, &FL.pv.g_x, &FL.pv.g_y);
@@ -434,9 +322,8 @@ void fontsel_open(void)
     short x, y, w, h;
     long ww, wh;
     if (fs.open) { wind_set(fs.wh, WF_TOP, 0, 0, 0, 0); fs.font = -1; fontsel_sync(); return; }
-    ww = 60L * wchar;
-    wh = hchar + 6 + FROWS * hchar + 8 + pv_h() + 10 + hchar + 4 + 8;
-    if (rsc_tree(RT_FONTSEL)) { ww = rsc_tree(RT_FONTSEL)->ob_width; wh = rsc_tree(RT_FONTSEL)->ob_height; }
+    if (!rsc_tree(RT_FONTSEL)) { alert(1, 3, AL_NO_RSC, AB_OK); return; }
+    ww = rsc_tree(RT_FONTSEL)->ob_width; wh = rsc_tree(RT_FONTSEL)->ob_height;
     wind_calc(WC_BORDER, FSKIND, 0, 0, (short)ww, (short)wh, &x, &y, &w, &h);
     x = (short)(desk.g_x + desk.g_w - w - 8);
     y = (short)(desk.g_y + 8);

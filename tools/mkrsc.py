@@ -8,9 +8,13 @@ Writes OUTDIR/EDWORD.RSC (English), EDWORDDE.RSC, EDWORDES.RSC, EDWORDIT.RSC
 and EDWORDFR.RSC - one resource file per language, each laid out for its own
 words - and edrsc.h, the tree and object numbers they all share.
 
-The trees: the menu bar, the Print dialog, the two pages of the Preferences,
-the font selector, the toolbar (16 and 8 pixel high icons, for ST high and
-ST medium resolution) and the toolbar's popup menus. They are ordinary GEM
+The trees: the menu bar, every dialog (Print, the two pages of the
+Preferences, Page Layout, Header and Footer, tables, pictures, Go to Page,
+Page Numbers, New Document and the rest), the dialogs in the Find,
+Spelling, Thesaurus, Import and Export windows, the progress window, the
+font selector, the toolbar (16 and 8 pixel high icons, for ST high and ST
+medium resolution) and the toolbar's popup menus. EdWord builds none of
+them itself. They are ordinary GEM
 objects, so they can be looked at and changed with a resource editor
 (ResourceMaster, Interface, ORCS...) as long as the object numbers stay the
 same.
@@ -18,7 +22,8 @@ same.
 Dialog rows are one character apart in the files; EdWord spreads them to
 one and a half when it loads them (it marks the objects to move with the
 extended object type: 1 an item in a row, 2 a box of radio buttons, 3 an
-exit button), so they look the same in every resolution.
+exit button, 4 the title; a dialog's box 5, or 6 without buttons), so they
+look the same in every resolution.
 """
 import os, sys, struct
 
@@ -106,7 +111,7 @@ def add(parent, o):
     return o
 
 # ---- the dialog builder: the same layout rules as gemdlg.c ------------------------
-T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON = range(7)
+T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG = range(8)
 
 class Dlg:
     def __init__(self, title):
@@ -123,14 +128,15 @@ class Dlg:
     def text(self, s, name=None, wc=None): self.item(T_TEXT, s, wc, name)
     def radio(self, group, s, name, wc=None): self.item(T_RADIO, s, (wc or len(s)) + 2, name, group=group)
     def check(self, s, name): self.item(T_CHECK, s, len(s) + 2, name)
-    def edit(self, prompt, n, after, valid, buf, name):
+    def edit(self, prompt, n, after, valid, buf, name, post_name=None):
         pre = prompt + b' ' if prompt else b''
         post = (b' ' + after) if after else b''
         t = pre + b'_' * n + post
-        self.item(T_EDIT, t, len(t), name, n=n, valid=valid, buf=buf, pre=pre, post=post)
+        self.item(T_EDIT, t, len(t), name, n=n, valid=valid, buf=buf, pre=pre, post=post, post_name=post_name)
     def button(self, s, name, flags=0): self.item(T_BUTTON, s, len(s), name, flags=flags)
+    def big(self, s, wc, name, flags=EXIT): self.item(T_BIG, s, wc, name, flags=flags)
 
-    def build(self, tname, limit=76):
+    def build(self, tname, limit=76, framed=True):
         items = self.items
         labw = 0
         for it in items:
@@ -153,6 +159,8 @@ class Dlg:
                 vrow += 1; it['row'], it['col'] = vrow, 2; x = labw; continue
             if x + it['wc'] > maxw and x > labw:
                 vrow += 1; x = labw
+            if t == T_TEXT and x == labw and labw + it['wc'] > maxw:
+                x = 0           # a long line of its own: from the left edge
             it['row'], it['col'] = vrow, x + 2
             x += it['wc'] + 2
             maxx = max(maxx, x)
@@ -178,7 +186,8 @@ class Dlg:
                 bx -= it['bw']
                 it['col'] = bx
                 bx -= 2
-        root = Obj(G_BOX, cp(0), cp(0), cp(cols), cp(nrows), state=OUTLINED, spec=0x00021100, name='ROOT')
+        root = Obj(G_BOX, cp(0), cp(0), cp(cols), cp(nrows), state=OUTLINED if framed else 0,
+                   spec=0x00021100 if framed else 0x00001100, ext=5 if nbtn else 6, name='ROOT')
         # radio groups first, in boxes
         done = set()
         for i, it in enumerate(items):
@@ -211,7 +220,11 @@ class Dlg:
                               ext=1, name=it['name']))
                 if post:
                     add(root, Obj(G_STRING, cp(c + len(pre) + it['n']), cp(it['row']), cp(len(post)), cp(1),
-                                  spec=('str', post), ext=1))
+                                  spec=('str', post), ext=1, name=it.get('post_name')))
+            elif t == T_BIG:
+                add(root, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
+                              flags=SELECTABLE | it.get('flags', 0), spec=('str', it['s'].ljust(it['wc'])[:it['wc']] if not it['s'].strip() else it['s']),
+                              ext=1, name=it['name']))
             elif t == T_BUTTON:
                 add(root, Obj(G_BUTTON, cp(it['col']), cp(nrows - nbrow + it['brow']), cp(it['bw']), cp(1),
                               flags=SELECTABLE | EXIT | it.get('flags', 0), spec=('str', it['s']), ext=3,
@@ -284,6 +297,274 @@ def dlg_prefs2(L):
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_SAVE_BTN'), 'OK', DEFAULT)
     return g.build('PREFS2')
+
+
+def blank(n): return b' ' * n
+
+def dlg_page(L):
+    g = Dlg(L('S_PAGE_TITLE'))
+    g.label(L('S_PAPER'))
+    for i in range(4): g.radio(1, PAPER_NAMES[i], 'PAPER%d' % i)
+    g.nl(); g.label(L('S_ORIENT'))
+    g.radio(2, L('S_PORTRAIT'), 'PORTRAIT'); g.radio(2, L('S_LANDSCAPE'), 'LAND')
+    g.nl(); g.label(L('S_MARGINS_MM'))
+    g.edit(L('S_TOP'), 3, None, digits(3), b'', 'MT')
+    g.edit(L('S_BOTTOM'), 3, None, digits(3), b'', 'MB')
+    g.edit(L('S_LEFT_M'), 3, None, digits(3), b'', 'ML')
+    g.edit(L('S_RIGHT_M'), 3, None, digits(3), b'', 'MR')
+    g.nl(); g.label(L('S_COLUMNS'))
+    g.edit(None, 1, None, digits(1), b'', 'COLS')
+    g.edit(L('S_GAP'), 3, L('S_MM'), digits(3), b'', 'GAP')
+    g.nl(); g.label(L('S_WRAPCOL'))
+    g.edit(None, 3, L('S_ZERO_OFF'), digits(3), b'', 'WRAP')
+    g.nl(); g.label(L('S_APPLY_TO'))
+    g.radio(3, L('S_WHOLE_DOC'), 'WHOLE'); g.radio(3, L('S_THIS_PAGE'), 'ONE'); g.radio(3, L('S_THIS_PAGE_ON'), 'AFTER')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('PAGE')
+
+def dlg_wrap(L):
+    g = Dlg(L('S_WRAP_TITLE'))
+    g.label(L('S_WRAPCOL')); g.edit(None, 3, None, digits(3), b'', 'WRAP')
+    g.nl(); g.text(L('S_WRAP_HINT'))
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('WRAP')
+
+def dlg_size(L):
+    g = Dlg(L('S_SIZE_TITLE'))
+    g.label(L('S_POINT_SIZE')); g.edit(None, 3, b'(4-120)', digits(3), b'', 'SIZE')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('SIZE')
+
+def dlg_headfoot(L):
+    g = Dlg(L('S_HF_TITLE'))
+    jn = [L('S_J_LEFT'), L('S_J_CENTRE'), L('S_J_RIGHT')]
+    for i in range(2):
+        g.label(L('S_FOOTER' if i else 'S_HEADER'))
+        g.edit(None, 56, None, anyc(56), b'', 'TEXT%d' % i)
+        g.nl(); g.label(b'')
+        for k in range(3): g.radio(1 + i, jn[k], 'J%d%d' % (i, k))
+        g.nl()
+    g.label(L('S_SIZE'))
+    g.edit(None, 2, L('S_POINT'), digits(2), b'', 'SIZE')
+    g.check(L('S_FIRST_PAGE_TOO'), 'FIRST')
+    g.nl(); g.label(L('S_FIELDS')); g.text(b'{page} {pages} {date} {time} {file}')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('HEADFOOT')
+
+def dlg_indents(L):
+    g = Dlg(L('S_INDENTS_TITLE'))
+    g.label(L('S_LEFT_INDENT')); g.edit(None, 3, L('S_MM'), digits(3), b'', 'LEFT')
+    g.nl(); g.label(L('S_FIRST_LINE')); g.edit(None, 4, L('S_MM'), anyc(4), b'', 'FIRST')
+    g.nl(); g.text(L('S_HANG_HINT'))
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('INDENTS')
+
+def dlg_table(L, insert):
+    g = Dlg(L('S_TBL_INS_TITLE' if insert else 'S_TBL_PROP_TITLE'))
+    g.label(L('S_ROWS')); g.edit(None, 3, None, digits(3), b'', 'ROWS')
+    g.nl(); g.label(L('S_COLUMNS')); g.edit(None, 2, b'(1-12)', digits(2), b'', 'COLS')
+    g.nl()
+    if not insert:
+        g.label(L('S_COL_WIDTHS'))
+        for i in range(12): g.edit(None, 3, None, digits(3), b'', 'W%d' % i)
+        g.nl()
+    g.label(b''); g.check(L('S_GRID_LINES'), 'GRID')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_INSERT' if insert else 'S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('TBLINS' if insert else 'TBLPROP')
+
+def dlg_objprops(L, drawing):
+    g = Dlg(L('S_DRAW_TITLE' if drawing else 'S_PIC_TITLE'))
+    g.label(L('S_POSITION_MM'))
+    g.edit(L('S_FROM_LEFT'), 4, None, digits(4), b'', 'X')
+    g.edit(L('S_FROM_TOP'), 4, None, digits(4), b'', 'Y')
+    g.nl(); g.label(L('S_SIZE_MM'))
+    g.edit(L('S_WIDTH'), 4, None, digits(4), b'', 'W')
+    g.edit(L('S_HEIGHT'), 4, None, digits(4), b'', 'H')
+    g.nl(); g.label(L('S_PAGE')); g.edit(None, 4, None, digits(4), b'', 'PAGE')
+    g.nl(); g.label(L('S_TEXT_WRAP'))
+    g.radio(1, L('S_WRAP_NONE'), 'WNONE'); g.radio(1, L('S_WRAP_BOX'), 'WBOX')
+    if drawing: g.radio(1, L('S_WRAP_SHAPE'), 'WSHAPE')
+    g.nl(); g.label(b''); g.check(L('S_FRAME'), 'FRAME')
+    g.button(L('S_DELETE'), 'DEL')
+    if drawing: g.button(L('S_EDIT_DRAWING'), 'EDIT')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('DRAWPROPS' if drawing else 'PICPROPS')
+
+def dlg_summary(L):
+    g = Dlg(L('S_SUMMARY_TITLE'))
+    g.text(blank(40), 'NAME')
+    g.nl()
+    for i, s in enumerate(('S_ST_PAGES', 'S_ST_WORDS', 'S_ST_CHARS', 'S_ST_CHARS_NS', 'S_ST_PARAS', 'S_ST_LINES',
+                           'S_ST_TABLES', 'S_ST_OBJECTS')):
+        g.label(L(s)); g.text(blank(8), 'V%d' % i); g.nl()
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('SUMMARY')
+
+def dlg_about(L):
+    g = Dlg(b'EdWord')
+    g.text(blank(40), 'VERSION'); g.nl()
+    g.text(L('S_ABOUT_ATARI'), 'LINE1'); g.nl()
+    g.text(L('S_ABOUT_LINE2')); g.nl()
+    g.text(L('S_ABOUT_LINE3')); g.nl()
+    g.text(L('S_ABOUT_THES'))
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('ABOUT')
+
+def dlg_textimport(L):
+    g = Dlg(L('S_IMPORT_TITLE'))
+    g.text(blank(60), 'INFO'); g.nl()
+    g.label(L('S_CHARACTERS'))
+    for i, s in enumerate((L('S_AUTO'), b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(1, s, 'CS%d' % i)
+    g.nl(); g.label(L('S_LINES'))
+    g.radio(2, L('S_ONE_PARA'), 'ONE'); g.radio(2, L('S_JOIN_LINES'), 'JOIN')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_IMPORT'), 'OK', DEFAULT)
+    return g.build('TEXTIMP')
+
+def dlg_textexport(L):
+    g = Dlg(L('S_EXPORT_TITLE'))
+    g.label(L('S_LINE_ENDINGS'))
+    g.radio(1, b'Atari/DOS CR LF', 'DOS'); g.radio(1, b'Unix LF', 'UNIX')
+    g.nl(); g.label(L('S_CHARACTERS'))
+    for i, s in enumerate((b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(2, s, 'CS%d' % i)
+    g.nl(); g.text(L('S_EXPORT_HINT'))
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_EXPORT'), 'OK', DEFAULT)
+    return g.build('TEXTEXP')
+
+def dlg_goto(L):
+    g = Dlg(L('S_GOTO_TITLE'))
+    g.label(L('S_GOTO_PAGE')); g.edit(None, 4, blank(16), digits(4), b'', 'PAGE', post_name='OF')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_GO'), 'OK', DEFAULT)
+    return g.build('GOTO')
+
+def dlg_pagenum(L):
+    g = Dlg(L('S_PN_TITLE'))
+    g.label(L('S_PN_WHERE')); g.radio(1, L('S_PN_TOP'), 'TOP'); g.radio(1, L('S_PN_BOTTOM'), 'BOTTOM')
+    g.nl(); g.label(L('S_PN_ALIGN'))
+    for k, s in enumerate(('S_J_LEFT', 'S_J_CENTRE', 'S_J_RIGHT')): g.radio(2, L(s), 'J%d' % k)
+    g.nl(); g.label(L('S_PN_STYLE'))
+    ex = [b'1', L('S_PN_PAGE') + b' 1', L('S_PN_PAGE') + b' 1 ' + L('S_PN_OF') + b' 3', b'- 1 -']
+    for k in range(4): g.radio(3, ex[k], 'S%d' % k)
+    g.nl(); g.label(b''); g.check(L('S_FIRST_PAGE_TOO'), 'FIRST')
+    g.button(L('S_PN_REMOVE'), 'REMOVE')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('PAGENUM')
+
+def dlg_template(L):
+    g = Dlg(L('S_TPL_TITLE'))
+    g.label(L('S_TPL_KIND'))
+    for i, s in enumerate(('S_TPL_BLANK', 'S_TPL_UK', 'S_TPL_US', 'S_TPL_NEWS')): g.radio(1, L(s), 'K%d' % i)
+    g.nl(); g.label(L('S_TPL_NAME')); g.edit(None, 40, None, anyc(40), b'', 'NAME')
+    g.nl(); g.label(L('S_TPL_ADDR')); g.edit(None, 40, None, anyc(40), b'', 'A0')
+    for i in (1, 2):
+        g.nl(); g.label(b''); g.edit(None, 40, None, anyc(40), b'', 'A%d' % i)
+    g.nl(); g.label(L('S_TPL_NTITLE')); g.edit(None, 40, None, anyc(40), b'', 'NTITLE')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_TPL_CREATE'), 'OK', DEFAULT)
+    return g.build('TEMPLATE')
+
+# ---- the tool windows (gemtwin.c): dialogs without a frame or a title ----------
+def tw_find(L):
+    g = Dlg(None)
+    g.label(L('S_FIND_WHAT')); g.edit(None, 30, None, anyc(30), b'', 'WHAT')
+    g.nl(); g.label(L('S_REPLACE_WITH')); g.edit(None, 30, None, anyc(30), b'', 'WITH')
+    g.nl(); g.label(b'')
+    g.check(L('S_MATCH_CASE'), 'CASE'); g.check(L('S_WHOLE_WORDS'), 'WORD'); g.check(L('S_BACKWARDS'), 'BACK')
+    g.nl(); g.text(blank(40), 'STATUS')
+    g.button(L('S_FIND_NEXT'), 'NEXT', DEFAULT)
+    g.button(L('S_REPLACE'), 'REP')
+    g.button(L('S_REPLACE_ALL'), 'ALL')
+    g.button(L('S_CLOSE'), 'CLOSE')
+    return g.build('FIND', framed=False)
+
+def tw_spell(L):
+    g = Dlg(None)
+    g.text(blank(46), 'HEAD'); g.nl()
+    g.label(L('S_CHANGE_TO')); g.edit(None, 31, None, anyc(31), b'', 'CHG')
+    g.nl(); g.label(L('S_SUGGESTIONS'))
+    for i in range(6): g.big(blank(18), 18, 'SUG%d' % i)
+    g.button(L('S_REPLACE'), 'REP', DEFAULT)
+    g.button(L('S_IGNORE'), 'IGN')
+    g.button(L('S_IGNORE_ALL'), 'IGA')
+    g.button(L('S_ADD'), 'ADD')
+    g.button(L('S_STOP'), 'STOP')
+    return g.build('SPELL', framed=False)
+
+def tw_thes(L):
+    g = Dlg(None)
+    g.label(L('S_TH_WORD')); g.edit(None, 30, None, anyc(30), b'', 'WORD')
+    g.big(L('S_LOOK_UP'), len(L('S_LOOK_UP')) + 4, 'LOOK')
+    g.nl(); g.label(L('S_MEANINGS'))
+    for i in range(6): g.big(blank(21), 21, 'M%d' % i)
+    g.nl(); g.label(L('S_SYNONYMS'))
+    for i in range(10): g.big(blank(16), 16, 'S%d' % i)
+    g.nl(); g.label(L('S_REPLACE_WITH')); g.edit(None, 30, None, anyc(30), b'', 'WITH')
+    g.nl(); g.text(blank(46), 'MSG')
+    g.button(L('S_REPLACE'), 'REP', DEFAULT)
+    g.button(L('S_CLOSE'), 'CLOSE')
+    return g.build('THES', framed=False)
+
+FMTS = lambda L: [b'RTF', L('S_FMT_TEXT'), b'Markdown', b'1st Word Plus', b'Protext', b'PDF']
+
+def tw_import(L):
+    g = Dlg(None)
+    g.label(L('S_FORMAT'))
+    g.radio(1, L('S_AUTO'), 'F0')
+    for i in range(5):
+        if i == 2: g.nl(); g.label(b'')
+        g.radio(1, FMTS(L)[i], 'F%d' % (i + 1))
+    g.nl(); g.label(L('S_CHARACTERS'))
+    for i, s in enumerate((L('S_AUTO'), b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(2, s, 'C%d' % i)
+    g.nl(); g.label(L('S_LINES')); g.radio(3, L('S_ONE_PARA'), 'J0'); g.radio(3, L('S_JOIN_LINES'), 'J1')
+    g.nl(); g.label(L('S_INTO')); g.radio(4, L('S_INTO_NEW'), 'I0')
+    g.nl(); g.label(b''); g.radio(4, L('S_INTO_CURSOR'), 'I1')
+    g.nl(); g.text(blank(46), 'STATUS')
+    g.button(L('S_CLOSE'), 'CLOSE')
+    g.button(L('M_IMPORT'), 'GO', DEFAULT)
+    return g.build('IMPORT', framed=False)
+
+def tw_export(L):
+    g = Dlg(None)
+    lab = L('S_XF_DOC').split(b'%')[0].rstrip()
+    g.label(lab); g.text(blank(36), 'DOC')
+    g.nl(); g.label(L('S_FORMAT'))
+    for i in range(6):
+        if i == 3: g.nl(); g.label(b'')
+        g.radio(1, FMTS(L)[i], 'F%d' % i)
+    g.nl(); g.label(L('S_LINE_ENDINGS')); g.radio(2, b'Atari/DOS CR LF', 'E0'); g.radio(2, b'Unix LF', 'E1')
+    g.nl(); g.label(L('S_CHARACTERS'))
+    for i, s in enumerate((b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(3, s, 'C%d' % i)
+    g.nl(); g.label(L('S_PDF_PICTURES'))
+    g.radio(4, L('S_SCREEN'), 'P0'); g.radio(4, b'2x', 'P1'); g.radio(4, b'3x', 'P2')
+    g.nl(); g.text(blank(46), 'STATUS')
+    g.button(L('S_CLOSE'), 'CLOSE')
+    g.button(L('M_EXPORT'), 'GO', DEFAULT)
+    return g.build('EXPORT', framed=False)
+
+# ---- the progress window (gemdlg.c): a bar, a percentage, maybe Cancel -----
+GAUGEW = 36
+def gauge(L, cancel):
+    g = Dlg(None)
+    g.text(blank(GAUGEW), 'BAR'); g.nl()
+    g.text(b'  0%', 'PCT')
+    if cancel: g.button(L('S_CANCEL'), 'CANCEL')
+    t = g.build('GAUGEC' if cancel else 'GAUGE', framed=False)
+    # the bar: a white box with a frame and the black fill inside
+    for o in t.root.children:
+        if o.name == 'BAR':
+            o.typ, o.spec = G_BOX, 0x00011170
+            o.children.append(Obj(G_BOX, cp(0), cp(0), cp(0), cp(1), spec=0x00001171, name='FILL'))
+    return t
 
 # ---- the font selector (gemtool.c) ------------------------------------------------
 FROWS = 9
@@ -565,7 +846,11 @@ def main():
     for lg in LANGS:
         L = Lang(text, lg)
         menu, cmds = menubar(L)
-        trees = [menu, dlg_print(L), dlg_prefs(L), dlg_prefs2(L), fontsel(L)]
+        trees = [menu, dlg_print(L), dlg_prefs(L), dlg_prefs2(L), fontsel(L),
+                 dlg_page(L), dlg_wrap(L), dlg_size(L), dlg_headfoot(L), dlg_indents(L), dlg_table(L, True),
+                 dlg_table(L, False), dlg_objprops(L, False), dlg_objprops(L, True), dlg_summary(L), dlg_about(L),
+                 dlg_textimport(L), dlg_textexport(L), dlg_goto(L), dlg_pagenum(L), dlg_template(L),
+                 tw_find(L), tw_spell(L), tw_thes(L), tw_import(L), tw_export(L), gauge(L, False), gauge(L, True)]
         tb16, tbl = toolbar(icons, True)
         tb8, _ = toolbar(icons, False)
         trees += [tb16, tb8,
@@ -594,6 +879,10 @@ def main():
             f.write('#define RT_%s %d\n' % (tname, ti))
         f.write('#define RT_COUNT %d\n\n' % len(names))
         pre = {'MENU': 'MN', 'PRINT': 'PR', 'PREFS': 'PF', 'PREFS2': 'PF2', 'FONTSEL': 'FS', 'TOOLBAR': 'TBO',
+               'PAGE': 'DPG', 'WRAP': 'DWR', 'SIZE': 'DSZ', 'HEADFOOT': 'DHF', 'INDENTS': 'DIN', 'TBLINS': 'DTI',
+               'TBLPROP': 'DTP', 'PICPROPS': 'DPP', 'DRAWPROPS': 'DDP', 'SUMMARY': 'DSU', 'ABOUT': 'DAB',
+               'TEXTIMP': 'DTXI', 'TEXTEXP': 'DTXE', 'GOTO': 'DGT', 'PAGENUM': 'DPN', 'TEMPLATE': 'DTM',
+               'FIND': 'WFD', 'SPELL': 'WSP', 'THES': 'WTH', 'IMPORT': 'WIX', 'EXPORT': 'WEX', 'GAUGE': 'DGA', 'GAUGEC': 'DGC',
                'TOOLBAR8': None, 'POPSIZE': 'PS', 'POPCOLOUR': 'PC', 'POPZOOM': 'PZ'}
         for tname, objs in names:
             p = pre[tname]

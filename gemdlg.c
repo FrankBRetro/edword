@@ -8,6 +8,7 @@
  * go bottom right. So every language fits without hand-placed objects.
  */
 #include <gem.h>
+#include <mint/cookie.h>
 #include <osbind.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,93 +19,11 @@
 #include "edrsc.h"
 
 /* ================================================================= */
-/*  The dialog builder                                                */
+/*  Dialogs: object trees from the resource file (gemrsc.c)           */
 /* ================================================================= */
 
+/* item types, for the shortcut letters and the look */
 enum { T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG, T_TITLE };
-
-static short ry(void) { return (short)(hchar + hchar / 2); }      /* row height */
-
-static short add(DLG *g, short parent, short type, short flags, short x, short y, short w, short h)
-{
-    OBJECT *o = &g->o[g->n];
-    if (g->n >= MAXDOBJ) return (short)(g->n - 1);
-    memset(o, 0, sizeof *o);
-    o->ob_next = o->ob_head = o->ob_tail = -1;
-    o->ob_type = type;
-    o->ob_flags = flags;
-    o->ob_x = x; o->ob_y = y; o->ob_width = w; o->ob_height = h;
-    if (parent >= 0) objc_add(g->o, parent, g->n);
-    return g->n++;
-}
-
-static short item(DLG *g, short type, const char *s, short wc)
-{
-    DITEM *it;
-    if (g->nit >= MAXDITEM) return (short)(g->nit - 1);
-    it = &g->it[g->nit];
-    memset(it, 0, sizeof *it);
-    it->type = type;
-    it->s = s;
-    it->wc = wc;
-    it->row = g->row;
-    it->obj = -1;
-    return g->nit++;
-}
-
-void dlg_begin(DLG *g, const char *title)
-{
-    memset(g, 0, sizeof *g);
-    g->framed = 1;
-    g->edit1 = -1;
-    if (title) item(g, T_TITLE, title, (short)strlen(title));
-    g->row = 1;
-}
-
-void dlg_row(DLG *g) { g->row++; }
-void dlg_label(DLG *g, const char *s) { item(g, T_LABEL, s, (short)strlen(s)); }
-short dlg_text(DLG *g, const char *s) { return item(g, T_TEXT, s, (short)strlen(s)); }
-
-short dlg_radio(DLG *g, int group, const char *s, int on)
-{
-    short i = item(g, T_RADIO, s, (short)(strlen(s) + 2));
-    g->it[i].group = (short)group;
-    g->it[i].on = on;
-    return i;
-}
-
-short dlg_check(DLG *g, const char *s, int on)
-{
-    short i = item(g, T_CHECK, s, (short)(strlen(s) + 2));
-    g->it[i].on = on;
-    return i;
-}
-
-/* an editable field; tmpl uses '_' for each character position */
-short dlg_edit(DLG *g, const char *tmpl, char *buf, const char *valid)
-{
-    short i = item(g, T_EDIT, tmpl, (short)strlen(tmpl));
-    g->it[i].tmpl = tmpl;
-    g->it[i].buf = buf;
-    g->it[i].valid = valid;
-    return i;
-}
-
-/* a button in the bottom row */
-short dlg_button(DLG *g, const char *s, int flags)
-{
-    short i = item(g, T_BUTTON, s, (short)strlen(s));
-    g->it[i].flags = (short)flags;
-    return i;
-}
-
-/* an exit button in a row, wc characters wide */
-short dlg_bigbutton(DLG *g, const char *s, int wc, int flags)
-{
-    short i = item(g, T_BIG, s, (short)wc);
-    g->it[i].flags = (short)flags;
-    return i;
-}
 
 int dlg_on(DLG *g, short i) { return i >= 0 && g->it[i].obj >= 0 && (g->o[g->it[i].obj].ob_state & OS_SELECTED); }
 short dlg_obj(DLG *g, short i) { return i >= 0 ? g->it[i].obj : -1; }
@@ -113,7 +32,7 @@ short dlg_obj(DLG *g, short i) { return i >= 0 ? g->it[i].obj : -1; }
  * MagiC object extensions (check boxes, radio buttons, underlined
  * shortcut letters), when the AES says it has them ------------------- */
 
-int aes_3d, aes_magic, win_dialogs = 1;
+int aes_3d, aes_magic, is_magic, win_dialogs = 1;
 
 void dlg_init(void)
 {
@@ -129,7 +48,11 @@ void dlg_init(void)
     } else if (aes_global[0] >= 0x0340) aes_3d = 1;    /* TOS 4 */
     eddiag("dlg_init: AES %04x, ?AGI %d, getinfo(13) %d: %d %d %d %d -> 3D %d, MagiC %d",
            aes_global[0], appl_find("?AGI\0\0\0\0"), appl_getinfo(AES_OBJECT, &o1, &o2, &o3, &o4), o1, o2, o3, o4, aes_3d, aes_magic);
-    edlog("AES 3D objects %d, MagiC objects %d", aes_3d, aes_magic);
+    {
+        long v;
+        is_magic = Getcookie(0x4D616758L, &v) == C_FOUND;   /* 'MagX': MagiC itself */
+    }
+    edlog("AES 3D objects %d, MagiC objects %d, MagiC %d", aes_3d, aes_magic, is_magic);
 }
 
 static int upc(int c) { return c >= 'a' && c <= 'z' ? c - 32 : c >= 0x80 ? st_upper((unsigned char)c) : c; }
@@ -169,6 +92,12 @@ static void dlg_style(DLG *g)
             else if (o->ob_type == G_FTEXT) {
                 o->ob_spec.tedinfo->te_color = 0x11F0;  /* white field, black frame */
                 o->ob_spec.tedinfo->te_thickness = -1;
+                if (is_magic) {
+                    /* MagiC's 3D input field: a background object with a
+                     * frame 2 pixels outside it, drawn sunken */
+                    o->ob_flags |= OF_FL3DBAK;
+                    o->ob_spec.tedinfo->te_thickness = 2;
+                }
             }
         }
     }
@@ -181,6 +110,8 @@ static void dlg_style(DLG *g)
             /* a real check box or round radio button, with its letter */
             o->ob_state |= (short)(OS_WHITEBAK | 0x8000 | ((it->ul >= 0 ? it->ul : 0x7F) << 8));
             o->ob_flags &= ~OF_FL3DMASK;
+            /* on the grey of a 3D dialog, not on a white square of its own */
+            if (aes_3d) o->ob_flags |= OF_FL3DBAK;
         } else if (aes_magic && it->ul >= 0 && (it->type == T_BUTTON || it->type == T_BIG))
             o->ob_state |= (short)(OS_WHITEBAK | (it->ul << 8));
     }
@@ -198,7 +129,6 @@ int dlg_tree(DLG *g, int tree)
     for (n = 0; n < MAXDOBJ && !(t[n].ob_flags & OF_LASTOB); n++) ;
     if (n >= MAXDOBJ || n >= MAXDITEM) return 0;
     n++;
-    if (t[0].ob_width > scr_w - 2 * wchar || t[0].ob_height > desk.g_h) return 0;   /* the screen's too small */
     memset(g, 0, sizeof *g);
     g->framed = 1;
     g->edit1 = -1;
@@ -245,6 +175,22 @@ void dlg_tree_end(DLG *g)
     dlg_style(g);
 }
 
+/* a dialog's tree, or an alert that the resource file is missing or old */
+int dlg_load(DLG *g, int tree)
+{
+    if (dlg_tree(g, tree)) return 1;
+    alert(1, 3, AL_NO_RSC, DAB_OK);
+    return 0;
+}
+
+/* an object not wanted this time */
+void dlg_hide(DLG *g, short obj)
+{
+    if (obj <= 0 || obj >= g->n) return;
+    g->o[obj].ob_flags |= OF_HIDETREE;
+    g->o[obj].ob_flags &= ~OF_EDITABLE;
+}
+
 void dlg_set(DLG *g, short obj, int on)
 {
     if (obj <= 0 || obj >= g->n) return;
@@ -270,192 +216,6 @@ void dlg_edtext(DLG *g, short obj, char *buf)
     if (obj <= 0 || obj >= g->n || (g->o[obj].ob_type != G_FTEXT && g->o[obj].ob_type != G_FBOXTEXT)) return;
     g->o[obj].ob_spec.tedinfo->te_ptext = buf;
     g->it[obj].buf = buf;
-}
-
-/* lay out the items and build the object tree */
-void dlg_end(DLG *g)
-{
-    short labw = 0, maxw, vrow = 0, lastrow = -1, x = 0, maxx = 0, nbtn = 0, btnw = 0, cols, i, k;
-    short nbrow, brw = 0;
-    short root, rh = ry();
-    int limit = scr_w / wchar - 4;
-
-    if (limit > 76) limit = 76;
-    for (i = 0; i < g->nit; i++)
-        if (g->it[i].type == T_LABEL && g->it[i].wc + 2 > labw) labw = (short)(g->it[i].wc + 2);
-    maxw = (short)limit;
-    if (labw > maxw / 2) labw = (short)(maxw / 2);
-
-    /* place the items, row by row, wrapping long rows */
-    for (i = 0; i < g->nit; i++) {
-        DITEM *it = &g->it[i];
-        if (it->type == T_BUTTON) { nbtn++; if (it->wc > btnw) btnw = it->wc; continue; }
-        if (it->type == T_TITLE) { it->row = 0; it->col = 2; vrow = 0; if (it->wc + 4 > maxx) maxx = (short)(it->wc + 2); continue; }
-        if (it->row != lastrow) {
-            vrow++;
-            lastrow = it->row;
-            x = labw;
-            if (it->type == T_LABEL) { it->row = vrow; it->col = 2; continue; }
-        }
-        if (it->type == T_LABEL) {       /* a label after items: starts a line of its own */
-            vrow++; it->row = vrow; it->col = 2; x = labw; continue;
-        }
-        if (x + it->wc > maxw && x > labw) { vrow++; x = labw; }
-        it->row = vrow;
-        it->col = (short)(x + 2);
-        x = (short)(x + it->wc + 2);
-        if (x > maxx) maxx = x;
-    }
-    /* the buttons: all as wide as the widest if they fit, else each as
-     * wide as its text, on as many rows as they need */
-    btnw = (short)(btnw + 4);
-    if (btnw < 8) btnw = 8;
-    nbrow = 0;
-    if (nbtn) {
-        int uniform = nbtn * (btnw + 2) + 4 <= limit, rw = 0;
-        nbrow = 1;
-        for (i = 0; i < g->nit; i++) {
-            DITEM *it = &g->it[i];
-            short w;
-            if (it->type != T_BUTTON) continue;
-            w = uniform ? btnw : (short)(it->wc + 4 < 8 ? 8 : it->wc + 4);
-            if (rw && rw + w + 2 + 4 > limit) { nbrow++; rw = 0; }
-            it->col = w;                      /* width, for now */
-            it->row = (short)(nbrow - 1);
-            rw += w + 2;
-            if (rw + 4 > brw) brw = (short)(rw + 4);
-        }
-    }
-    cols = (short)(maxx + 2);
-    if (brw > cols) cols = brw;
-    if (cols < 20) cols = 20;
-    g->cols = cols;
-    g->nrows = (short)(vrow + 1 + (nbtn ? nbrow + 1 : 0));
-    /* right-align each row of buttons */
-    for (k = 0; k < nbrow; k++) {
-        short bx = (short)(cols - 2);
-        for (i = g->nit - 1; i >= 0; i--) {
-            DITEM *it = &g->it[i];
-            if (it->type != T_BUTTON || it->row != k) continue;
-            bx = (short)(bx - it->col);
-            it->wc = it->col;
-            it->col = bx;
-            bx -= 2;
-        }
-    }
-
-    /* the tree: the box, radio groups first (so items found inside them
-     * win), then everything else */
-    g->n = 0;
-    /* half a row under the buttons, so they and their 3D edges and the
-     * default button's frame stand clear of the bottom */
-    root = add(g, -1, G_BOX, 0, 0, 0, (short)(cols * wchar), (short)(g->nrows * rh + (nbtn ? rh / 2 : 0)));
-    g->o[root].ob_spec.index = g->framed ? 0x00021100L : 0x00001100L;
-    g->o[root].ob_state = (short)(g->framed ? OS_OUTLINED : 0);
-    for (i = 0; i < g->nit; i++) {
-        DITEM *it = &g->it[i];
-        short gx0, gy0, gx1, gy1, box, j;
-        if (it->type != T_RADIO || it->obj >= 0) continue;
-        gx0 = gy0 = 32767; gx1 = gy1 = 0;
-        for (j = i; j < g->nit; j++) {
-            DITEM *t = &g->it[j];
-            if (t->type != T_RADIO || t->group != it->group) continue;
-            if (t->col < gx0) gx0 = t->col;
-            if (t->row < gy0) gy0 = t->row;
-            if (t->col + t->wc > gx1) gx1 = (short)(t->col + t->wc);
-            if (t->row + 1 > gy1) gy1 = (short)(t->row + 1);
-        }
-        box = add(g, root, G_IBOX, 0, (short)(gx0 * wchar), (short)(gy0 * rh), (short)((gx1 - gx0) * wchar),
-                  (short)((gy1 - gy0) * rh));
-        g->o[box].ob_spec.index = 0L;
-        for (j = i; j < g->nit; j++) {
-            DITEM *t = &g->it[j];
-            short o;
-            if (t->type != T_RADIO || t->group != it->group) continue;
-            o = add(g, box, G_BUTTON, OF_SELECTABLE | OF_RBUTTON, (short)((t->col - gx0) * wchar),
-                    (short)((t->row - gy0) * rh + (rh - hchar) / 2), (short)(t->wc * wchar), hchar);
-            g->o[o].ob_spec.free_string = (char *)t->s;
-            if (t->on) g->o[o].ob_state |= OS_SELECTED;
-            t->obj = o;
-        }
-    }
-    for (i = 0; i < g->nit; i++) {
-        DITEM *it = &g->it[i];
-        short o, y = (short)(it->row * rh + (rh - hchar) / 2);
-        switch (it->type) {
-        case T_TITLE: case T_LABEL: case T_TEXT:
-            o = add(g, root, G_STRING, 0, (short)(it->col * wchar), y, (short)(it->wc * wchar), hchar);
-            g->o[o].ob_spec.free_string = (char *)it->s;
-            it->obj = o;
-            break;
-        case T_CHECK:
-            o = add(g, root, G_BUTTON, OF_SELECTABLE, (short)(it->col * wchar), y, (short)(it->wc * wchar), hchar);
-            g->o[o].ob_spec.free_string = (char *)it->s;
-            if (it->on) g->o[o].ob_state |= OS_SELECTED;
-            it->obj = o;
-            break;
-        case T_EDIT: {
-            int k = g->nte < MAXTED ? g->nte : MAXTED - 1;
-            TEDINFO *t = &g->te[k];
-            const char *u1 = strchr(it->tmpl, '_'), *u2;
-            if (g->nte < MAXTED) g->nte++;
-            if (aes_3d && u1 && strlen(it->tmpl) < 48) {
-                /* the 3D look: the prompt and the text after it beside a
-                 * white field that holds just the characters */
-                long pre = u1 - it->tmpl;
-                for (u2 = u1; *u2 == '_'; u2++) ;
-                if (pre > 0) {
-                    memcpy(g->tx[k][0], it->tmpl, pre);
-                    g->tx[k][0][pre] = 0;
-                    o = add(g, root, G_STRING, 0, (short)(it->col * wchar), y, (short)(pre * wchar), hchar);
-                    g->o[o].ob_spec.free_string = g->tx[k][0];
-                }
-                if (*u2) {
-                    strcpy(g->tx[k][2], u2);
-                    o = add(g, root, G_STRING, 0, (short)((it->col + (u2 - it->tmpl)) * wchar), y,
-                            (short)(strlen(u2) * wchar), hchar);
-                    g->o[o].ob_spec.free_string = g->tx[k][2];
-                }
-                memcpy(g->tx[k][1], u1, u2 - u1);
-                g->tx[k][1][u2 - u1] = 0;
-                o = add(g, root, G_FTEXT, OF_EDITABLE, (short)((it->col + pre) * wchar), y,
-                        (short)((u2 - u1) * wchar), hchar);
-                memset(t, 0, sizeof *t);
-                t->te_ptmplt = g->tx[k][1];
-            } else {
-                o = add(g, root, G_FTEXT, OF_EDITABLE, (short)(it->col * wchar), y, (short)(it->wc * wchar), hchar);
-                memset(t, 0, sizeof *t);
-                t->te_ptmplt = (char *)it->tmpl;
-            }
-            t->te_ptext = it->buf;
-            t->te_pvalid = (char *)it->valid;
-            t->te_font = IBM;
-            t->te_color = 0x1180;
-            t->te_txtlen = (short)(strlen(it->valid) + 1);
-            t->te_tmplen = (short)(strlen(t->te_ptmplt) + 1);
-            g->o[o].ob_spec.tedinfo = t;
-            it->obj = o;
-            if (g->edit1 < 0) g->edit1 = o;
-            break;
-        }
-        case T_BIG:
-            o = add(g, root, G_BUTTON, (short)(OF_SELECTABLE | it->flags), (short)(it->col * wchar), y,
-                    (short)(it->wc * wchar), hchar);
-            g->o[o].ob_spec.free_string = (char *)it->s;
-            it->obj = o;
-            break;
-        case T_BUTTON:
-            o = add(g, root, G_BUTTON, (short)(OF_SELECTABLE | it->flags), (short)(it->col * wchar),
-                    (short)((g->nrows - nbrow + it->row) * rh + (rh - hchar) / 2 - 2), (short)(it->wc * wchar), hchar);
-            g->o[o].ob_spec.free_string = (char *)it->s;
-            it->obj = o;
-            break;
-        }
-    }
-    g->o[g->n - 1].ob_flags |= OF_LASTOB;
-    g->w = g->o[0].ob_width;
-    g->h = g->o[0].ob_height;
-    dlg_style(g);
 }
 
 /* ---- where windows were: dialogs and tool windows open again where
@@ -1058,87 +818,49 @@ static int mm2pt(int mm) { return (int)((mm * 720L + (mm >= 0 ? 127 : -127)) / 2
 /* a field in mm back to points; unchanged fields keep their exact value */
 static int field_pt(const char *buf, int old) { int mm = atoi(buf); return mm == pt2mm(old) ? old : mm2pt(mm); }
 
-/* "Prompt: ___" templates, built from the current language */
-static char tmpls[24][48];
-static int  ntmpl;
-static const char *tmpl(const char *prompt, int n, const char *after)
-{
-    char *t = tmpls[ntmpl++ % 24];
-    int k = 0, i;
-    if (prompt && prompt[0]) k = sprintf(t, "%s ", prompt);
-    for (i = 0; i < n && k < 40; i++) t[k++] = '_';
-    t[k] = 0;
-    if (after && after[0]) { strcat(t, " "); strcat(t, after); }
-    return t;
-}
-
-static const char digits[] = "9999999999999999";
-static const char anyc[]   = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-
-static const char *valid_n(int n) { return digits + 16 - n; }
-static const char *valid_x(int n) { return anyc + 64 - n; }
-
 /* ================================================================= */
 /*  Page layout                                                       */
 /* ================================================================= */
 
 int dlg_page(DOC *d)
 {
-    static char mt[4], mb[4], ml[4], mr[4], nc[3], gap[4], wc[4];
+    static char mt[4], mb[4], ml[4], mr[4], nc[2], gap[4], wc[4];
     DLG g;
     PAGESET *ps = &PS(d);
     PGFMT f;
-    short paper[NPAPER], land, whole, one, after, ok, i;
-    int page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0, v;
+    short i;
+    int page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0, v, how, k;
 
     page_fmt(d, page, &f);
     sprintf(mt, "%d", pt2mm(f.mt)); sprintf(mb, "%d", pt2mm(f.mb));
     sprintf(ml, "%d", pt2mm(f.ml)); sprintf(mr, "%d", pt2mm(f.mr));
-    sprintf(nc, "%d", f.cols); sprintf(gap, "%d", pt2mm(f.colgap));
+    sprintf(nc, "%d", f.cols > 9 ? 9 : f.cols); sprintf(gap, "%d", pt2mm(f.colgap));
     sprintf(wc, "%d", ps->wrapcol);
-
-    dlg_begin(&g, L(S_PAGE_TITLE));
-    dlg_label(&g, L(S_PAPER));
-    for (i = 0; i < NPAPER; i++) paper[i] = dlg_radio(&g, 1, paper_name[i], ps->paper == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_ORIENT));
-    dlg_radio(&g, 2, L(S_PORTRAIT), !ps->landscape);
-    land = dlg_radio(&g, 2, L(S_LANDSCAPE), ps->landscape);
-    dlg_row(&g);
-    dlg_label(&g, L(S_MARGINS_MM));
-    dlg_edit(&g, tmpl(L(S_TOP), 3, NULL), mt, valid_n(3));
-    dlg_edit(&g, tmpl(L(S_BOTTOM), 3, NULL), mb, valid_n(3));
-    dlg_edit(&g, tmpl(L(S_LEFT_M), 3, NULL), ml, valid_n(3));
-    dlg_edit(&g, tmpl(L(S_RIGHT_M), 3, NULL), mr, valid_n(3));
-    dlg_row(&g);
-    dlg_label(&g, L(S_COLUMNS));
-    dlg_edit(&g, tmpl(NULL, 1, NULL), nc, valid_n(1));
-    dlg_edit(&g, tmpl(L(S_GAP), 3, L(S_MM)), gap, valid_n(3));
-    dlg_row(&g);
-    dlg_label(&g, L(S_WRAPCOL));
-    dlg_edit(&g, tmpl(NULL, 3, L(S_ZERO_OFF)), wc, valid_n(3));
-    dlg_row(&g);
-    dlg_label(&g, L(S_APPLY_TO));
-    /* start with what this page has now */
-    {
-        int k, how = d->a.novr ? 1 : 0;          /* 0 whole, 1 this page, 2 onwards */
-        for (k = 0; k < d->a.novr; k++) {
-            PGOVR *o = &d->a.ovr[k];
-            if (o->page == page) { how = o->following ? 2 : 1; break; }
-            if (o->page < page && o->following) how = 2;
-        }
-        whole = dlg_radio(&g, 3, L(S_WHOLE_DOC), how == 0);
-        one = dlg_radio(&g, 3, L(S_THIS_PAGE), how == 1);
-        after = dlg_radio(&g, 3, L(S_THIS_PAGE_ON), how == 2);
+    if (!dlg_load(&g, RT_PAGE)) return 0;
+    for (i = 0; i < NPAPER; i++) dlg_set(&g, (short)(DPG_PAPER0 + i), ps->paper == i);
+    dlg_set(&g, DPG_PORTRAIT, !ps->landscape);
+    dlg_set(&g, DPG_LAND, ps->landscape);
+    dlg_edtext(&g, DPG_MT, mt); dlg_edtext(&g, DPG_MB, mb);
+    dlg_edtext(&g, DPG_ML, ml); dlg_edtext(&g, DPG_MR, mr);
+    dlg_edtext(&g, DPG_COLS, nc); dlg_edtext(&g, DPG_GAP, gap);
+    dlg_edtext(&g, DPG_WRAP, wc);
+    /* start with what this page has now: the whole document, this page, or onwards */
+    how = d->a.novr ? 1 : 0;
+    for (k = 0; k < d->a.novr; k++) {
+        PGOVR *o = &d->a.ovr[k];
+        if (o->page == page) { how = o->following ? 2 : 1; break; }
+        if (o->page < page && o->following) how = 2;
     }
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    dlg_set(&g, DPG_WHOLE, how == 0);
+    dlg_set(&g, DPG_ONE, how == 1);
+    dlg_set(&g, DPG_AFTER, how == 2);
+    g.cancel = DPG_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DPG_OK) return 0;
 
     for (i = 0; i < NPAPER; i++)
-        if (dlg_on(&g, paper[i])) break;
-    v = dlg_on(&g, land) ? 1 : 0;
+        if (dlg_on(&g, (short)(DPG_PAPER0 + i))) break;
+    v = dlg_on(&g, DPG_LAND) ? 1 : 0;
     if (i < NPAPER) page_set_paper(ps, i, v);
     else if (v != ps->landscape) { short t = ps->w; ps->w = ps->h; ps->h = t; ps->landscape = (short)v; }
     f.mt = (short)field_pt(mt, f.mt); f.mb = (short)field_pt(mb, f.mb);
@@ -1148,9 +870,8 @@ int dlg_page(DOC *d)
     f.colgap = (short)field_pt(gap, f.colgap);
     v = atoi(wc);
     ps->wrapcol = (short)(v > 250 ? 250 : v);
-    if (dlg_on(&g, one) || dlg_on(&g, after)) page_ovr_set(d, page, dlg_on(&g, after), &f);
+    if (dlg_on(&g, DPG_ONE) || dlg_on(&g, DPG_AFTER)) page_ovr_set(d, page, dlg_on(&g, DPG_AFTER), &f);
     else {
-        (void)whole;
         ps->mt = f.mt; ps->mb = f.mb; ps->ml = f.ml; ps->mr = f.mr;
         ps->cols = f.cols; ps->colgap = f.colgap;
         page_ovr_clear(d);
@@ -1166,18 +887,13 @@ int dlg_wrapcol(DOC *d)
 {
     static char wc[4];
     DLG g;
-    short ok;
     int v;
     sprintf(wc, "%d", PS(d).wrapcol);
-    dlg_begin(&g, L(S_WRAP_TITLE));
-    dlg_label(&g, L(S_WRAPCOL));
-    dlg_edit(&g, tmpl(NULL, 3, NULL), wc, valid_n(3));
-    dlg_row(&g);
-    dlg_text(&g, L(S_WRAP_HINT));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    if (!dlg_load(&g, RT_WRAP)) return 0;
+    dlg_edtext(&g, DWR_WRAP, wc);
+    g.cancel = DWR_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DWR_OK) return 0;
     v = atoi(wc);
     PS(d).wrapcol = (short)(v > 250 ? 250 : v);
     d->dirty = 1;
@@ -1188,16 +904,13 @@ int dlg_size(int *size)
 {
     static char sz[4];
     DLG g;
-    short ok;
     int v;
     sprintf(sz, "%d", *size);
-    dlg_begin(&g, L(S_SIZE_TITLE));
-    dlg_label(&g, L(S_POINT_SIZE));
-    dlg_edit(&g, tmpl(NULL, 3, "(4-120)"), sz, valid_n(3));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    if (!dlg_load(&g, RT_SIZE)) return 0;
+    dlg_edtext(&g, DSZ_SIZE, sz);
+    g.cancel = DSZ_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DSZ_OK) return 0;
     v = atoi(sz);
     if (v < 4 || v > 120) return 0;
     *size = v;
@@ -1208,7 +921,6 @@ int dlg_size(int *size)
 /*  Progress gauge                                                    */
 /* ================================================================= */
 
-#define GAUGEW 36
 static DLG   gg;
 static short g_bar, g_fill, g_txt, g_open, g_btn = -1, g_want_cancel, g_stop;
 static int   g_last;
@@ -1266,36 +978,20 @@ int gauge_msg(short *msg)
 void gauge_open(const char *title, const GRECT *over)
 {
     short x, y, w, h, root, wx, wy, ww, wh;
-    dlg_begin(&gg, NULL);
-    g_bar = dlg_text(&gg, "                                    ");
-    dlg_row(&gg);
+    root = 0;
+    if (!dlg_load(&gg, g_want_cancel ? RT_GAUGEC : RT_GAUGE)) { g_want_cancel = 0; return; }
+    /* the tree: the bar (a white box), its black fill, the percentage, Cancel */
+    g_bar = DGA_BAR; g_fill = DGA_FILL; g_txt = DGA_PCT;
+    g_btn = g_want_cancel ? DGC_CANCEL : -1;
     strcpy(g_text, "  0%");
-    g_txt = dlg_text(&gg, g_text);
-    g_btn = g_want_cancel ? dlg_button(&gg, L(S_CANCEL), OF_EXIT) : -1;
+    dlg_str(&gg, g_txt, g_text);
+    gg.framed = 0;
+    gg.o[g_fill].ob_width = 0;
+    gg.o[g_fill].ob_height = gg.o[g_bar].ob_height;
     g_want_cancel = 0;
     g_stop = 0;
-    dlg_end(&gg);
-    if (g_btn >= 0) g_btn = gg.it[g_btn].obj;
-    g_txt = gg.it[g_txt].obj;
-    root = 0;
-    /* turn the spacer into the bar, with a filled box inside */
-    g_bar = gg.it[g_bar].obj;
-    gg.o[g_bar].ob_type = G_BOX;
-    gg.o[g_bar].ob_spec.index = 0x00011170L;          /* 1-pixel frame, white */
+    dlg_tree_end(&gg);
     gg.o[g_bar].ob_flags &= ~OF_FL3DMASK;
-    gg.o[g_bar].ob_width = (short)(GAUGEW * wchar);
-    gg.o[gg.n - 1].ob_flags &= ~OF_LASTOB;
-    g_fill = (short)gg.n;
-    {
-        OBJECT *o = &gg.o[gg.n++];
-        memset(o, 0, sizeof *o);
-        o->ob_next = o->ob_head = o->ob_tail = -1;
-        o->ob_type = G_BOX;
-        o->ob_spec.index = 0x00001171L;               /* solid black */
-        o->ob_height = hchar;
-        objc_add(gg.o, g_bar, g_fill);
-    }
-    gg.o[gg.n - 1].ob_flags |= OF_LASTOB;
     (void)root;
     g_last = -1;
     g_open = 1;
@@ -1356,7 +1052,7 @@ void gauge_set(long done, long total)
          * white and filled it black each time, and with a screen of
          * several planes drawn a plane at a time that flashed colours. */
         GRECT a[2];
-        short ow = gg.o[g_fill].ob_width, nw = (short)((long)GAUGEW * wchar * pct / 100), fx, fy, i;
+        short ow = gg.o[g_fill].ob_width, nw = (short)((long)gg.o[g_bar].ob_width * pct / 100), fx, fy, i;
         gg.o[g_fill].ob_width = nw;
         sprintf(g_text, "%3d%%", pct);
         objc_offset(gg.o, g_fill, &fx, &fy);
@@ -1514,23 +1210,12 @@ static void prefs_more(void)
     int i;
     strncpy(dd, pref_docdir, 40);
     dd[40] = 0;
-    if (dlg_tree(&g, RT_PREFS2)) {
-        for (i = 0; i < 3; i++) { kp[i] = (short)(PF2_KEEP0 + i); dlg_set(&g, kp[i], lay_keep == i); }
-        dlg_edtext(&g, PF2_DOCDIR, dd);
-        g.cancel = PF2_CANCEL;
-        ok = PF2_OK;
-        dlg_tree_end(&g);
-    } else {
-    dlg_begin(&g, L(S_PREFS_TITLE));
-    dlg_label(&g, L(S_KEEP));
-    for (i = 0; i < 3; i++) kp[i] = dlg_radio(&g, 1, L(S_KEEP_ANY + i), lay_keep == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_DOCDIR));
-    dlg_edit(&g, tmpl(NULL, 40, NULL), dd, valid_x(40));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    }
+    if (!dlg_load(&g, RT_PREFS2)) return;
+    for (i = 0; i < 3; i++) { kp[i] = (short)(PF2_KEEP0 + i); dlg_set(&g, kp[i], lay_keep == i); }
+    dlg_edtext(&g, PF2_DOCDIR, dd);
+    g.cancel = PF2_CANCEL;
+    ok = PF2_OK;
+    dlg_tree_end(&g);
     if (dlg_run(&g) != ok) return;
     for (i = 0; i < 3; i++) if (dlg_on(&g, kp[i])) lay_keep = i;
     if (strncmp(dd, pref_docdir, 40)) {
@@ -1541,7 +1226,6 @@ static void prefs_more(void)
 
 int dlg_prefs(void)
 {
-    eddiag("prefs: 3D %d, MagiC %d, resource tree %p", aes_3d, aes_magic, (void *)rsc_tree(RT_PREFS));
     static const int order[NDATEFMT] = { DT_SHORT, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
     static char dl[NDATEFMT][32], mins[3];
     DLG g;
@@ -1550,73 +1234,27 @@ int dlg_prefs(void)
 
     for (i = 0; i < NDATEFMT; i++) fmt_now(dl[i], order[i]);
     sprintf(mins, "%d", pref_asmin);
-    if (dlg_tree(&g, RT_PREFS)) {
-        for (i = 0; i < NLANG; i++) {
-            lang[i] = (short)(PF_LANG0 + i); dlg_set(&g, lang[i], ui_lang == i);
-            dict[i] = (short)(PF_DICT0 + i); dlg_set(&g, dict[i], spell_lang == i);
-        }
-        for (i = 0; i < NDATEFMT; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
-        for (i = 0; i < NPAPER; i++) { pp[i] = (short)(PF_PAPER0 + i); dlg_set(&g, pp[i], pref_paper == i); }
-        dlg_set(&g, PF_PORTRAIT, !pref_land);
-        dlg_set(&g, land = PF_LAND, pref_land);
-        dlg_set(&g, tbar = PF_TOOLBAR, pref_toolbar);
-        dlg_set(&g, live = PF_LIVE, pref_live);
-        dlg_set(&g, col = PF_COLOURS, colour_on);
-        for (i = 0; i < 3; i++) { ps[i] = (short)(PF_PDF1 + i); dlg_set(&g, ps[i], pdf_scale == i + 1); }
-        for (i = 0; i < 4; i++) { dm[i] = (short)(PF_DISP0 + i); dlg_set(&g, dm[i], pref_display == i); }
-        dlg_set(&g, ason = PF_ASON, pref_autosave);
-        dlg_edtext(&g, PF_ASMIN, mins);
-        dlg_set(&g, PF_ASCOPY, !pref_asmode);
-        dlg_set(&g, asm1 = PF_ASDOC, pref_asmode);
-        more = PF_MORE; ok = PF_OK;
-        g.cancel = PF_CANCEL;
-        dlg_tree_end(&g);
-    } else {
-    dlg_begin(&g, L(S_PREFS_TITLE));
-    dlg_label(&g, L(S_LANGUAGE));
-    for (i = 0; i < NLANG; i++) lang[i] = dlg_radio(&g, 1, lang_name[i], ui_lang == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_DATE_FORMAT));
-    for (i = 0; i < NDATEFMT; i++) dr[i] = dlg_radio(&g, 2, dl[i], pref_date == order[i]);
-    dlg_row(&g);
-    dlg_label(&g, L(S_NEW_PAGES));
-    for (i = 0; i < NPAPER; i++) pp[i] = dlg_radio(&g, 3, paper_name[i], pref_paper == i);
-    dlg_radio(&g, 4, L(S_PORTRAIT), !pref_land);
-    land = dlg_radio(&g, 4, L(S_LANDSCAPE), pref_land);
-    dlg_row(&g);
-    dlg_label(&g, L(S_NEW_WINDOWS));
-    tbar = dlg_check(&g, L(S_SHOW_TOOLBAR), pref_toolbar);
-    dlg_row(&g);
-    dlg_label(&g, L(S_SPELLING));
-    live = dlg_check(&g, L(S_LIVE_SPELL), pref_live);
-    dlg_row(&g);
-    dlg_label(&g, L(S_DICTIONARY));
-    for (i = 0; i < NLANG; i++) dict[i] = dlg_radio(&g, 8, lang_name[i], spell_lang == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_TEXT_COLOUR));
-    col = dlg_check(&g, L(S_SHOW_COLOURS), colour_on);
-    dlg_row(&g);
-    dlg_label(&g, L(S_PDF_PICTURES));
-    ps[0] = dlg_radio(&g, 5, L(S_SCREEN), pdf_scale == 1);
-    ps[1] = dlg_radio(&g, 5, "2x", pdf_scale == 2);
-    ps[2] = dlg_radio(&g, 5, "3x", pdf_scale == 3);
-    dlg_row(&g);
-    dlg_label(&g, L(S_EDITING));
-    dm[0] = dlg_radio(&g, 6, L(S_D_NORMAL), pref_display == 0);
-    dm[1] = dlg_radio(&g, 6, L(S_D_DARK), pref_display == 1);
-    dm[2] = dlg_radio(&g, 6, L(S_D_GREEN), pref_display == 2);
-    dm[3] = dlg_radio(&g, 6, L(S_D_AMBER), pref_display == 3);
-    dlg_row(&g);
-    dlg_label(&g, L(S_AUTOSAVE));
-    ason = dlg_check(&g, L(S_ON), pref_autosave);
-    dlg_edit(&g, tmpl(L(S_EVERY), 2, L(S_MINUTES)), mins, valid_n(2));
-    dlg_radio(&g, 7, L(S_BACKUP_COPY), !pref_asmode);
-    asm1 = dlg_radio(&g, 7, L(S_SAVE_DOC), pref_asmode);
-    more = dlg_button(&g, L(S_PREFS_MORE), OF_EXIT);
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    if (!dlg_load(&g, RT_PREFS)) return 0;
+    for (i = 0; i < NLANG; i++) {
+        lang[i] = (short)(PF_LANG0 + i); dlg_set(&g, lang[i], ui_lang == i);
+        dict[i] = (short)(PF_DICT0 + i); dlg_set(&g, dict[i], spell_lang == i);
     }
+    for (i = 0; i < NDATEFMT; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
+    for (i = 0; i < NPAPER; i++) { pp[i] = (short)(PF_PAPER0 + i); dlg_set(&g, pp[i], pref_paper == i); }
+    dlg_set(&g, PF_PORTRAIT, !pref_land);
+    dlg_set(&g, land = PF_LAND, pref_land);
+    dlg_set(&g, tbar = PF_TOOLBAR, pref_toolbar);
+    dlg_set(&g, live = PF_LIVE, pref_live);
+    dlg_set(&g, col = PF_COLOURS, colour_on);
+    for (i = 0; i < 3; i++) { ps[i] = (short)(PF_PDF1 + i); dlg_set(&g, ps[i], pdf_scale == i + 1); }
+    for (i = 0; i < 4; i++) { dm[i] = (short)(PF_DISP0 + i); dlg_set(&g, dm[i], pref_display == i); }
+    dlg_set(&g, ason = PF_ASON, pref_autosave);
+    dlg_edtext(&g, PF_ASMIN, mins);
+    dlg_set(&g, PF_ASCOPY, !pref_asmode);
+    dlg_set(&g, asm1 = PF_ASDOC, pref_asmode);
+    more = PF_MORE; ok = PF_OK;
+    g.cancel = PF_CANCEL;
+    dlg_tree_end(&g);
     r = dlg_run(&g);
     if (r != ok && r != more) return 0;
 
@@ -1648,45 +1286,34 @@ int dlg_prefs(void)
 
 int dlg_headfoot(DOC *d)
 {
-    static char hb[2][61], sz[3];
+    static char hb[2][57], sz[3];
     DLG g;
-    short ed[2], jr[2][3], first, ok;
     int i, k, v;
-    const char *jn[3];
 
-    jn[0] = L(S_J_LEFT); jn[1] = L(S_J_CENTRE); jn[2] = L(S_J_RIGHT);
     for (i = 0; i < 2; i++) {
-        strncpy(hb[i], HF(d).text[i], 60);
-        hb[i][60] = 0;
+        strncpy(hb[i], HF(d).text[i], 56);
+        hb[i][56] = 0;
     }
     sprintf(sz, "%d", HF(d).size);
-    dlg_begin(&g, L(S_HF_TITLE));
-    for (i = 0; i < 2; i++) {
-        dlg_label(&g, L(i ? S_FOOTER : S_HEADER));
-        ed[i] = dlg_edit(&g, tmpl(NULL, 56, NULL), hb[i], valid_x(56));
-        dlg_row(&g);
-        dlg_label(&g, "");
-        for (k = 0; k < 3; k++) jr[i][k] = dlg_radio(&g, 1 + i, jn[k], HF(d).just[i] == k);
-        dlg_row(&g);
+    if (!dlg_load(&g, RT_HEADFOOT)) return 0;
+    dlg_edtext(&g, DHF_TEXT0, hb[0]);
+    dlg_edtext(&g, DHF_TEXT1, hb[1]);
+    for (k = 0; k < 3; k++) {
+        dlg_set(&g, (short)(DHF_J00 + k), HF(d).just[0] == k);
+        dlg_set(&g, (short)(DHF_J10 + k), HF(d).just[1] == k);
     }
-    dlg_label(&g, L(S_SIZE));
-    dlg_edit(&g, tmpl(NULL, 2, L(S_POINT)), sz, valid_n(2));
-    first = dlg_check(&g, L(S_FIRST_PAGE_TOO), HF(d).first);
-    dlg_row(&g);
-    dlg_label(&g, L(S_FIELDS));
-    dlg_text(&g, "{page} {pages} {date} {time} {file}");
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    (void)ed;
-    if (dlg_run(&g) != ok) return 0;
+    dlg_edtext(&g, DHF_SIZE, sz);
+    dlg_set(&g, DHF_FIRST, HF(d).first);
+    g.cancel = DHF_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DHF_OK) return 0;
     for (i = 0; i < 2; i++) {
         strcpy(HF(d).text[i], hb[i]);
-        for (k = 0; k < 3; k++) if (dlg_on(&g, jr[i][k])) HF(d).just[i] = (unsigned char)k;
+        for (k = 0; k < 3; k++) if (dlg_on(&g, (short)((i ? DHF_J10 : DHF_J00) + k))) HF(d).just[i] = (unsigned char)k;
     }
     v = atoi(sz);
     HF(d).size = (unsigned char)(v < 4 ? 4 : v > 72 ? 72 : v);
-    HF(d).first = (unsigned char)dlg_on(&g, first);
+    HF(d).first = (unsigned char)dlg_on(&g, DHF_FIRST);
     d->dirty = 1;
     return 1;
 }
@@ -1699,23 +1326,16 @@ int dlg_indents(DOC *d, int *left, int *first)
 {
     static char lb[4], fb[5];
     DLG g;
-    short ok;
     int l, f;
     (void)d;
     sprintf(lb, "%d", pt2mm(*left));
     sprintf(fb, "%d", pt2mm(*first));
-    dlg_begin(&g, L(S_INDENTS_TITLE));
-    dlg_label(&g, L(S_LEFT_INDENT));
-    dlg_edit(&g, tmpl(NULL, 3, L(S_MM)), lb, valid_n(3));
-    dlg_row(&g);
-    dlg_label(&g, L(S_FIRST_LINE));
-    dlg_edit(&g, tmpl(NULL, 4, L(S_MM)), fb, valid_x(4));
-    dlg_row(&g);
-    dlg_text(&g, L(S_HANG_HINT));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    if (!dlg_load(&g, RT_INDENTS)) return 0;
+    dlg_edtext(&g, DIN_LEFT, lb);
+    dlg_edtext(&g, DIN_FIRST, fb);
+    g.cancel = DIN_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DIN_OK) return 0;
     l = field_pt(lb, *left);
     f = field_pt(fb, *first);
     if (l < 0) l = 0;
@@ -1736,31 +1356,27 @@ int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
 {
     static char rb[4], cb[3], wb[MAX_COLS][4];
     DLG g;
-    short ok, brd, i;
+    short i, ok;
     int n;
     (void)d;
     sprintf(rb, "%d", *rows);
     sprintf(cb, "%d", *cols);
-    dlg_begin(&g, L(insert ? S_TBL_INS_TITLE : S_TBL_PROP_TITLE));
-    dlg_label(&g, L(S_ROWS));
-    dlg_edit(&g, tmpl(NULL, 3, NULL), rb, valid_n(3));
-    dlg_row(&g);
-    dlg_label(&g, L(S_COLUMNS));
-    dlg_edit(&g, tmpl(NULL, 2, "(1-12)"), cb, valid_n(2));
-    dlg_row(&g);
-    if (!insert) {
-        dlg_label(&g, L(S_COL_WIDTHS));
-        for (i = 0; i < *cols && i < MAX_COLS; i++) {
-            sprintf(wb[i], "%d", pt2mm(w[i]));
-            dlg_edit(&g, tmpl(NULL, 3, NULL), wb[i], valid_n(3));
+    if (!dlg_load(&g, insert ? RT_TBLINS : RT_TBLPROP)) return 0;
+    if (insert) {
+        dlg_edtext(&g, DTI_ROWS, rb); dlg_edtext(&g, DTI_COLS, cb);
+        dlg_set(&g, DTI_GRID, *border);
+        g.cancel = DTI_CANCEL; ok = DTI_OK;
+    } else {
+        dlg_edtext(&g, DTP_ROWS, rb); dlg_edtext(&g, DTP_COLS, cb);
+        for (i = 0; i < MAX_COLS; i++) {
+            /* a field for each column there is */
+            if (i < *cols) { sprintf(wb[i], "%d", pt2mm(w[i])); dlg_edtext(&g, (short)(DTP_W0 + i), wb[i]); }
+            else dlg_hide(&g, (short)(DTP_W0 + i));
         }
-        dlg_row(&g);
+        dlg_set(&g, DTP_GRID, *border);
+        g.cancel = DTP_CANCEL; ok = DTP_OK;
     }
-    dlg_label(&g, "");
-    brd = dlg_check(&g, L(S_GRID_LINES), *border);
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(insert ? S_INSERT : S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    dlg_tree_end(&g);
     if (dlg_run(&g) != ok) return 0;
     n = atoi(rb);
     *rows = n < 1 ? 1 : n > 200 ? 200 : n;
@@ -1772,7 +1388,7 @@ int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
             w[i] = (short)(v < 12 ? 12 : v);
         }
     *cols = n;
-    *border = dlg_on(&g, brd);
+    *border = dlg_on(&g, insert ? DTI_GRID : DTP_GRID);
     return 1;
 }
 
@@ -1780,42 +1396,38 @@ int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
 /*  Picture and drawing properties                                    */
 /* ================================================================= */
 
-/* returns 0 cancel, 1 OK, 2 delete, 3 edit the drawing */
+/* returns 0 cancel, 1 OK, 2 delete, 3 edit the drawing (the object
+ * numbers of the picture's dialog and the drawing's are the same up to
+ * their buttons) */
 int dlg_objprops(DOC *d, OBJ *o)
 {
     static char xb[5], yb[5], wb[5], hb[5], pb[5];
     DLG g;
-    short ok, del, edt = -1, wr[3], frame, i;
-    int v;
+    short ok, del, edt = -1, i, shape = -1;
+    int v, drw = o->type == OB_DRAW;
     char x0[5], y0[5], w0[5], h0[5];
     sprintf(xb, "%d", pt2mm(o->x / TWIPS)); sprintf(yb, "%d", pt2mm(o->y / TWIPS));
     sprintf(wb, "%d", pt2mm(o->w / TWIPS)); sprintf(hb, "%d", pt2mm(o->h / TWIPS));
     strcpy(x0, xb); strcpy(y0, yb); strcpy(w0, wb); strcpy(h0, hb);
     sprintf(pb, "%d", o->page + 1);
-    dlg_begin(&g, L(o->type == OB_IMG ? S_PIC_TITLE : S_DRAW_TITLE));
-    dlg_label(&g, L(S_POSITION_MM));
-    dlg_edit(&g, tmpl(L(S_FROM_LEFT), 4, NULL), xb, valid_n(4));
-    dlg_edit(&g, tmpl(L(S_FROM_TOP), 4, NULL), yb, valid_n(4));
-    dlg_row(&g);
-    dlg_label(&g, L(S_SIZE_MM));
-    dlg_edit(&g, tmpl(L(S_WIDTH), 4, NULL), wb, valid_n(4));
-    dlg_edit(&g, tmpl(L(S_HEIGHT), 4, NULL), hb, valid_n(4));
-    dlg_row(&g);
-    dlg_label(&g, L(S_PAGE));
-    dlg_edit(&g, tmpl(NULL, 4, NULL), pb, valid_n(4));
-    dlg_row(&g);
-    dlg_label(&g, L(S_TEXT_WRAP));
-    wr[0] = dlg_radio(&g, 1, L(S_WRAP_NONE), o->wrap == WR_NONE);
-    wr[1] = dlg_radio(&g, 1, L(S_WRAP_BOX), o->wrap == WR_BOX || (o->wrap == WR_SHAPE && o->type != OB_DRAW));
-    wr[2] = o->type == OB_DRAW ? dlg_radio(&g, 1, L(S_WRAP_SHAPE), o->wrap == WR_SHAPE) : -1;
-    dlg_row(&g);
-    dlg_label(&g, "");
-    frame = dlg_check(&g, L(S_FRAME), o->border);
-    del = dlg_button(&g, L(S_DELETE), OF_EXIT);
-    if (o->type == OB_DRAW) edt = dlg_button(&g, L(S_EDIT_DRAWING), OF_EXIT);
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    if (!dlg_load(&g, drw ? RT_DRAWPROPS : RT_PICPROPS)) return 0;
+    if (drw) {
+        dlg_edtext(&g, DDP_X, xb); dlg_edtext(&g, DDP_Y, yb); dlg_edtext(&g, DDP_W, wb); dlg_edtext(&g, DDP_H, hb);
+        dlg_edtext(&g, DDP_PAGE, pb);
+        dlg_set(&g, DDP_WNONE, o->wrap == WR_NONE);
+        dlg_set(&g, DDP_WBOX, o->wrap == WR_BOX);
+        dlg_set(&g, shape = DDP_WSHAPE, o->wrap == WR_SHAPE);
+        dlg_set(&g, DDP_FRAME, o->border);
+        del = DDP_DEL; edt = DDP_EDIT; ok = DDP_OK; g.cancel = DDP_CANCEL;
+    } else {
+        dlg_edtext(&g, DPP_X, xb); dlg_edtext(&g, DPP_Y, yb); dlg_edtext(&g, DPP_W, wb); dlg_edtext(&g, DPP_H, hb);
+        dlg_edtext(&g, DPP_PAGE, pb);
+        dlg_set(&g, DPP_WNONE, o->wrap == WR_NONE);
+        dlg_set(&g, DPP_WBOX, o->wrap != WR_NONE);
+        dlg_set(&g, DPP_FRAME, o->border);
+        del = DPP_DEL; ok = DPP_OK; g.cancel = DPP_CANCEL;
+    }
+    dlg_tree_end(&g);
     i = dlg_run(&g);
     if (i == del) return 2;
     if (i != ok && i != edt) return 0;
@@ -1826,8 +1438,8 @@ int dlg_objprops(DOC *d, OBJ *o)
     if (strcmp(hb, h0)) { v = field_pt(hb, o->h / TWIPS); o->h = (v < 6 ? 6 : v) * (long)TWIPS; }
     v = atoi(pb) - 1;
     o->page = (short)(v < 0 ? 0 : v > doc_npages(d) ? doc_npages(d) : v);
-    o->wrap = dlg_on(&g, wr[0]) ? WR_NONE : wr[2] >= 0 && dlg_on(&g, wr[2]) ? WR_SHAPE : WR_BOX;
-    o->border = (short)dlg_on(&g, frame);
+    o->wrap = dlg_on(&g, drw ? DDP_WNONE : DPP_WNONE) ? WR_NONE : shape >= 0 && dlg_on(&g, shape) ? WR_SHAPE : WR_BOX;
+    o->border = (short)dlg_on(&g, drw ? DDP_FRAME : DPP_FRAME);
     return i == edt ? 3 : 1;
 }
 
@@ -1837,53 +1449,42 @@ int dlg_objprops(DOC *d, OBJ *o)
 
 void dlg_summary(DOC *d)
 {
-    static char v[8][16];
+    static char v[8][16], nm[48];
     DLG g;
     DSTATS s;
     int i;
-    static const int lab[8] = { S_ST_PAGES, S_ST_WORDS, S_ST_CHARS, S_ST_CHARS_NS, S_ST_PARAS, S_ST_LINES,
-                                S_ST_TABLES, S_ST_OBJECTS };
     long val[8];
     doc_layout(d);
     doc_stats(d, &s);
     val[0] = s.pages; val[1] = s.words; val[2] = s.chars; val[3] = s.chars_ns;
     val[4] = s.paras; val[5] = s.lines; val[6] = s.tables; val[7] = s.objects;
-    dlg_begin(&g, L(S_SUMMARY_TITLE));
-    dlg_text(&g, d->base);
-    dlg_row(&g);
+    if (!dlg_load(&g, RT_SUMMARY)) return;
+    strncpy(nm, d->base, sizeof nm - 1);
+    dlg_str(&g, DSU_NAME, nm);
     for (i = 0; i < 8; i++) {
+        static const short vo[8] = { DSU_V0, DSU_V1, DSU_V2, DSU_V3, DSU_V4, DSU_V5, DSU_V6, DSU_V7 };
         sprintf(v[i], "%8ld", val[i]);
-        dlg_label(&g, L(lab[i]));
-        dlg_text(&g, v[i]);
-        dlg_row(&g);
+        dlg_str(&g, vo[i], v[i]);
     }
-    dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    g.cancel = DSU_OK;
+    dlg_tree_end(&g);
     dlg_run(&g);
 }
 
 void dlg_about(void)
 {
-    static char ver[48], vline[60];
+    static char vline[60];
     DLG g;
-    strcpy(ver, "EdWord");
-    dlg_begin(&g, ver);
+    if (!dlg_load(&g, RT_ABOUT)) return;
 #ifdef ED_CPU
     sprintf(vline, "%s %s (%s)", L(S_VERSION), ED_VERSION, ED_CPU);
 #else
     sprintf(vline, "%s %s", L(S_VERSION), ED_VERSION);
 #endif
-    dlg_text(&g, vline);
-    dlg_row(&g);
-    dlg_text(&g, ED_ABOUT[0] ? ED_ABOUT : L(S_ABOUT_ATARI));
-    dlg_row(&g);
-    dlg_text(&g, L(S_ABOUT_LINE2));
-    dlg_row(&g);
-    dlg_text(&g, L(S_ABOUT_LINE3));
-    dlg_row(&g);
-    dlg_text(&g, L(S_ABOUT_THES));
-    dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    dlg_str(&g, DAB_VERSION, vline);
+    if (ED_ABOUT[0]) dlg_str(&g, DAB_LINE1, (char *)ED_ABOUT);
+    g.cancel = DAB_OK;
+    dlg_tree_end(&g);
     dlg_run(&g);
 }
 
@@ -1897,57 +1498,35 @@ int dlg_textimport(int eol, int det, int *cs, int *join)
     static const char *css[] = { "", "Atari ST", "Windows", "UTF-8", "UTF-16" };
     static char info[90];
     DLG g;
-    short r[5], jn, ok;
     int i;
 
     sprintf(info, L(S_FOUND), L(eols[eol]), css[det]);
-    dlg_begin(&g, L(S_IMPORT_TITLE));
-    dlg_text(&g, info);
-    dlg_row(&g);
-    dlg_label(&g, L(S_CHARACTERS));
-    r[0] = dlg_radio(&g, 1, L(S_AUTO), 1);
-    r[1] = dlg_radio(&g, 1, "Atari ST", 0);
-    r[2] = dlg_radio(&g, 1, "Windows", 0);
-    r[3] = dlg_radio(&g, 1, "UTF-8", 0);
-    r[4] = dlg_radio(&g, 1, "UTF-16", 0);
-    dlg_row(&g);
-    dlg_label(&g, L(S_LINES));
-    dlg_radio(&g, 2, L(S_ONE_PARA), 1);
-    jn = dlg_radio(&g, 2, L(S_JOIN_LINES), 0);
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_IMPORT), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    if (!dlg_load(&g, RT_TEXTIMP)) return 0;
+    dlg_str(&g, DTXI_INFO, info);
+    dlg_set(&g, DTXI_CS0, 1);
+    dlg_set(&g, DTXI_ONE, 1);
+    g.cancel = DTXI_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DTXI_OK) return 0;
     *cs = CS_AUTO;
-    for (i = 0; i < 5; i++) if (dlg_on(&g, r[i])) *cs = i;
-    *join = dlg_on(&g, jn);
+    for (i = 0; i < 5; i++) if (dlg_on(&g, (short)(DTXI_CS0 + i))) *cs = i;
+    *join = dlg_on(&g, DTXI_JOIN);
     return 1;
 }
 
 int dlg_textexport(int *crlf, int *cs)
 {
     DLG g;
-    short dos, r[4], ok;
     int i;
-    dlg_begin(&g, L(S_EXPORT_TITLE));
-    dlg_label(&g, L(S_LINE_ENDINGS));
-    dos = dlg_radio(&g, 1, "Atari/DOS CR LF", 1);
-    dlg_radio(&g, 1, "Unix LF", 0);
-    dlg_row(&g);
-    dlg_label(&g, L(S_CHARACTERS));
-    r[0] = dlg_radio(&g, 2, "Atari ST", 1);
-    r[1] = dlg_radio(&g, 2, "Windows", 0);
-    r[2] = dlg_radio(&g, 2, "UTF-8", 0);
-    r[3] = dlg_radio(&g, 2, "UTF-16", 0);
-    dlg_row(&g);
-    dlg_text(&g, L(S_EXPORT_HINT));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_EXPORT), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
-    *crlf = dlg_on(&g, dos);
+    if (!dlg_load(&g, RT_TEXTEXP)) return 0;
+    dlg_set(&g, DTXE_DOS, 1);
+    dlg_set(&g, DTXE_CS0, 1);
+    g.cancel = DTXE_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DTXE_OK) return 0;
+    *crlf = dlg_on(&g, DTXE_DOS);
     *cs = CS_ATARI;
-    for (i = 0; i < 4; i++) if (dlg_on(&g, r[i])) *cs = i + 1;
+    for (i = 0; i < 4; i++) if (dlg_on(&g, (short)(DTXE_CS0 + i))) *cs = i + 1;
     return 1;
 }
 
@@ -1957,20 +1536,19 @@ int dlg_textexport(int *crlf, int *cs)
 
 int dlg_goto(DOC *d, int *page)
 {
-    static char pb[6];
+    static char pb[5];
     static char of[40];
     DLG g;
-    short ok;
     int v;
     sprintf(pb, "%d", *page + 1);
-    sprintf(of, L(S_OF_N), doc_npages(d));
-    dlg_begin(&g, L(S_GOTO_TITLE));
-    dlg_label(&g, L(S_GOTO_PAGE));
-    dlg_edit(&g, tmpl(NULL, 4, of), pb, valid_n(4));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_GO), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    of[0] = ' ';
+    sprintf(of + 1, L(S_OF_N), doc_npages(d));
+    if (!dlg_load(&g, RT_GOTO)) return 0;
+    dlg_edtext(&g, DGT_PAGE, pb);
+    dlg_str(&g, DGT_OF, of);
+    g.cancel = DGT_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DGT_OK) return 0;
     v = atoi(pb);
     if (v < 1) v = 1;
     if (v > doc_npages(d)) v = doc_npages(d);
@@ -1982,8 +1560,7 @@ int dlg_goto(DOC *d, int *page)
 int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour)
 {
     static DLG g;
-    static char fb[6], tb[6], lb[41], cb[4], pr[60], cur[40];
-    short ok, all, now, rng, lst, col;
+    static char fb[5], tb[5], lb[41], cb[3], pr[60], cur[40];
     int np = doc_npages(d), a, b, c, k, page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0;
     sprintf(fb, "%d", 1);
     sprintf(tb, "%d", np);
@@ -1991,56 +1568,24 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int 
     sprintf(cb, "%d", *copies > 0 ? *copies : 1);
     sprintf(pr, "%.56s", printer);
     sprintf(cur, "%s (%d)", L(S_CUR_PAGE), page + 1);
-    if (dlg_tree(&g, RT_PRINT)) {
-        dlg_str(&g, PR_PRINTER, pr);
-        dlg_str(&g, PR_CUR, cur);
-        dlg_edtext(&g, PR_FROM, fb);
-        dlg_edtext(&g, PR_TO, tb);
-        dlg_edtext(&g, PR_LISTED, lb);
-        dlg_edtext(&g, PR_COPIES, cb);
-        dlg_set(&g, PR_ALL, 1);
-        dlg_set(&g, PR_COLOUR, *colour);
-        dlg_set(&g, PR_MONO, !*colour);
-        col = PR_COLOUR;
-        g.cancel = PR_CANCEL;
-        dlg_tree_end(&g);
-        all = PR_ALL; now = PR_CUR; rng = PR_RANGE; lst = PR_LIST; ok = PR_OK;
-    } else {
-    dlg_begin(&g, L(S_PRINT_TITLE));
-    dlg_label(&g, L(S_PRINTER));
-    dlg_text(&g, pr);
-    dlg_row(&g);
-    dlg_label(&g, L(S_PAGES));
-    all = dlg_radio(&g, 1, L(S_ALL_PAGES), 1);
-    now = dlg_radio(&g, 1, cur, 0);
-    dlg_row(&g);
-    dlg_label(&g, "");
-    rng = dlg_radio(&g, 1, L(S_PAGES_FROM), 0);
-    dlg_edit(&g, tmpl(NULL, 4, NULL), fb, valid_n(4));
-    dlg_edit(&g, tmpl(L(S_PAGES_TO), 4, NULL), tb, valid_n(4));
-    dlg_row(&g);
-    dlg_label(&g, "");
-    lst = dlg_radio(&g, 1, L(S_PAGE_LIST), 0);
-    dlg_edit(&g, tmpl(NULL, 16, NULL), lb, valid_x(40));
-    dlg_text(&g, L(S_PAGE_LIST_HINT));
-    dlg_row(&g);
-    dlg_label(&g, L(S_PRT_COLOURS));
-    col = dlg_radio(&g, 2, L(S_PRT_COLOUR), *colour);
-    dlg_radio(&g, 2, L(S_PRT_MONO), !*colour);
-    dlg_row(&g);
-    dlg_label(&g, L(S_COPIES));
-    dlg_edit(&g, tmpl(NULL, 2, NULL), cb, valid_n(2));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_PRINT_BTN), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    }
-    (void)rng;
+    if (!dlg_load(&g, RT_PRINT)) return 0;
+    dlg_str(&g, PR_PRINTER, pr);
+    dlg_str(&g, PR_CUR, cur);
+    dlg_edtext(&g, PR_FROM, fb);
+    dlg_edtext(&g, PR_TO, tb);
+    dlg_edtext(&g, PR_LISTED, lb);
+    dlg_edtext(&g, PR_COPIES, cb);
+    dlg_set(&g, PR_ALL, 1);
+    dlg_set(&g, PR_COLOUR, *colour);
+    dlg_set(&g, PR_MONO, !*colour);
+    g.cancel = PR_CANCEL;
+    dlg_tree_end(&g);
     for (;;) {
-        if (dlg_run(&g) != ok) return 0;
+        if (dlg_run(&g) != PR_OK) return 0;
         memset(sel, 0, (size_t)np);
-        if (dlg_on(&g, all)) memset(sel, 1, (size_t)np);
-        else if (dlg_on(&g, now)) sel[page < np ? page : np - 1] = 1;
-        else if (dlg_on(&g, lst)) page_list(lb, np, sel);
+        if (dlg_on(&g, PR_ALL)) memset(sel, 1, (size_t)np);
+        else if (dlg_on(&g, PR_CUR)) sel[page < np ? page : np - 1] = 1;
+        else if (dlg_on(&g, PR_LIST)) page_list(lb, np, sel);
         else {
             a = atoi(fb); b = atoi(tb);
             if (a < 1) a = 1;
@@ -2049,11 +1594,11 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int 
         }
         for (k = 0; k < np && !sel[k]; k++) ;
         if (k < np) break;
-        alert(1, 1, AL_NO_PAGES, AB_OK);
+        alert(1, 1, AL_NO_PAGES, DAB_OK);
     }
     c = atoi(cb);
     *copies = c < 1 ? 1 : c > 99 ? 99 : c;
-    *colour = dlg_on(&g, col);
+    *colour = dlg_on(&g, PR_COLOUR);
     return 1;
 }
 
@@ -2061,44 +1606,28 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int 
 int dlg_pagenum(DOC *d)
 {
     static DLG g;
-    static const short sty[NPNSTYLES] = { 0, 1, 2, 3 };
-    static char ex[NPNSTYLES][40], pw[34], ow[24];
-    short wr[2], jr[3], sr[NPNSTYLES], first, ok, rem, r;
+    static char pw[34], ow[24];
+    short r;
     int where = 1, style = 1, just = 1, i;
-    const char *jn[3];
-    jn[0] = L(S_J_LEFT); jn[1] = L(S_J_CENTRE); jn[2] = L(S_J_RIGHT);
     if (hf_pagenum_find(d, &where, &style)) just = HF(d).just[where];
-    sprintf(ex[0], "1");
-    sprintf(ex[1], "%s 1", L(S_PN_PAGE));
-    sprintf(ex[2], "%s 1 %s 3", L(S_PN_PAGE), L(S_PN_OF));
-    sprintf(ex[3], "- 1 -");
-    dlg_begin(&g, L(S_PN_TITLE));
-    dlg_label(&g, L(S_PN_WHERE));
-    wr[0] = dlg_radio(&g, 1, L(S_PN_TOP), where == 0);
-    wr[1] = dlg_radio(&g, 1, L(S_PN_BOTTOM), where == 1);
-    dlg_row(&g);
-    dlg_label(&g, L(S_PN_ALIGN));
-    for (i = 0; i < 3; i++) jr[i] = dlg_radio(&g, 2, jn[i], just == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_PN_STYLE));
-    for (i = 0; i < NPNSTYLES; i++) sr[i] = dlg_radio(&g, 3, ex[i], style == sty[i]);
-    dlg_row(&g);
-    dlg_label(&g, "");
-    first = dlg_check(&g, L(S_FIRST_PAGE_TOO), HF(d).first);
-    rem = dlg_button(&g, L(S_PN_REMOVE), OF_EXIT);
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
+    if (!dlg_load(&g, RT_PAGENUM)) return 0;
+    dlg_set(&g, DPN_TOP, where == 0);
+    dlg_set(&g, DPN_BOTTOM, where == 1);
+    for (i = 0; i < 3; i++) dlg_set(&g, (short)(DPN_J0 + i), just == i);
+    for (i = 0; i < NPNSTYLES; i++) dlg_set(&g, (short)(DPN_S0 + i), style == i);
+    dlg_set(&g, DPN_FIRST, HF(d).first);
+    g.cancel = DPN_CANCEL;
+    dlg_tree_end(&g);
     r = dlg_run(&g);
-    if (r == rem) { hf_pagenum_clear(d); return 1; }
-    if (r != ok) return 0;
-    where = dlg_on(&g, wr[0]) ? 0 : 1;
-    for (i = 0; i < 3; i++) if (dlg_on(&g, jr[i])) just = i;
-    for (i = 0; i < NPNSTYLES; i++) if (dlg_on(&g, sr[i])) style = sty[i];
+    if (r == DPN_REMOVE) { hf_pagenum_clear(d); return 1; }
+    if (r != DPN_OK) return 0;
+    where = dlg_on(&g, DPN_TOP) ? 0 : 1;
+    for (i = 0; i < 3; i++) if (dlg_on(&g, (short)(DPN_J0 + i))) just = i;
+    for (i = 0; i < NPNSTYLES; i++) if (dlg_on(&g, (short)(DPN_S0 + i))) style = i;
     strncpy(pw, L(S_PN_PAGE), sizeof pw - 1);
     strncpy(ow, L(S_PN_OF), sizeof ow - 1);
     hf_pagenum_set(d, where, just, style, pw, ow);
-    HF(d).first = (unsigned char)dlg_on(&g, first);
+    HF(d).first = (unsigned char)dlg_on(&g, DPN_FIRST);
     d->dirty = 1;
     return 1;
 }
@@ -2111,33 +1640,19 @@ int dlg_template(int *kind)
 {
     static char nm[41], ad[3][41], ti[41];
     DLG g;
-    short kr[NTPL], ok;
     int i;
     strncpy(nm, tpl_name, 40);
     for (i = 0; i < 3; i++) strncpy(ad[i], tpl_addr[i], 40);
     strncpy(ti, tpl_title, 40);
-    dlg_begin(&g, L(S_TPL_TITLE));
-    dlg_label(&g, L(S_TPL_KIND));
-    for (i = 0; i < NTPL; i++) kr[i] = dlg_radio(&g, 1, L(S_TPL_BLANK + i), *kind == i);
-    dlg_row(&g);
-    dlg_label(&g, L(S_TPL_NAME));
-    dlg_edit(&g, tmpl(NULL, 40, NULL), nm, valid_x(40));
-    dlg_row(&g);
-    dlg_label(&g, L(S_TPL_ADDR));
-    dlg_edit(&g, tmpl(NULL, 40, NULL), ad[0], valid_x(40));
-    for (i = 1; i < 3; i++) {
-        dlg_row(&g);
-        dlg_label(&g, "");
-        dlg_edit(&g, tmpl(NULL, 40, NULL), ad[i], valid_x(40));
-    }
-    dlg_row(&g);
-    dlg_label(&g, L(S_TPL_NTITLE));
-    dlg_edit(&g, tmpl(NULL, 40, NULL), ti, valid_x(40));
-    dlg_button(&g, L(S_CANCEL), OF_EXIT);
-    ok = dlg_button(&g, L(S_TPL_CREATE), OF_EXIT | OF_DEFAULT);
-    dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
-    for (i = 0; i < NTPL; i++) if (dlg_on(&g, kr[i])) *kind = i;
+    if (!dlg_load(&g, RT_TEMPLATE)) return 0;
+    for (i = 0; i < NTPL; i++) dlg_set(&g, (short)(DTM_K0 + i), *kind == i);
+    dlg_edtext(&g, DTM_NAME, nm);
+    dlg_edtext(&g, DTM_A0, ad[0]); dlg_edtext(&g, DTM_A1, ad[1]); dlg_edtext(&g, DTM_A2, ad[2]);
+    dlg_edtext(&g, DTM_NTITLE, ti);
+    g.cancel = DTM_CANCEL;
+    dlg_tree_end(&g);
+    if (dlg_run(&g) != DTM_OK) return 0;
+    for (i = 0; i < NTPL; i++) if (dlg_on(&g, (short)(DTM_K0 + i))) *kind = i;
     strcpy(tpl_name, nm);
     for (i = 0; i < 3; i++) strcpy(tpl_addr[i], ad[i]);
     strcpy(tpl_title, ti);

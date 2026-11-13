@@ -461,10 +461,69 @@ static long tb_key(DOC *d)
 static const short tbcmd[][2] = { RSC_TB_CMDS };
 #define NTBC ((int)(sizeof tbcmd / sizeof tbcmd[0]))
 
+/* in 16 colours and more: a copy of the resource's toolbar with the
+ * icons' coloured pixels as images of their own (in the pens' colours)
+ * under each black icon, all drawn by the AES */
+static const short tbimg[][2] = {
+    { TBO_UNDOIMG, IC_UNDO }, { TBO_REDOIMG, IC_REDO }, { TBO_BOLDIMG, IC_BOLD }, { TBO_ITALICIMG, IC_ITALIC },
+    { TBO_UNDERIMG, IC_UNDER }, { TBO_LEFTIMG, IC_LEFT }, { TBO_CENTREIMG, IC_CENTRE }, { TBO_RIGHTIMG, IC_RIGHT },
+    { TBO_JUSTIFYIMG, IC_JUSTIFY }, { TBO_BULLETSIMG, IC_BULLETS }, { TBO_NUMBERSIMG, IC_NUMBERS },
+    { TBO_TABLEIMG, IC_TABLE }, { TBO_PGBRKIMG, IC_PGBRK }, { TBO_FONTIMG, IC_FONT }, { TBO_SIZEIMG, IC_SIZE },
+    { TBO_COLOURIMG, IC_COLOUR }, { TBO_ZOOMIMG, IC_ZOOM }, { TBO_SPELLIMG, IC_SPELL }, { TBO_CODESIMG, IC_CODES },
+    { TBO_RULERIMG, IC_RULER }, { TBO_GUIDESIMG, IC_GUIDES }
+};
+#define NTBIMG ((int)(sizeof tbimg / sizeof tbimg[0]))
+#define MAXLAYER 24
+static OBJECT tbx[TBO_COUNT + MAXLAYER];
+static BITBLK tbx_bb[NTBIMG + MAXLAYER];
+static OBJECT *tbx_from;
+
+static OBJECT *tb_colour(OBJECT *t)
+{
+    int i, k, n = TBO_COUNT, nb = 0;
+    if (t == tbx_from) return tbx;
+    memcpy(tbx, t, sizeof(OBJECT) * TBO_COUNT);
+    tbx[TBO_COUNT - 1].ob_flags &= ~OF_LASTOB;
+    for (i = 0; i < NTBIMG; i++) {
+        /* the black image: the icon without its coloured pixels */
+        OBJECT *o = &tbx[tbimg[i][0]];
+        tbx_bb[nb] = *o->ob_spec.bitblk;
+        tbx_bb[nb].bi_pdata = (short *)icon_black(tbimg[i][1]);
+        o->ob_spec.bitblk = &tbx_bb[nb++];
+    }
+    for (k = 0; k < icon_nlayers() && n < TBO_COUNT + MAXLAYER; k++) {
+        int ic, pen;
+        const unsigned short *m = icon_layer(k, &ic, &pen);
+        OBJECT *img = NULL, *l = &tbx[n];
+        short box = -1;
+        for (i = 0; i < NTBIMG; i++) if (tbimg[i][1] == ic) img = &tbx[tbimg[i][0]];
+        if (!img) continue;
+        for (i = 1; i < TBO_COUNT; i++)          /* the button it's in */
+            if (tbx[i].ob_head >= 0 && &tbx[tbx[i].ob_head] <= img && &tbx[tbx[i].ob_tail] >= img) box = (short)i;
+        if (box < 0) continue;
+        *l = *img;
+        tbx_bb[nb] = *img->ob_spec.bitblk;
+        tbx_bb[nb].bi_pdata = (short *)m;
+        tbx_bb[nb].bi_color = (short)pen;
+        l->ob_spec.bitblk = &tbx_bb[nb++];
+        l->ob_flags = 0;
+        l->ob_next = tbx[box].ob_head;           /* drawn first: under the black */
+        l->ob_head = l->ob_tail = -1;
+        tbx[box].ob_head = (short)n;
+        n++;
+    }
+    tbx[n - 1].ob_flags |= OF_LASTOB;
+    tbx_from = t;
+    return tbx;
+}
+
+static int tb_layer(short o) { return o >= TBO_COUNT; }
+
 static OBJECT *tb_tree(const GRECT *tb)
 {
     OBJECT *t = rsc_tree(hchar >= 16 ? RT_TOOLBAR : RT_TOOLBAR8);
     if (!t || t[0].ob_height != tb->g_h) return NULL;
+    if (icons_coloured()) t = tb_colour(t);
     t[0].ob_x = tb->g_x; t[0].ob_y = tb->g_y;
     t[0].ob_width = t[TBO_LINE].ob_width = tb->g_w;
     return t;
@@ -482,7 +541,7 @@ static void tb_states(DOC *d, OBJECT *t)
         if (aes_3d) t[o].ob_flags |= OF_FL3DACT;
         for (c = t[o].ob_head; c > o; c = t[c].ob_next) {
             /* white on the black of a selected button, without 3D */
-            t[c].ob_spec.bitblk->bi_color = (short)(on && !aes_3d ? 0 : 1);
+            if (!tb_layer(c)) t[c].ob_spec.bitblk->bi_color = (short)(on && !aes_3d ? 0 : 1);
             t[c].ob_state = (short)(off ? OS_DISABLED : 0);
         }
     }

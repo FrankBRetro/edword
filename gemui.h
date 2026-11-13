@@ -10,7 +10,7 @@
 #include "lang.h"
 
 #ifndef ED_VERSION
-#define ED_VERSION "3.0.11"   /* one more on every commit */
+#define ED_VERSION "3.0.12"   /* one more on every commit */
 #endif
 #ifndef ED_ABOUT
 #define ED_ABOUT ""
@@ -203,6 +203,10 @@ enum { IC_BOLD, IC_ITALIC, IC_UNDER, IC_LEFT, IC_CENTRE, IC_RIGHT, IC_JUSTIFY,
        IC_UNDO, IC_REDO, IC_ZOOM, IC_TABLE, IC_RULER, IC_GUIDES, IC_PGBRK, IC_COUNT };
 void  icons_init(void);
 int   icon_h(void);
+int   icons_coloured(void);
+int   icon_nlayers(void);
+const unsigned short *icon_layer(int k, int *ic, int *pen);
+unsigned short *icon_black(int ic);
 void  draw_tbicon(int ic, short x, short y);
 short tb_item_x(DOC *d, int cmd);
 
@@ -229,41 +233,34 @@ int   word_misspelt(DOC *d, long a, long b);
 void  img_cache_free(DOC *d);
 
 /* gemdlg.c: a dialog builder that lays itself out, so every language fits */
+/* a dialog: a copy of its tree from the resource file, so it can be
+ * changed; each object is an item (dlg_on() and dlg_run()'s answer are
+ * object numbers) */
 #define MAXDOBJ 140
 #define MAXTED  20
-#define MAXDITEM 120
+#define MAXDITEM MAXDOBJ
 typedef struct {
-    short type, group, flags, wc;   /* item kind, radio group, extra flags, width   */
-    short row, col;                 /* after layout: row and column (characters)    */
+    short type;                     /* item kind                                    */
+    short wc;                       /* width in characters                          */
     short obj;                      /* its object                                   */
-    int   on;
-    const char *s, *tmpl, *valid;
-    char *buf;
-    short ul, key;                  /* shortcut: letter position, the letter    */
+    const char *s;                  /* its text                                     */
+    char *buf;                      /* an edit field's text                         */
+    short ul, key;                  /* shortcut: letter position, the letter        */
 } DITEM;
 typedef struct {
     OBJECT  o[MAXDOBJ];
     TEDINFO te[MAXTED];
     short   n, nte;
     DITEM   it[MAXDITEM];
-    short   nit, row, nrows, cols, framed, edit1;
+    short   nit, framed, edit1;
     short   x, y, w, h;             /* on screen                                    */
-    short   cancel;                 /* from a resource file: the Cancel button      */
-    char    tx[MAXTED][3][48];      /* edit fields split for the 3D look            */
+    short   cancel;                 /* the Cancel button (Esc)                      */
 } DLG;
-void  dlg_begin(DLG *g, const char *title);
-void  dlg_row(DLG *g);
-void  dlg_label(DLG *g, const char *s);
-short dlg_text(DLG *g, const char *s);
-short dlg_radio(DLG *g, int group, const char *s, int on);
-short dlg_check(DLG *g, const char *s, int on);
-short dlg_edit(DLG *g, const char *tmpl, char *buf, const char *valid);
-short dlg_button(DLG *g, const char *s, int flags);
-short dlg_bigbutton(DLG *g, const char *s, int wc, int flags);
-void  dlg_end(DLG *g);
 short dlg_run(DLG *g);
 int   dlg_on(DLG *g, short item);
-int   dlg_tree(DLG *g, int tree);   /* a dialog from the resource file: items are objects */
+int   dlg_tree(DLG *g, int tree);   /* the dialog's tree; 0 if the file hasn't it   */
+int   dlg_load(DLG *g, int tree);   /* the same, with an alert if it hasn't         */
+void  dlg_hide(DLG *g, short obj);
 void  dlg_tree_end(DLG *g);
 void  dlg_set(DLG *g, short obj, int on);
 void  dlg_str(DLG *g, short obj, char *s);
@@ -292,7 +289,7 @@ int   dlg_goto(DOC *d, int *page);
 int   dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour);
 void  dlg_init(void);
 void  dlg_front(void);
-extern int dlg_busy, aes_3d, aes_magic, win_dialogs;
+extern int dlg_busy, aes_3d, aes_magic, is_magic, win_dialogs;
 int   winpos_get(const char *key, short *x, short *y, short *w, short *h);
 void  winpos_set(const char *key, short x, short y, short w, short h);
 void  winpos_save(const char *key, short wh);

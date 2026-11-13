@@ -1855,6 +1855,16 @@ int main(int argc, char *argv[])
     vst_color(vhandle, 1);
     wind_get(0, WF_WORKXYWH, &desk.g_x, &desk.g_y, &desk.g_w, &desk.g_h);
     icons_init();
+    if (!rsc_load(ui_lang, 1)) {
+        /* the menus and dialogs are in EDWORD*.RSC: nothing to work with */
+        busy_ptr(0);
+        alert(1, 3, AL_NO_RSC, AB_OK);
+        display_restore();
+        fonts_unload();
+        v_clsvwk(vhandle);
+        appl_exit();
+        return 1;
+    }
     build_menu();
     menu_bar(mtree, 1);
     update_menu(NULL);

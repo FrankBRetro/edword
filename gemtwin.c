@@ -4,7 +4,7 @@
  *             Spelling, Thesaurus; and the suggestions popup of
  *             spelling as you type
  *
- * Each window holds an ordinary object tree made by the dialog builder,
+ * Each window holds an ordinary object tree from the resource file,
  * drawn through the window's rectangle list. Edit fields are edited with
  * objc_edit(); Tab moves between them. The documents stay usable while
  * the windows are open: they act on the document used last.
@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gemui.h"
+#include "edrsc.h"
 
 #define TWKIND (NAME | CLOSER | MOVER)
 
@@ -23,7 +24,7 @@ typedef struct {
     DLG    g;
     char   name[48];
     void (*act)(short item, int clicks);
-    void (*build)(void);
+    int  (*build)(void);
     void (*changed)(short item);        /* a radio button or check box changed */
     void (*topped)(void);               /* the window came to the top          */
 } TWIN;
@@ -98,8 +99,7 @@ static int tw_open(TWIN *t, int title, int at_bottom)
 {
     short x, y, w, h;
     if (t->open) { wind_set(t->wh, WF_TOP, 0, 0, 0, 0); return 1; }
-    t->build();
-    t->g.framed = 0;
+    if (!t->build()) return 0;
     tw_place(t);
     wind_calc(WC_BORDER, TWKIND, 0, 0, t->g.w, t->g.h, &x, &y, &w, &h);
     if (at_bottom) { x = (short)(desk.g_x + (desk.g_w - w) / 2); y = (short)(desk.g_y + desk.g_h - h - 2); }
@@ -108,7 +108,7 @@ static int tw_open(TWIN *t, int title, int at_bottom)
     winpos_get(t->name, &x, &y, NULL, NULL);          /* where it was last time */
     winpos_clamp(&x, &y, w, h);
     t->wh = wind_create(TWKIND, x, y, w, h);
-    if (t->wh < 0) { alert(1, 3, AL_NO_WINDOWS, AB_OK); return 0; }
+    if (t->wh < 0) { alert(1, 3, AL_NO_WINDOWS, DAB_OK); return 0; }
     wind_set_str(t->wh, WF_NAME, t->name);
     t->open = 1;
     t->curs = 0;
@@ -236,6 +236,14 @@ static void set_disabled(TWIN *t, short item, int dis)
 
 static DOC *live_doc(DOC *d) { return d && d->used ? d : active_doc(); }
 
+/* the window's dialog from the resource file: no frame, no title */
+static int tw_tree(TWIN *t, int tree)
+{
+    if (!dlg_load(&t->g, tree)) return 0;
+    t->g.framed = 0;
+    return 1;
+}
+
 /* ================================================================= */
 /*  Find and replace                                                  */
 /* ================================================================= */
@@ -243,8 +251,6 @@ static DOC *live_doc(DOC *d) { return d && d->used ? d : active_doc(); }
 static TWIN fw;
 static char f_what[41], f_with[41], f_status[48];
 static short f_ewhat, f_ewith, f_case, f_word, f_back, f_next, f_rep, f_all, f_close, f_stat;
-static const char f_tmpl[] = "________________________________________";
-static const char f_valid[] = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
 static int f_flags(void)
 {
@@ -252,29 +258,19 @@ static int f_flags(void)
            (dlg_on(&fw.g, f_back) ? FIND_BACK : 0);
 }
 
-static void f_build(void)
+static int f_build(void)
 {
     DLG *g = &fw.g;
-    dlg_begin(g, NULL);
-    dlg_label(g, L(S_FIND_WHAT));
-    f_ewhat = dlg_edit(g, f_tmpl + 10, f_what, f_valid + 10);
-    dlg_row(g);
-    dlg_label(g, L(S_REPLACE_WITH));
-    f_ewith = dlg_edit(g, f_tmpl + 10, f_with, f_valid + 10);
-    dlg_row(g);
-    dlg_label(g, "");
-    f_case = dlg_check(g, L(S_MATCH_CASE), 0);
-    f_word = dlg_check(g, L(S_WHOLE_WORDS), 0);
-    f_back = dlg_check(g, L(S_BACKWARDS), 0);
-    dlg_row(g);
-    strcpy(f_status, "                                        ");
-    f_stat = dlg_text(g, f_status);
-    f_next = dlg_button(g, L(S_FIND_NEXT), OF_EXIT | OF_DEFAULT);
-    f_rep = dlg_button(g, L(S_REPLACE), OF_EXIT);
-    f_all = dlg_button(g, L(S_REPLACE_ALL), OF_EXIT);
-    f_close = dlg_button(g, L(S_CLOSE), OF_EXIT);
-    dlg_end(g);
+    if (!tw_tree(&fw, RT_FIND)) return 0;
+    f_ewhat = WFD_WHAT; f_ewith = WFD_WITH; f_case = WFD_CASE; f_word = WFD_WORD; f_back = WFD_BACK;
+    f_stat = WFD_STATUS; f_next = WFD_NEXT; f_rep = WFD_REP; f_all = WFD_ALL; f_close = WFD_CLOSE;
+    dlg_edtext(g, f_ewhat, f_what);
+    dlg_edtext(g, f_ewith, f_with);
+    f_status[0] = 0;
+    dlg_str(g, f_stat, f_status);
+    dlg_tree_end(g);
     fw.def = f_next;
+    return 1;
 }
 
 static void f_say(int text, long n)
@@ -344,7 +340,7 @@ void find_open(DOC *d)
 void find_again(DOC *d)
 {
     if (!f_what[0]) { find_open(d); return; }
-    if (!fw.g.nit) { fw.act = f_act; fw.build = f_build; f_build(); }
+    if (!fw.g.nit) { fw.act = f_act; fw.build = f_build; if (!f_build()) return; }
     f_find(d);
 }
 
@@ -371,8 +367,6 @@ static struct {
     char   word[WORDMAX], sug[6][WORDMAX], head[80], chg[WORDMAX];
     short  sb[6], ech, rep, ign, iga, add, stp, head_i;
 } sp;
-static const char sp_tmpl[]  = "_______________________________";
-static const char sp_valid[] = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
 /* load the dictionaries when first needed */
 int spell_ensure(int quiet)
@@ -386,7 +380,7 @@ int spell_ensure(int quiet)
         ok = spell_load_main(path);
         busy_end();
         if (!ok) {
-            if (!quiet) alert(1, 3, AL_NO_DIC, AB_OK);
+            if (!quiet) alert(1, 3, AL_NO_DIC, DAB_OK);
             if (!spell_nuser) return 0;
         }
     }
@@ -398,25 +392,20 @@ int spell_ensure(int quiet)
     return 1;
 }
 
-static void sp_build(void)
+static int sp_build(void)
 {
     DLG *g = &sw.g;
     int i;
-    dlg_begin(g, NULL);
-    sp.head_i = dlg_text(g, sp.head);
-    dlg_row(g);
-    dlg_label(g, L(S_CHANGE_TO));
-    sp.ech = dlg_edit(g, sp_tmpl, sp.chg, sp_valid);
-    dlg_row(g);
-    dlg_label(g, L(S_SUGGESTIONS));
-    for (i = 0; i < 6; i++) sp.sb[i] = dlg_bigbutton(g, sp.sug[i], 18, OF_EXIT);
-    sp.rep = dlg_button(g, L(S_REPLACE), OF_EXIT | OF_DEFAULT);
-    sp.ign = dlg_button(g, L(S_IGNORE), OF_EXIT);
-    sp.iga = dlg_button(g, L(S_IGNORE_ALL), OF_EXIT);
-    sp.add = dlg_button(g, L(S_ADD), OF_EXIT);
-    sp.stp = dlg_button(g, L(S_STOP), OF_EXIT);
-    dlg_end(g);
+    static const short sb[6] = { WSP_SUG0, WSP_SUG1, WSP_SUG2, WSP_SUG3, WSP_SUG4, WSP_SUG5 };
+    if (!tw_tree(&sw, RT_SPELL)) return 0;
+    sp.head_i = WSP_HEAD; sp.ech = WSP_CHG;
+    dlg_str(g, sp.head_i, sp.head);
+    dlg_edtext(g, sp.ech, sp.chg);
+    for (i = 0; i < 6; i++) { sp.sb[i] = sb[i]; dlg_str(g, sp.sb[i], sp.sug[i]); }
+    sp.rep = WSP_REP; sp.ign = WSP_IGN; sp.iga = WSP_IGA; sp.add = WSP_ADD; sp.stp = WSP_STOP;
+    dlg_tree_end(g);
     sw.def = sp.rep;
+    return 1;
 }
 
 void spell_close(void)
@@ -451,7 +440,7 @@ static void sp_find(void)
     }
     if (s < 0) {
         spell_close();
-        alert(1, 1, AL_SPELL_DONE, AB_OK);
+        alert(1, 1, AL_SPELL_DONE, DAB_OK);
         return;
     }
     sp.s = s;
@@ -585,32 +574,23 @@ static struct {
     char   word[WORDMAX], with[WORDMAX], mean[TH_MEAN][36], syn[TH_SYN][WORDMAX], msg[60];
     short  eword, look, mb[TH_MEAN], sb[TH_SYN], ewith, rep, cls, msg_i;
 } th;
-static const char th_tmpl[] = "______________________________";
-static const char th_valid[] = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
-static void th_build(void)
+static int th_build(void)
 {
     DLG *g = &tw.g;
     int i;
-    dlg_begin(g, NULL);
-    dlg_label(g, L(S_TH_WORD));
-    th.eword = dlg_edit(g, th_tmpl, th.word, th_valid);
-    th.look = dlg_bigbutton(g, L(S_LOOK_UP), (int)strlen(L(S_LOOK_UP)) + 4, OF_EXIT);
-    dlg_row(g);
-    dlg_label(g, L(S_MEANINGS));
-    for (i = 0; i < TH_MEAN; i++) th.mb[i] = dlg_bigbutton(g, th.mean[i], 21, OF_EXIT);
-    dlg_row(g);
-    dlg_label(g, L(S_SYNONYMS));
-    for (i = 0; i < TH_SYN; i++) th.sb[i] = dlg_bigbutton(g, th.syn[i], 16, OF_EXIT);
-    dlg_row(g);
-    dlg_label(g, L(S_REPLACE_WITH));
-    th.ewith = dlg_edit(g, th_tmpl, th.with, th_valid);
-    dlg_row(g);
-    th.msg_i = dlg_text(g, th.msg);
-    th.rep = dlg_button(g, L(S_REPLACE), OF_EXIT | OF_DEFAULT);
-    th.cls = dlg_button(g, L(S_CLOSE), OF_EXIT);
-    dlg_end(g);
+    static const short mb[TH_MEAN] = { WTH_M0, WTH_M1, WTH_M2, WTH_M3, WTH_M4, WTH_M5 };
+    static const short sb[TH_SYN] = { WTH_S0, WTH_S1, WTH_S2, WTH_S3, WTH_S4, WTH_S5, WTH_S6, WTH_S7, WTH_S8, WTH_S9 };
+    if (!tw_tree(&tw, RT_THES)) return 0;
+    th.eword = WTH_WORD; th.look = WTH_LOOK; th.ewith = WTH_WITH; th.msg_i = WTH_MSG; th.rep = WTH_REP; th.cls = WTH_CLOSE;
+    dlg_edtext(g, th.eword, th.word);
+    dlg_edtext(g, th.ewith, th.with);
+    dlg_str(g, th.msg_i, th.msg);
+    for (i = 0; i < TH_MEAN; i++) { th.mb[i] = mb[i]; th.mean[i][0] = 0; dlg_str(g, mb[i], th.mean[i]); }
+    for (i = 0; i < TH_SYN; i++) { th.sb[i] = sb[i]; th.syn[i][0] = 0; dlg_str(g, sb[i], th.syn[i]); }
+    dlg_tree_end(g);
     tw.def = th.rep;
+    return 1;
 }
 
 static const char *pos_name(char p)
@@ -647,7 +627,7 @@ static void th_lookup(void)
     char path[300];
     if (!thes_ready()) {
         sprintf(path, "%sEDWORD.THS", progdir);
-        if (!thes_open(path)) { alert(1, 3, AL_NO_THS, AB_OK); return; }
+        if (!thes_open(path)) { alert(1, 3, AL_NO_THS, DAB_OK); return; }
     }
     busy_ptr(1);
     thes_lookup(th.word, &th.r);
@@ -756,18 +736,6 @@ void find_set(const char *what, const char *with)
  * options, then Import... or Export... asks for the file. Export acts on
  * the document used last; its name is shown in the window. */
 
-static const char *fmt_name(int f)
-{
-    switch (f) {
-    case FT_RTF:  return "RTF";
-    case FT_TEXT: return L(S_FMT_TEXT);
-    case FT_MD:   return "Markdown";
-    case FT_FWP:  return "1st Word Plus";
-    case FT_PT:   return "Protext";
-    default:      return "PDF";
-    }
-}
-
 static void set_on(TWIN *t, short item, int on)
 {
     short o = t->g.it[item].obj;
@@ -806,45 +774,24 @@ static void ix_enable(void)
     set_disabled(&iw, ix_i[1], !live_doc(NULL));
 }
 
-static void ix_build(void)
+static int ix_build(void)
 {
     DLG *g = &iw.g;
     int i;
-    dlg_begin(g, NULL);
-    dlg_label(g, L(S_FORMAT));
-    ix_f[0] = dlg_radio(g, 1, L(S_AUTO), ix_fmt == 0);
-    for (i = 0; i < 5; i++) {
-        if (i == 2) { dlg_row(g); dlg_label(g, ""); }
-        ix_f[i + 1] = dlg_radio(g, 1, fmt_name(i), ix_fmt == i + 1);
-    }
-    dlg_row(g);
-    dlg_label(g, L(S_CHARACTERS));
-    ix_c[0] = dlg_radio(g, 2, L(S_AUTO), ix_cs == CS_AUTO);
-    ix_c[1] = dlg_radio(g, 2, "Atari ST", ix_cs == CS_ATARI);
-    ix_c[2] = dlg_radio(g, 2, "Windows", ix_cs == CS_WIN);
-    ix_c[3] = dlg_radio(g, 2, "UTF-8", ix_cs == CS_UTF8);
-    ix_c[4] = dlg_radio(g, 2, "UTF-16", ix_cs == CS_UTF16);
-    dlg_row(g);
-    dlg_label(g, L(S_LINES));
-    ix_j[0] = dlg_radio(g, 3, L(S_ONE_PARA), !ix_join);
-    ix_j[1] = dlg_radio(g, 3, L(S_JOIN_LINES), ix_join);
-    dlg_row(g);
-    dlg_label(g, L(S_INTO));
-    ix_i[0] = dlg_radio(g, 4, L(S_INTO_NEW), !ix_into);
-    dlg_row(g);
-    dlg_label(g, "");
-    ix_i[1] = dlg_radio(g, 4, L(S_INTO_CURSOR), ix_into);
-    dlg_row(g);
-    memset(ix_status, ' ', 46);
-    ix_status[46] = 0;
-    ix_stat = dlg_text(g, ix_status);
-    ix_close = dlg_button(g, L(S_CLOSE), OF_EXIT);
-    ix_go = dlg_button(g, L(M_IMPORT), OF_EXIT | OF_DEFAULT);
-    dlg_end(g);
-    iw.def = ix_go;
+    if (!tw_tree(&iw, RT_IMPORT)) return 0;
+    for (i = 0; i < 6; i++) { ix_f[i] = (short)(WIX_F0 + i); dlg_set(g, ix_f[i], ix_fmt == i); }
+    for (i = 0; i < 5; i++) { ix_c[i] = (short)(WIX_C0 + i); dlg_set(g, ix_c[i], ix_cs == (i ? i : CS_AUTO)); }
+    ix_j[0] = WIX_J0; ix_j[1] = WIX_J1;
+    dlg_set(g, ix_j[0], !ix_join); dlg_set(g, ix_j[1], ix_join);
+    ix_i[0] = WIX_I0; ix_i[1] = WIX_I1;
+    dlg_set(g, ix_i[0], !ix_into); dlg_set(g, ix_i[1], ix_into);
+    ix_stat = WIX_STATUS; ix_close = WIX_CLOSE; ix_go = WIX_GO;
     ix_status[0] = 0;
+    dlg_str(g, ix_stat, ix_status);
+    dlg_tree_end(g);
+    iw.def = ix_go;
     ix_enable();
-    (void)ix_stat;
+    return 1;
 }
 
 static void ix_changed(short it)
@@ -912,8 +859,6 @@ static void ex_read(void)
     for (i = 0; i < 3; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
 }
 
-static char ex_doclabel[24];
-
 static void ex_name(void)
 {
     DOC *d = live_doc(NULL);
@@ -934,52 +879,25 @@ static void ex_enable(void)
     ex_name();
 }
 
-static void ex_build(void)
+static int ex_build(void)
 {
     DLG *g = &ew.g;
     int i;
-    char *pc;
-    dlg_begin(g, NULL);
-    strncpy(ex_doclabel, L(S_XF_DOC), sizeof ex_doclabel - 1);      /* "Document:" */
-    pc = strchr(ex_doclabel, '%');
-    if (pc) *pc = 0;
-    for (pc = ex_doclabel + strlen(ex_doclabel); pc > ex_doclabel && pc[-1] == ' '; ) *--pc = 0;
-    dlg_label(g, ex_doclabel);
-    memset(ex_docline, ' ', 36);
-    ex_docline[36] = 0;
-    ex_doc = dlg_text(g, ex_docline);
-    dlg_row(g);
-    dlg_label(g, L(S_FORMAT));
-    for (i = 0; i < 6; i++) {
-        if (i == 3) { dlg_row(g); dlg_label(g, ""); }
-        ex_f[i] = dlg_radio(g, 1, fmt_name(i), ex_fmt == i);
-    }
-    dlg_row(g);
-    dlg_label(g, L(S_LINE_ENDINGS));
-    ex_e[0] = dlg_radio(g, 2, "Atari/DOS CR LF", ex_crlf);
-    ex_e[1] = dlg_radio(g, 2, "Unix LF", !ex_crlf);
-    dlg_row(g);
-    dlg_label(g, L(S_CHARACTERS));
-    ex_c[0] = dlg_radio(g, 3, "Atari ST", ex_cs == CS_ATARI);
-    ex_c[1] = dlg_radio(g, 3, "Windows", ex_cs == CS_WIN);
-    ex_c[2] = dlg_radio(g, 3, "UTF-8", ex_cs == CS_UTF8);
-    ex_c[3] = dlg_radio(g, 3, "UTF-16", ex_cs == CS_UTF16);
-    dlg_row(g);
-    dlg_label(g, L(S_PDF_PICTURES));
-    ex_p[0] = dlg_radio(g, 4, L(S_SCREEN), pdf_scale == 1);
-    ex_p[1] = dlg_radio(g, 4, "2x", pdf_scale == 2);
-    ex_p[2] = dlg_radio(g, 4, "3x", pdf_scale == 3);
-    dlg_row(g);
-    memset(ex_status, ' ', 46);
-    ex_status[46] = 0;
-    ex_stat = dlg_text(g, ex_status);
-    ex_close = dlg_button(g, L(S_CLOSE), OF_EXIT);
-    ex_go = dlg_button(g, L(M_EXPORT), OF_EXIT | OF_DEFAULT);
-    dlg_end(g);
-    ew.def = ex_go;
+    if (!tw_tree(&ew, RT_EXPORT)) return 0;
+    for (i = 0; i < 6; i++) { ex_f[i] = (short)(WEX_F0 + i); dlg_set(g, ex_f[i], ex_fmt == i); }
+    ex_e[0] = WEX_E0; ex_e[1] = WEX_E1;
+    dlg_set(g, ex_e[0], ex_crlf); dlg_set(g, ex_e[1], !ex_crlf);
+    for (i = 0; i < 4; i++) { ex_c[i] = (short)(WEX_C0 + i); dlg_set(g, ex_c[i], ex_cs == i + 1); }
+    for (i = 0; i < 3; i++) { ex_p[i] = (short)(WEX_P0 + i); dlg_set(g, ex_p[i], pdf_scale == i + 1); }
+    ex_doc = WEX_DOC; ex_stat = WEX_STATUS; ex_close = WEX_CLOSE; ex_go = WEX_GO;
+    ex_docline[0] = 0;
+    dlg_str(g, ex_doc, ex_docline);
     ex_status[0] = 0;
+    dlg_str(g, ex_stat, ex_status);
+    dlg_tree_end(g);
+    ew.def = ex_go;
     ex_enable();
-    (void)ex_doc; (void)ex_stat;
+    return 1;
 }
 
 static void ex_changed(short it)

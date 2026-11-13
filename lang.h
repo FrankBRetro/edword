@@ -119,6 +119,7 @@ enum {
     AL_NO_TOC_HERE,
     AL_NO_VDI,
     AL_NO_WINDOWS,
+    AL_NO_RSC,
     AL_SAFE_MODE,
     AL_SAVE_CHANGES,
     AL_SPELL_DONE,

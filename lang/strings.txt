@@ -716,6 +716,12 @@ de: Keine Fenster mehr frei.|Bitte eines schließen.
 es: No quedan ventanas libres.|Cierre una.
 it: Non ci sono altre finestre|libere. Chiuderne una.
 fr: Plus de fenêtre libre.|Fermez-en une.
+@AL_NO_RSC
+en: EdWord's resource file|(EDWORD.RSC) is missing|or doesn't match this|version.
+de: EdWords Ressourcendatei|(EDWORD.RSC) fehlt oder|passt nicht zu dieser|Version.
+es: Falta el archivo de|recursos (EDWORD.RSC) o|no es de esta versión.
+it: Il file di risorse|(EDWORD.RSC) manca o non|è di questa versione.
+fr: Le fichier ressource|(EDWORD.RSC) manque ou|n'est pas de cette version.
 @AL_SAFE_MODE
 en: Safe mode (Control held):|GDOS fonts are not loaded.
 de: Sicherer Modus (Control|gedrückt): keine GDOS-|Schriften geladen.

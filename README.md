@@ -80,14 +80,16 @@ FPU.
 - **Five languages** for the user interface and the manual: English, German,
   Spanish, Italian, French. The TOS language is used at first; Preferences
   changes it. Spelling and thesaurus stay British English.
-- **Resource files (ST)**: the menu bar, the Print and Preferences dialogs,
-  the font selector, the toolbar with its icons and the size, colour and
-  zoom popups come from `EDWORD.RSC` (one file per language,
+- **Resource files (ST)**: the menu bar, every dialog (and the dialogs in
+  the Find, Spelling, Thesaurus, Import and Export windows and the progress
+  window), the font selector, the toolbar with its icons and the size,
+  colour and zoom popups come from `EDWORD.RSC` (one file per language,
   `EDWORDDE.RSC` and so on), so they can be changed with a resource editor
-  and are drawn and handled by the AES. Without the files, or built with
-  `make RSC=0`, EdWord builds them itself. With an AES that has 3D objects (TOS 4,
-  MultiTOS, MagiC, XaAES, MyAES) the dialogs, the font selector and the
-  toolbar take the 3D look either way.
+  and are drawn and handled by the AES. EdWord needs the files beside it.
+  With an AES that has 3D objects (TOS 4, MultiTOS, MagiC, XaAES, MyAES)
+  they take the 3D look; under MagiC the check boxes, radio buttons and
+  edit fields are MagiC's own. On 16 colours and more the toolbar's icons
+  are in colour.
 - **Pictures placed to the pixel**: positions and sizes are kept in twips
   (1/20 point), so a picture or drawing lands on the screen pixel you drop
   it on at any zoom; Shift+arrow keys move a selected one by one pixel.
@@ -427,8 +429,6 @@ make ED_VERSION=3.1 ED_ABOUT="Built for our club"
 make EDDEMO=1                # ... that runs DEMO.SCR (manual screenshots)
 make CPU=030                 # EDW030.PRG; also CPU=030F, CPU=040, CPU=CF
 make cpus                    # all four (objects in build/<cpu>)
-make RSC=0                   # menus and dialogs built in, not from EDWORD*.RSC
-                             #   (make clean when switching)
 make rsc                     # EDWORD*.RSC and edrsc.h from lang/strings.txt
                              #   (tools/mkrsc.py; needs Python 3)
 make MKDIC.TTP               # dictionary builder for the ST
