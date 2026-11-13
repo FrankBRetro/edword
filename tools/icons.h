@@ -1,14 +1,15 @@
 /* Copyright (c) 2026 Francis C Bullen. SPDX-License-Identifier: MIT (see LICENSE) */
 /*
- * gemicon.c - 16x16 toolbar icons, drawn with vrt_cpyfm()
+ * icons.h - the toolbar's 16x16 icons, read by tools/mkrsc.py, which puts
+ * them in EDWORD*.RSC as images (EdWord doesn't compile this file).
  *
  * In ST medium resolution (8 pixel high characters) each pair of rows
  * is OR-ed together, so the icons keep their thin lines at half height.
+ * Each icon is a line with its name in a comment and its 16 words; each
+ * colour layer is the icon's IC_ name, a VDI pen and 16 words.
  */
-#include <gem.h>
-#include "gemui.h"
 
-static unsigned short icon16[IC_COUNT][16] = {
+static const unsigned short icon16[][16] = {
     /* BOLD    */ { 0x0000, 0x0000, 0x3FF0, 0x3878, 0x3838, 0x3838, 0x3878, 0x3FF0, 0x387C, 0x383C, 0x383C, 0x383C, 0x3878, 0x3FF8, 0x0000, 0x0000 },
     /* ITALIC  */ { 0x0000, 0x0000, 0x01FC, 0x0070, 0x0060, 0x00E0, 0x00C0, 0x01C0, 0x0180, 0x0380, 0x0300, 0x0700, 0x0600, 0x1FC0, 0x0000, 0x0000 },
     /* UNDER   */ { 0x0000, 0x3C3C, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x0C30, 0x07E0, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000 },
@@ -31,9 +32,8 @@ static unsigned short icon16[IC_COUNT][16] = {
     /* GUIDES  */ { 0x0000, 0x3FFC, 0x2004, 0x2AA4, 0x2004, 0x2824, 0x2004, 0x2824, 0x2004, 0x2824, 0x2004, 0x2AA4, 0x2004, 0x3FFC, 0x0000, 0x0000 },
     /* PGBRK   */ { 0x3FF8, 0x2008, 0x2BE8, 0x2008, 0x2BE8, 0x2008, 0x0000, 0xE739, 0xE739, 0x0000, 0x3FF8, 0x2008, 0x2BE8, 0x2008, 0x2BE8, 0x2008 },
 };
-static unsigned short icon8[IC_COUNT][8];
 
-/* colour layers for 16 colours and more :
+/* colour layers for 16 colours and more:
  * pixels drawn in a pen; those of the icon itself are taken from its
  * black. Pens are the VDI's standard colours, 0 white. */
 static const struct { short ic, pen; unsigned short m[16]; } layer16[] = {
@@ -54,76 +54,3 @@ static const struct { short ic, pen; unsigned short m[16]; } layer16[] = {
     { IC_CODES, 6, { 0x0000, 0x7FFE, 0x4C1E, 0x7FFE, 0x4046, 0x7FFE, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } },
     { IC_CODES, 0, { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x7FFE, 0x4FF2, 0x5FFA, 0x5FFA, 0x4FF2, 0x7FFE, 0x0000, 0x0000 } },
 };
-
-#define NLAYER ((int)(sizeof layer16 / sizeof layer16[0]))
-static unsigned short layer8[NLAYER][8];
-/* each icon's black: all of it in fewer than 16 colours, without its
- * coloured pixels in more */
-static unsigned short black16[IC_COUNT][16], black8[IC_COUNT][8];
-static int coloured;
-
-void icons_init(void)
-{
-    int i, r, k;
-    coloured = npens >= 16;
-    for (i = 0; i < IC_COUNT; i++)
-        for (r = 0; r < 16; r++) {
-            unsigned short m = 0;
-            if (coloured) for (k = 0; k < NLAYER; k++) if (layer16[k].ic == i) m |= layer16[k].m[r];
-            black16[i][r] = (unsigned short)(icon16[i][r] & ~m);
-        }
-    for (i = 0; i < IC_COUNT; i++)
-        for (r = 0; r < 8; r++) {
-            icon8[i][r] = (unsigned short)(icon16[i][2 * r] | icon16[i][2 * r + 1]);
-            black8[i][r] = (unsigned short)(black16[i][2 * r] | black16[i][2 * r + 1]);
-        }
-    for (k = 0; k < NLAYER; k++)
-        for (r = 0; r < 8; r++) {
-            layer8[k][r] = (unsigned short)(layer16[k].m[2 * r] | layer16[k].m[2 * r + 1]);
-            /* at half height a coloured pixel takes the place of a black one */
-            black8[layer16[k].ic][r] &= (unsigned short)~layer8[k][r];
-        }
-}
-
-int icons_coloured(void) { return coloured; }
-int icon_nlayers(void) { return coloured ? NLAYER : 0; }
-
-/* layer k: its icon, pen and pixels at the screen's icon height */
-const unsigned short *icon_layer(int k, int *ic, int *pen)
-{
-    *ic = layer16[k].ic; *pen = layer16[k].pen;
-    return icon_h() == 16 ? layer16[k].m : layer8[k];
-}
-
-/* an icon's black pixels (all of them without colour) */
-unsigned short *icon_black(int ic) { return icon_h() == 16 ? black16[ic] : black8[ic]; }
-
-int icon_h(void) { return hchar >= 16 ? 16 : 8; }
-
-/* draw an icon in pen 1 with its top left corner at x,y */
-static void blit_mask(const unsigned short *m, int pen, short x, short y);
-
-void draw_tbicon(int ic, short x, short y)
-{
-    int k;
-    for (k = 0; k < icon_nlayers(); k++)
-        if (layer16[k].ic == ic) blit_mask(icon_h() == 16 ? layer16[k].m : layer8[k], layer16[k].pen, x, y);
-    blit_mask(icon_black(ic), 1, x, y);
-}
-
-static void blit_mask(const unsigned short *m, int pen, short x, short y)
-{
-    MFDB src, dst;
-    short pxy[8], col[2];
-    int h = icon_h();
-
-    src.fd_addr = (void *)m;
-    src.fd_w = 16; src.fd_h = (short)h; src.fd_wdwidth = 1;
-    src.fd_stand = 0; src.fd_nplanes = 1;
-    src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
-    dst.fd_addr = 0;
-    pxy[0] = 0; pxy[1] = 0; pxy[2] = 15; pxy[3] = (short)(h - 1);
-    pxy[4] = x; pxy[5] = y; pxy[6] = (short)(x + 15); pxy[7] = (short)(y + h - 1);
-    col[0] = (short)pen; col[1] = 0;
-    vrt_cpyfm(vhandle, MD_TRANS, pxy, &src, &dst, col);
-}

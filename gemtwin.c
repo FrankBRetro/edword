@@ -108,7 +108,7 @@ static int tw_open(TWIN *t, int title, int at_bottom)
     winpos_get(t->name, &x, &y, NULL, NULL);          /* where it was last time */
     winpos_clamp(&x, &y, w, h);
     t->wh = wind_create(TWKIND, x, y, w, h);
-    if (t->wh < 0) { alert(1, 3, AL_NO_WINDOWS, DAB_OK); return 0; }
+    if (t->wh < 0) { alert(1, 3, AL_NO_WINDOWS, AB_OK); return 0; }
     wind_set_str(t->wh, WF_NAME, t->name);
     t->open = 1;
     t->curs = 0;
@@ -361,7 +361,7 @@ const TOOL find_tool = { f_owns, f_msg, f_click, f_key, f_close_tool, f_docgone 
 
 static TWIN sw;
 static struct {
-    int    ns, wrapped;
+    int    ns, wrapped, done;
     DOC   *d;
     long   s, e, from, start;
     char   word[WORDMAX], sug[6][WORDMAX], head[80], chg[WORDMAX];
@@ -380,7 +380,7 @@ int spell_ensure(int quiet)
         ok = spell_load_main(path);
         busy_end();
         if (!ok) {
-            if (!quiet) alert(1, 3, AL_NO_DIC, DAB_OK);
+            if (!quiet) alert(1, 3, AL_NO_DIC, AB_OK);
             if (!spell_nuser) return 0;
         }
     }
@@ -417,7 +417,26 @@ void spell_close(void)
 
 DOC *spell_doc(void) { return sw.open ? sp.d : NULL; }
 
-/* show the next misspelt word, or finish */
+/* the check is over: say so in the window, which stays open (no alert to
+ * hold up the other windows) until Stop or its closer */
+static void sp_done(void)
+{
+    int i;
+    sp.done = 1;
+    strcpy(sp.head, L(S_SPELL_DONE));
+    sp.chg[0] = 0;
+    sw.idx = 0;
+    for (i = 0; i < 6; i++) { sp.sug[i][0] = 0; show_obj(&sw, sp.sb[i], 0); }
+    set_disabled(&sw, sp.rep, 1);
+    set_disabled(&sw, sp.ign, 1);
+    set_disabled(&sw, sp.iga, 1);
+    set_disabled(&sw, sp.add, 1);
+    sw.def = sp.stp;
+    tw_redraw(&sw);
+}
+
+/* show the next misspelt word, or finish: at the end of the document it
+ * goes on from the start, without asking, up to where it began */
 static void sp_find(void)
 {
     DOC *d = sp.d;
@@ -430,19 +449,13 @@ static void sp_find(void)
         busy_ptr(0);
         if (sp.wrapped && (s < 0 || s >= sp.start)) s = -1;
         else if (s < 0 && !sp.wrapped && sp.start > 0) {
-            if (alert(1, 2, AL_SPELL_WRAP, AB_CONT_STOP) == 1) {
-                sp.wrapped = 1;
-                sp.from = 0;
-                continue;
-            }
+            sp.wrapped = 1;
+            sp.from = 0;
+            continue;
         }
         break;
     }
-    if (s < 0) {
-        spell_close();
-        alert(1, 1, AL_SPELL_DONE, DAB_OK);
-        return;
-    }
+    if (s < 0) { sp_done(); return; }
     sp.s = s;
     sp.e = e;
     select_range(d, s, e);
@@ -477,6 +490,7 @@ static void sp_act(short it, int clicks)
     int i;
     (void)clicks;
     if (it == sp.stp) { spell_close(); return; }
+    if (sp.done) return;
     if (!sp_still_there()) {
         /* the text changed under us: look again from there */
         sp.from = sp.s <= d->len ? sp.s : d->len;
@@ -512,7 +526,11 @@ void spell_run(DOC *d)
     sp.head[0] = 0; sp.chg[0] = 0;
     if (!tw_open(&sw, S_SPELL_TITLE, 1)) return;
     sp.d = d;
-    sp.wrapped = 0;
+    sp.wrapped = sp.done = 0;
+    set_disabled(&sw, sp.rep, 0);
+    set_disabled(&sw, sp.ign, 0);
+    set_disabled(&sw, sp.iga, 0);
+    sw.def = sp.rep;
     sp.start = sp.from = doc_sel(d, &a, &b) ? a : d->cursor;
     sp_find();
 }
@@ -627,7 +645,7 @@ static void th_lookup(void)
     char path[300];
     if (!thes_ready()) {
         sprintf(path, "%sEDWORD.THS", progdir);
-        if (!thes_open(path)) { alert(1, 3, AL_NO_THS, DAB_OK); return; }
+        if (!thes_open(path)) { alert(1, 3, AL_NO_THS, AB_OK); return; }
     }
     busy_ptr(1);
     thes_lookup(th.word, &th.r);

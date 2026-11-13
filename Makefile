@@ -2,9 +2,13 @@
 # EdWord - build with the m68k-atari-mint cross toolchain and gemlib
 #   https://tho-otto.de/crossmint.php  or  Vincent Riviere's packages
 #
-#   make                      EDWORD.PRG
+#   make                      every version and DIST (see make dist below)
+#   make EDWORD.PRG           just the 68000 version
 #   make EDLOG=1              ... that writes a start-up log, EDWORD.LOG
 #   make EDDEMO=1             ... that runs DEMO.SCR (screenshots for the manual)
+#   make EDTEST=1             EDWTEST.PRG, the test build: in English, it runs
+#                             every menu command, edits in each view, saves,
+#                             exports and loads, and logs it all to EDTEST.LOG
 #   make ED_VERSION=3.1 ED_ABOUT="Built for the Atari club"
 #                             set the version and the sentence in the About box
 #
@@ -14,6 +18,11 @@
 #   make CPU=040              EDW040.PRG   68040 or 68060 (with its FPU)
 #   make CPU=CF               EDWCF.PRG    ColdFire V4e (FireBee)
 #   make cpus                 all four
+#   make dist                 all five, then DIST: DIST/EDWORD ready to copy to an
+#                             Atari (68000 program, resource files, dictionaries,
+#                             manual), DIST/CPU/<cpu> the faster programs, DIST/LANG/
+#                             <lang> each language's dictionary and manual; and all
+#                             of it in EDWORD-<version>.zip
 # The ColdFire one needs MiNTLib and gemlib built for m5475 (the "V4E"
 # libraries); the others use the usual 68000 ones. Each refuses to start, with
 # an alert, on a processor it can't run on (cpucheck.c).
@@ -45,6 +54,10 @@ endif
 ifdef CPU
 OBJDIR   = build/$(CPU)
 endif
+ifdef EDTEST
+TARGET   = EDWTEST.PRG
+OBJDIR   = build/test
+endif
 # The processor check and the strings of its alert run on any ST. The 68k
 # versions link with the 68000 libraries too, so that the C library's start-up
 # runs everywhere and the check gets its turn (EdWord calls nothing in them
@@ -67,6 +80,9 @@ endif
 ifdef EDDEMO
 CFLAGS += -DEDDEMO
 endif
+ifdef EDTEST
+CFLAGS += -DEDDEMO -DEDTEST
+endif
 ifdef ED_VERSION
 CFLAGS += -DED_VERSION='"$(ED_VERSION)"'
 endif
@@ -77,9 +93,17 @@ LDLIBS  = -lgem
 
 CORE    = doc.o layout.o edit.o undo.o docops.o rtf.o pdf.o pagedraw.o raster.o img.o thes.o \
           charset.o text.o codes.o spell.o md.o fwp.o protext.o chart.o prt.o
-GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemicon.o gemtool.o gemtwin.o gemobj.o gemclip.o \
+GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemtheme.o gemtool.o gemtwin.o gemobj.o gemclip.o \
           demo.o lang.o cpucheck.o
 OBJS    = $(addprefix $(OBJDIR)/,$(GEMOBJ) $(CORE))
+
+# "make" alone builds every processor's version and DIST; a build for one
+# processor, or with EDLOG, EDDEMO, EDDIAG or EDTEST, just its program
+ifeq ($(CPU)$(EDLOG)$(EDDEMO)$(EDDIAG)$(EDTEST),)
+all: dist
+else
+all: $(TARGET)
+endif
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDCPU) -o $@ $(OBJS) $(LDLIBS)
@@ -98,8 +122,8 @@ lang.c lang.h: lang/strings.txt tools/mklang.py
 $(addprefix $(OBJDIR)/,$(GEMOBJ)): lang.h gemui.h edrsc.h
 
 # the resource files, one per language, and their object numbers
-RSCS    = EDWORD.RSC EDWORDDE.RSC EDWORDES.RSC EDWORDIT.RSC EDWORDFR.RSC
-rsc edrsc.h $(RSCS): lang/strings.txt tools/mkrsc.py tools/mklang.py gemicon.c
+RSCS    = EDWORD.RSC EDWORDDE.RSC EDWORDES.RSC EDWORDIT.RSC EDWORDFR.RSC EDWORDCS.RSC
+rsc edrsc.h $(RSCS): lang/strings.txt tools/mkrsc.py tools/mklang.py tools/icons.h
 	$(PYTHON) tools/mkrsc.py lang/strings.txt .
 # the version and About text change with the command line
 $(OBJDIR)/gemdlg.o: FORCE
@@ -134,6 +158,11 @@ mkdic: tools/mkdic.c charset.c wp.h
 
 clean:
 	rm -f *.o EDWORD.PRG MKDIC.TTP hosttest mkdic
-	rm -rf build EDW030.PRG EDW030F.PRG EDW040.PRG EDWCF.PRG
+	rm -rf build EDW030.PRG EDW030F.PRG EDW040.PRG EDWCF.PRG EDWTEST.PRG DIST EDWORD-*.zip
 
-.PHONY: clean cpus FORCE
+dist: EDWORD.PRG $(RSCS)
+	$(MAKE) cpus
+	$(MAKE) EDTEST=1
+	sh tools/mkdist.sh
+
+.PHONY: all clean cpus dist FORCE

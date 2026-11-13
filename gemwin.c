@@ -37,9 +37,21 @@ static int in_rect(const GRECT *r, short x, short y)
     return r->g_h > 0 && x >= r->g_x && y >= r->g_y && x < r->g_x + r->g_w && y < r->g_y + r->g_h;
 }
 
+/* the rulers are being drawn (their white and black are the theme's) */
+static int in_ruler;
+
+/* the furniture's colours in a theme: the desk's pattern, the rulers'
+ * grey margins, white and black */
+static int ink(void) { return theme_on() && in_ruler ? theme_pen(TH_TEXT) : 1; }
+
 static void fill(const GRECT *r, int color, int pattern)
 {
     short p[4];
+    if (theme_on()) {
+        if (color == 1 && pattern == 4) { color = theme_pen(TH_DESK); pattern = 0; }
+        else if (color == 1 && pattern == 2) { color = theme_pen(TH_MARGIN); pattern = 0; }
+        else if (in_ruler && color == 0 && pattern == 0) color = theme_pen(TH_FACE);
+    }
     p[0] = r->g_x; p[1] = r->g_y; p[2] = r->g_x + r->g_w - 1; p[3] = r->g_y + r->g_h - 1;
     vswr_mode(vhandle, MD_REPLACE);
     vsf_interior(vhandle, pattern ? FIS_PATTERN : FIS_SOLID);
@@ -104,6 +116,16 @@ void work_area(DOC *d, GRECT *g)
 #define RULW (3 * wchar + 4)
 static int rulers_on(DOC *d) { return pref_rulers && d->view != VIEW_CODES && !d->iconified; }
 
+/* the status line along the top: the font, the alignment, the page, the
+ * zoom (drawn by EdWord, so a colour theme colours it too) */
+#define SBH (hchar + 4)
+static void status_rect(DOC *d, GRECT *sb)
+{
+    work_area(d, sb);
+    if (d->iconified) sb->g_h = 0;
+    else if (sb->g_h > SBH) sb->g_h = SBH;
+}
+
 static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
 {
     GRECT wa;
@@ -113,6 +135,8 @@ static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
     tb->g_h = cp->g_h = hr->g_h = vr->g_h = 0;
     if (d->iconified) return;
     y = wa.g_y; h = wa.g_h;
+    y += SBH; h -= SBH;
+    tb->g_y = y;
     if (d->toolbar) { tb->g_h = TBH; y += TBH; h -= TBH; }
     if (h < 0) h = 0;
     tp->g_y = y; tp->g_h = h;
@@ -332,7 +356,8 @@ static void draw_codes_line(CODES *c, long li, long x, long base, int cols)
 {
     long s = c->ls[li], n = codes_line_len(c, li), i = 0;
     char buf[256];
-    short fg = (short)ed_fg(), pen = pref_display == DISP_NORMAL && npens >= 4 ? 2 : fg;
+    short fg = (short)(theme_on() && pref_display == DISP_NORMAL ? theme_pen(TH_TEXT) : ed_fg());
+    short pen = pref_display == DISP_NORMAL && npens >= 4 ? 2 : fg;
     if (n > cols) n = cols;
     if (n > 255) n = 255;
     while (i < n) {
@@ -362,14 +387,16 @@ static void draw_codes_pane(DOC *d, const GRECT *cp, GRECT *clip)
     CODES *c = &d->cv;
     short pxy[4];
     long li, a, b, x0 = cp->g_x + 4, y0 = cp->g_y + 2;
-    int cols = (int)((cp->g_w - 8) / wchar);
+    int cols = (int)((cp->g_w - 8) / wchar), th;
 
     if (!rc_inter(cp, &r)) return;
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
-    fill(&r, ed_bg(), 0);
+    /* the quick codes in the colour theme's, on the paper display */
+    th = theme_on() && pref_display == DISP_NORMAL;
+    fill(&r, th ? theme_pen(TH_LIGHT) : ed_bg(), 0);
     set_sys_font();
-    vst_color(vhandle, ed_fg());
+    vst_color(vhandle, th ? theme_pen(TH_TEXT) : ed_fg());
     vswr_mode(vhandle, MD_TRANS);
     for (li = c->top; li < c->nl; li++) {
         long y = y0 + (li - c->top) * hchar;
@@ -401,25 +428,14 @@ static void draw_codes_pane(DOC *d, const GRECT *cp, GRECT *clip)
 
 /* ---- toolbar ------------------------------------------------------- */
 
-/* Icon buttons; the font, size, colour and zoom buttons open popups and
- * are marked with a small arrow. */
-typedef struct { short icon, w, cmd; } TBI;    /* w in pixels; icon < 0: gap */
+/* The toolbar is a tree in the resource file: a box for each button with
+ * its icon as images (and a small arrow on the font, size, colour and
+ * zoom buttons, which open popups), drawn and found by the AES. These
+ * stand for those four in RSC_TB_CMDS. */
 #define TB_FONT  (-1)
 #define TB_SIZE  (-2)
 #define TB_COLOR (-3)
 #define TB_ZOOM  (-4)
-#define BTNW 22
-#define POPW 30
-static const TBI tbi[] = {
-    { IC_UNDO, BTNW, C_UNDO }, { IC_REDO, BTNW, C_REDO }, { -1, 6, 0 },
-    { IC_BOLD, BTNW, C_BOLD }, { IC_ITALIC, BTNW, C_ITALIC }, { IC_UNDER, BTNW, C_UNDER }, { -1, 6, 0 },
-    { IC_LEFT, BTNW, C_JLEFT }, { IC_CENTRE, BTNW, C_JCENTRE }, { IC_RIGHT, BTNW, C_JRIGHT },
-    { IC_JUSTIFY, BTNW, C_JFULL }, { -1, 6, 0 },
-    { IC_BULLETS, BTNW, C_BULLETS }, { IC_NUMBERS, BTNW, C_NUMBERS }, { IC_TABLE, BTNW, C_TBLINS }, { IC_PGBRK, BTNW, C_PGBRK }, { -1, 6, 0 },
-    { IC_FONT, POPW, TB_FONT }, { IC_SIZE, POPW, TB_SIZE }, { IC_COLOUR, POPW, TB_COLOR }, { -1, 6, 0 },
-    { IC_ZOOM, POPW, TB_ZOOM }, { IC_SPELL, BTNW, C_SPELL }, { IC_CODES, BTNW, C_SPLIT }, { -1, 6, 0 },
-    { IC_RULER, BTNW, C_RULERS }, { IC_GUIDES, BTNW, C_GUIDES }, { -1, 0, 0 }
-};
 
 static int tb_active(DOC *d, int cmd)
 {
@@ -456,92 +472,64 @@ static long tb_key(DOC *d)
            ((long)pref_rulers << 26) ^ ((long)pref_guides << 27);
 }
 
-/* ---- the toolbar from the resource file: a box for each button with
- * its icon (and the popup mark) as images, drawn and found by the AES */
 static const short tbcmd[][2] = { RSC_TB_CMDS };
 #define NTBC ((int)(sizeof tbcmd / sizeof tbcmd[0]))
+static const short tb_mono[] = { RSC_TB_MONO }, tb_colour[] = { RSC_TB_COLOUR }, tb_coloured[] = { RSC_TB_COLOURED };
+#define NTBM ((int)(sizeof tb_mono / sizeof tb_mono[0]))
+#define NTBL ((int)(sizeof tb_colour / sizeof tb_colour[0]))
 
-/* in 16 colours and more: a copy of the resource's toolbar with the
- * icons' coloured pixels as images of their own (in the pens' colours)
- * under each black icon, all drawn by the AES */
-static const short tbimg[][2] = {
-    { TBO_UNDOIMG, IC_UNDO }, { TBO_REDOIMG, IC_REDO }, { TBO_BOLDIMG, IC_BOLD }, { TBO_ITALICIMG, IC_ITALIC },
-    { TBO_UNDERIMG, IC_UNDER }, { TBO_LEFTIMG, IC_LEFT }, { TBO_CENTREIMG, IC_CENTRE }, { TBO_RIGHTIMG, IC_RIGHT },
-    { TBO_JUSTIFYIMG, IC_JUSTIFY }, { TBO_BULLETSIMG, IC_BULLETS }, { TBO_NUMBERSIMG, IC_NUMBERS },
-    { TBO_TABLEIMG, IC_TABLE }, { TBO_PGBRKIMG, IC_PGBRK }, { TBO_FONTIMG, IC_FONT }, { TBO_SIZEIMG, IC_SIZE },
-    { TBO_COLOURIMG, IC_COLOUR }, { TBO_ZOOMIMG, IC_ZOOM }, { TBO_SPELLIMG, IC_SPELL }, { TBO_CODESIMG, IC_CODES },
-    { TBO_RULERIMG, IC_RULER }, { TBO_GUIDESIMG, IC_GUIDES }
-};
-#define NTBIMG ((int)(sizeof tbimg / sizeof tbimg[0]))
-#define MAXLAYER 24
-static OBJECT tbx[TBO_COUNT + MAXLAYER];
-static BITBLK tbx_bb[NTBIMG + MAXLAYER];
-static OBJECT *tbx_from;
-
-static OBJECT *tb_colour(OBJECT *t)
+static int is_layer(short o)
 {
-    int i, k, n = TBO_COUNT, nb = 0;
-    if (t == tbx_from) return tbx;
-    memcpy(tbx, t, sizeof(OBJECT) * TBO_COUNT);
-    tbx[TBO_COUNT - 1].ob_flags &= ~OF_LASTOB;
-    for (i = 0; i < NTBIMG; i++) {
-        /* the black image: the icon without its coloured pixels */
-        OBJECT *o = &tbx[tbimg[i][0]];
-        tbx_bb[nb] = *o->ob_spec.bitblk;
-        tbx_bb[nb].bi_pdata = (short *)icon_black(tbimg[i][1]);
-        o->ob_spec.bitblk = &tbx_bb[nb++];
-    }
-    for (k = 0; k < icon_nlayers() && n < TBO_COUNT + MAXLAYER; k++) {
-        int ic, pen;
-        const unsigned short *m = icon_layer(k, &ic, &pen);
-        OBJECT *img = NULL, *l = &tbx[n];
-        short box = -1;
-        for (i = 0; i < NTBIMG; i++) if (tbimg[i][1] == ic) img = &tbx[tbimg[i][0]];
-        if (!img) continue;
-        for (i = 1; i < TBO_COUNT; i++)          /* the button it's in */
-            if (tbx[i].ob_head >= 0 && &tbx[tbx[i].ob_head] <= img && &tbx[tbx[i].ob_tail] >= img) box = (short)i;
-        if (box < 0) continue;
-        *l = *img;
-        tbx_bb[nb] = *img->ob_spec.bitblk;
-        tbx_bb[nb].bi_pdata = (short *)m;
-        tbx_bb[nb].bi_color = (short)pen;
-        l->ob_spec.bitblk = &tbx_bb[nb++];
-        l->ob_flags = 0;
-        l->ob_next = tbx[box].ob_head;           /* drawn first: under the black */
-        l->ob_head = l->ob_tail = -1;
-        tbx[box].ob_head = (short)n;
-        n++;
-    }
-    tbx[n - 1].ob_flags |= OF_LASTOB;
-    tbx_from = t;
-    return tbx;
+    int i;
+    for (i = 0; i < NTBL; i++) if (tb_colour[i] == o) return 1;
+    return 0;
 }
 
-static int tb_layer(short o) { return o >= TBO_COUNT; }
-
+/* the toolbar's tree, where the toolbar is; the icons in colour on 16
+ * colours and more */
 static OBJECT *tb_tree(const GRECT *tb)
 {
     OBJECT *t = rsc_tree(hchar >= 16 ? RT_TOOLBAR : RT_TOOLBAR8);
-    if (!t || t[0].ob_height != tb->g_h) return NULL;
-    if (icons_coloured()) t = tb_colour(t);
+    int i, col = npens >= 16;
+    if (!t) return NULL;
     t[0].ob_x = tb->g_x; t[0].ob_y = tb->g_y;
     t[0].ob_width = t[TBO_LINE].ob_width = tb->g_w;
+    t[0].ob_height = tb->g_h;
+    t[TBO_LINE].ob_y = (short)(tb->g_h - 1);
+    for (i = 0; i < NTBM; i++) {
+        if (col) t[tb_mono[i]].ob_flags |= OF_HIDETREE; else t[tb_mono[i]].ob_flags &= ~OF_HIDETREE;
+        if (col) t[tb_coloured[i]].ob_flags &= ~OF_HIDETREE; else t[tb_coloured[i]].ob_flags |= OF_HIDETREE;
+    }
+    for (i = 0; i < NTBL; i++)
+        if (col) t[tb_colour[i]].ob_flags &= ~OF_HIDETREE; else t[tb_colour[i]].ob_flags |= OF_HIDETREE;
+    /* a colour theme: the bar and its buttons are drawn by EdWord in the
+     * theme's colours, the icons on them still by the AES */
+    {
+        static USERBLK ub[1 + NTBC];
+        if (theme_on()) {
+            theme_userdef(&t[0], &ub[0], 0);
+            for (i = 0; i < NTBC; i++) theme_userdef(&t[tbcmd[i][0]], &ub[1 + i], 1);
+        } else {
+            t[0].ob_type = G_BOX; t[0].ob_spec.index = 0x00001100L;
+            for (i = 0; i < NTBC; i++) { t[tbcmd[i][0]].ob_type = G_BOX; t[tbcmd[i][0]].ob_spec.index = 0x00011170L; }
+        }
+    }
     return t;
 }
 
 /* the states for this document: on, greyed, the 3D look */
 static void tb_states(DOC *d, OBJECT *t)
 {
-    int i;
-    if (aes_3d) t[0].ob_flags |= OF_FL3DBAK;
+    int i, th = theme_on(), look3d = aes_3d && !th;
+    if (look3d) t[0].ob_flags |= OF_FL3DBAK;
     for (i = 0; i < NTBC; i++) {
         short o = tbcmd[i][0], c, on = (short)tb_active(d, tbcmd[i][1]);
         short off = (short)((tbcmd[i][1] == TB_COLOR && !colour_on) || tb_disabled(d, tbcmd[i][1]));
         t[o].ob_state = (short)((on ? OS_SELECTED : 0) | (off ? OS_DISABLED : 0));
-        if (aes_3d) t[o].ob_flags |= OF_FL3DACT;
+        if (look3d) t[o].ob_flags |= OF_FL3DACT;
         for (c = t[o].ob_head; c > o; c = t[c].ob_next) {
-            /* white on the black of a selected button, without 3D */
-            if (!tb_layer(c)) t[c].ob_spec.bitblk->bi_color = (short)(on && !aes_3d ? 0 : 1);
+            /* white on the black of a selected button, without 3D or a theme */
+            if (!is_layer(c)) t[c].ob_spec.bitblk->bi_color = (short)(on && !aes_3d && !th ? 0 : 1);
             t[c].ob_state = (short)(off ? OS_DISABLED : 0);
         }
     }
@@ -551,81 +539,21 @@ static void tb_states(DOC *d, OBJECT *t)
 short tb_item_x(DOC *d, int cmd)
 {
     GRECT tb, tp, cp;
-    long x;
     int i;
     OBJECT *t;
     get_panes(d, &tb, &tp, &cp);
-    if ((t = tb_tree(&tb)) != NULL) {
-        for (i = 0; i < NTBC; i++) if (tbcmd[i][1] == cmd) return (short)(tb.g_x + t[tbcmd[i][0]].ob_x);
-        return -1;
-    }
-    x = tb.g_x + 4;
-    for (i = 0; tbi[i].w; i++) {
-        if (tbi[i].icon >= 0 && tbi[i].cmd == cmd) return (short)x;
-        x += tbi[i].w;
-    }
+    if ((t = tb_tree(&tb)) == NULL) return -1;
+    for (i = 0; i < NTBC; i++) if (tbcmd[i][1] == cmd) return (short)(tb.g_x + t[tbcmd[i][0]].ob_x);
     return -1;
 }
 
 static void draw_toolbar(DOC *d, const GRECT *tb, GRECT *clip)
 {
     GRECT r = *clip;
-    short pxy[4], pl[10];
-    long x = tb->g_x + 4, by = tb->g_y + 2, bh = tb->g_h - 5;
-    int i, ih = icon_h();
     OBJECT *t;
-
-    if (!rc_inter(tb, &r)) return;
-    if ((t = tb_tree(tb)) != NULL) {
-        tb_states(d, t);
-        objc_draw(t, 0, 8, r.g_x, r.g_y, r.g_w, r.g_h);
-        tb_state[d->slot] = tb_key(d);
-        return;
-    }
-    pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
-    vs_clip(vhandle, 1, pxy);
-    fill(&r, 0, 0);
-    vswr_mode(vhandle, MD_TRANS);
-    vsl_type(vhandle, 1); vsl_color(vhandle, 1); vsl_width(vhandle, 1);
-    pl[0] = tb->g_x; pl[2] = tb->g_x + tb->g_w - 1; pl[1] = pl[3] = tb->g_y + tb->g_h - 1;
-    v_pline(vhandle, 2, pl);
-    for (i = 0; tbi[i].w; i++) {
-        long bw = tbi[i].w - 2;
-        if (tbi[i].icon >= 0) {
-            pl[0] = pl[6] = pl[8] = (short)x; pl[2] = pl[4] = (short)(x + bw - 1);
-            pl[1] = pl[3] = pl[9] = (short)by; pl[5] = pl[7] = (short)(by + bh);
-            vsl_type(vhandle, 1);
-            v_pline(vhandle, 5, pl);
-            draw_tbicon(tbi[i].icon, (short)(x + 3), (short)(by + (bh + 1 - ih) / 2));
-            if (tbi[i].cmd < 0) {                     /* popup arrow */
-                long ax = x + bw - 9, ay = by + bh / 2 - 1, k;
-                for (k = 0; k < 3; k++) {
-                    pl[0] = (short)(ax + k); pl[2] = (short)(ax + 6 - k);
-                    pl[1] = pl[3] = (short)(ay + k);
-                    v_pline(vhandle, 2, pl);
-                }
-            }
-            if ((tbi[i].cmd == TB_COLOR && !colour_on) || tb_disabled(d, tbi[i].cmd)) {   /* greyed */
-                GRECT g;
-                g.g_x = (short)(x + 1); g.g_y = (short)(by + 1); g.g_w = (short)(bw - 2); g.g_h = (short)(bh - 1);
-                vswr_mode(vhandle, MD_TRANS);
-                vsf_interior(vhandle, FIS_PATTERN); vsf_style(vhandle, 4); vsf_color(vhandle, 0);
-                pl[0] = g.g_x; pl[1] = g.g_y; pl[2] = g.g_x + g.g_w - 1; pl[3] = g.g_y + g.g_h - 1;
-                vr_recfl(vhandle, pl);
-                vsf_interior(vhandle, FIS_SOLID);
-            }
-            if (tb_active(d, tbi[i].cmd)) {
-                vswr_mode(vhandle, MD_XOR);
-                vsf_interior(vhandle, FIS_SOLID);
-                vsf_color(vhandle, 1);
-                xor_box(x + 1, by + 1, x + bw - 2, by + bh - 1);
-                vswr_mode(vhandle, MD_TRANS);
-            }
-        }
-        x += tbi[i].w;
-    }
-    vswr_mode(vhandle, MD_REPLACE);
-    vs_clip(vhandle, 0, pxy);
+    if (!rc_inter(tb, &r) || (t = tb_tree(tb)) == NULL) return;
+    tb_states(d, t);
+    objc_draw(t, 0, 8, r.g_x, r.g_y, r.g_w, r.g_h);
     tb_state[d->slot] = tb_key(d);
 }
 
@@ -633,28 +561,17 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
 {
     static const char *items[MAX_FONTS + 2];
     static char sz[NSIZES + 1][16], zm[NZOOM][8];
-    long x = tb->g_x + 4;
     int i, k, n, sel, cmd = 0;
-    short px, py;
+    short px, py, o, dummy;
     OBJECT *t = tb_tree(tb);
 
-    if (t) {
-        short o = objc_find(t, 0, 8, mx, (short)(tb->g_y + tb->g_h / 2)), dummy;
-        if (o > 0 && t[o].ob_type == G_IMAGE) o = t[o].ob_next;      /* the button it's in */
-        while (o > 0 && t[o].ob_type == G_IMAGE) o = t[o].ob_next;
-        for (i = 0; i < NTBC && tbcmd[i][0] != o; i++) ;
-        if (i == NTBC) return;
-        cmd = tbcmd[i][1];
-        objc_offset(t, o, &px, &dummy);
-    } else {
-        for (i = 0; tbi[i].w; i++) {
-            if (tbi[i].icon >= 0 && mx >= x && mx < x + tbi[i].w - 2) break;
-            x += tbi[i].w;
-        }
-        if (!tbi[i].w) return;
-        cmd = tbi[i].cmd;
-        px = (short)x;
-    }
+    if (!t) return;
+    o = objc_find(t, 0, 8, mx, (short)(tb->g_y + tb->g_h / 2));
+    while (o > 0 && t[o].ob_type == G_IMAGE) o = t[o].ob_next;      /* the button it's in */
+    for (i = 0; i < NTBC && tbcmd[i][0] != o; i++) ;
+    if (i == NTBC) return;
+    cmd = tbcmd[i][1];
+    objc_offset(t, o, &px, &dummy);
     py = (short)(tb->g_y + tb->g_h);
     switch (cmd) {
     case TB_FONT: {
@@ -691,11 +608,13 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
         n = -1;
         for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (zooms[k] == d->zoom && !d->fitw) n = k; }
         items[NZOOM] = L(M_ZOOMFIT);
-        if (d->fitw) n = NZOOM;
+        items[NZOOM + 1] = L(M_ZOOMPAGE);
+        if (d->fitw) n = d->fitw == FIT_PAGE ? NZOOM + 1 : NZOOM;
         sel = popup_rsc(RT_POPZOOM, n, px, py);
-        if (sel == -3) sel = popup(items, NZOOM + 1, n, px, py);
+        if (sel == -3) sel = popup(items, NZOOM + 2, n, px, py);
         if (sel >= 0 && sel < NZOOM) set_zoom(d, zooms[sel]);
-        else if (sel == NZOOM) set_fit_width(d, 1);
+        else if (sel == NZOOM) set_fit_width(d, FIT_WIDTH);
+        else if (sel == NZOOM + 1) set_fit_width(d, FIT_PAGE);
         break;
     default:
         if (!tb_disabled(d, cmd)) do_cmd(cmd);
@@ -760,7 +679,7 @@ static void tri(long x, long y, int up)
     p[2] = (short)(x - s); p[3] = (short)(up ? y + s : y - s);
     p[4] = (short)(x + s); p[5] = p[3];
     vsf_interior(vhandle, FIS_SOLID);
-    vsf_color(vhandle, 1);
+    vsf_color(vhandle, ink());
     v_fillarea(vhandle, 3, p);
 }
 
@@ -815,6 +734,7 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
     if (!rc_inter(hr, &r)) return;
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
+    in_ruler = 1;
     page_fmt(d, ln->page, &f);
     /* off the page: the desk; the margins: grey; between: white */
     {
@@ -832,9 +752,10 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
         fill_margin(mr, hr->g_y, pr - mr, hr->g_h, 1);
     }
     /* the marks, every millimetre when there's room */
-    vsl_color(vhandle, 1); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
+    vsl_color(vhandle, ink()); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
     vswr_mode(vhandle, MD_TRANS);
     set_sys_font();
+    vst_color(vhandle, ink());
     wmm = (long)PS(d).w * 254 / 720;
     step = label_step(d, mm_x, 4L * wchar);   /* two digits and two spaces */
     for (mm = 0; mm <= wmm; mm++) {
@@ -874,10 +795,12 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
         tri(xl, base - (hchar >= 16 ? 4 : 3), 1);
         tri(xr, base - (hchar >= 16 ? 4 : 3), 1);
     }
-    vsl_color(vhandle, 1);
+    vsl_color(vhandle, ink());
     hline2(hr->g_x, hr->g_x + hr->g_w - 1, base);
     vswr_mode(vhandle, MD_REPLACE);
     vs_clip(vhandle, 0, pxy);
+    in_ruler = 0;
+    vsl_color(vhandle, 1);
     style_reset();
     rul_state[d->slot] = ruler_key(d);
 }
@@ -894,8 +817,10 @@ static void draw_vruler(DOC *d, const GRECT *vr, const GRECT *tp, GRECT *clip)
     if (!rc_inter(vr, &r)) return;
     pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
     vs_clip(vhandle, 1, pxy);
-    vsl_color(vhandle, 1); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
+    in_ruler = 1;
+    vsl_color(vhandle, ink()); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
     set_sys_font();
+    vst_color(vhandle, ink());
     step = label_step(d, mm_y, hchar + 2);
     cur = vr->g_y;                         /* drawn down to here */
     for (pg = 0; pg < np; pg++) {
@@ -936,6 +861,8 @@ static void draw_vruler(DOC *d, const GRECT *vr, const GRECT *tp, GRECT *clip)
     fill_span(vr->g_x, cur, vr->g_w, bottom - cur, 1, 4);   /* the desk below the last page */
     vline2(right, vr->g_y, vr->g_y + vr->g_h - 1);
     vs_clip(vhandle, 0, pxy);
+    in_ruler = 0;
+    vsl_color(vhandle, 1);
     style_reset();
 }
 
@@ -1003,11 +930,40 @@ static void draw_guides(DOC *d, int page, long x, long y, const GRECT *clip)
     vswr_mode(vhandle, MD_REPLACE);
 }
 
+/* the status line: white and black, or the colour theme's */
+static void draw_status(DOC *d, GRECT *clip)
+{
+    GRECT sb, r = *clip;
+    short pxy[4], dmy;
+    int th = theme_on();
+    status_rect(d, &sb);
+    if (!rc_inter(&sb, &r)) return;
+    pxy[0] = r.g_x; pxy[1] = r.g_y; pxy[2] = r.g_x + r.g_w - 1; pxy[3] = r.g_y + r.g_h - 1;
+    vs_clip(vhandle, 1, pxy);
+    sb.g_h--;
+    fill(&sb, th ? theme_pen(TH_FACE) : 0, 0);
+    pxy[0] = sb.g_x; pxy[2] = sb.g_x + sb.g_w - 1; pxy[1] = pxy[3] = sb.g_y + sb.g_h;
+    vsl_color(vhandle, th ? theme_pen(TH_DARK) : 1); vsl_type(vhandle, 1); vsl_width(vhandle, 1);
+    vswr_mode(vhandle, MD_REPLACE);
+    v_pline(vhandle, 2, pxy);
+    vsl_color(vhandle, 1);
+    set_sys_font();
+    vst_color(vhandle, th ? theme_pen(TH_TEXT) : 1);
+    vst_alignment(vhandle, 0, 5, &dmy, &dmy);           /* the top of the text */
+    vswr_mode(vhandle, MD_TRANS);
+    v_gtext(vhandle, (short)(sb.g_x + 2), (short)(sb.g_y + (sb.g_h - hchar) / 2), d->info);
+    vst_alignment(vhandle, 0, 0, &dmy, &dmy);
+    vswr_mode(vhandle, MD_REPLACE);
+    vs_clip(vhandle, 0, pxy);
+    style_reset();
+}
+
 static void draw_window(DOC *d, GRECT *clip)
 {
     GRECT tb, tp, cp, dv, hr, vr;
     panes(d, &tb, &hr, &vr, &tp, &cp);
     if (d->iconified) { draw_icon(d, &tp, clip); return; }
+    draw_status(d, clip);
     if (tb.g_h) draw_toolbar(d, &tb, clip);
     if (hr.g_h) { draw_hruler(d, &hr, &tp, clip); draw_vruler(d, &vr, &tp, clip); draw_corner(&hr, &vr, clip); }
     if (tp.g_h) draw_text_pane(d, &tp, clip);
@@ -1037,11 +993,13 @@ void redraw_area(DOC *d, GRECT *area)
     if (!rc_inter(&scr, &a)) return;
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
+    theme_for(d->slot);                          /* this window's colour theme */
     wind_get(d->wh, WF_FIRSTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     while (r.g_w && r.g_h) {
         if (rc_inter(&a, &r)) draw_window(d, &r);
         wind_get(d->wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     }
+    theme_global();
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
 }
@@ -1276,8 +1234,10 @@ void set_info(DOC *d)
             L(jn[p->just & 3]), extra, L(S_I_PAGE), ln->page + 1, doc_npages(d), d->zoom,
             d->view == VIEW_CODES ? L(S_I_QUICK) : d->view == VIEW_SPLIT ? (d->focus ? L(S_I_CODES) : L(S_I_TEXT)) : "");
     if (strcmp(s, d->info)) {
+        GRECT sb;
         strcpy(d->info, s);
-        wind_set_str(d->wh, WF_INFO, d->info);
+        status_rect(d, &sb);
+        redraw_area(d, &sb);
     }
 }
 
@@ -1605,10 +1565,14 @@ void set_toolbar(DOC *d, int on)
 static int fit_zoom(DOC *d)
 {
     GRECT tb, tp, cp;
-    long pw = page_w_px(d), z;
+    long pw = page_w_px(d), ph = page_h_px(d), z;
     get_panes(d, &tb, &tp, &cp);
-    if (pw <= 0 || tp.g_w <= 0) return d->zoom;
+    if (pw <= 0 || tp.g_w <= 0 || ph <= 0 || tp.g_h <= 0) return d->zoom;
     z = (tp.g_w - 2L * PGAP - 4) * 100 / pw;
+    if (d->fitw == FIT_PAGE) {                    /* the whole page: its height too */
+        long zh = (tp.g_h - 2L * PGAP - 4) * 100 / ph;
+        if (zh < z) z = zh;
+    }
     return (int)(z < ZOOM_MIN ? ZOOM_MIN : z > ZOOM_MAX ? ZOOM_MAX : z);
 }
 
@@ -1631,6 +1595,7 @@ static void zoom_apply(DOC *d, int zoom)
 /* a zoom chosen by the user: the fit to the window's width ends */
 void set_zoom(DOC *d, int zoom) { d->fitw = 0; zoom_apply(d, zoom); }
 
+/* on: FIT_WIDTH or FIT_PAGE, 0 off */
 void set_fit_width(DOC *d, int on)
 {
     d->fitw = on;
@@ -1679,7 +1644,6 @@ int open_window(DOC *d)
     }
     set_name(d);
     d->info[0] = 0;
-    wind_set_str(d->wh, WF_INFO, " ");
     /* where the page is much wider than the screen (ST medium has narrow
      * pixels), start at the largest zoom that shows the page's width */
     if (d->zoom == 100 && page_w_px(d) + 2 * PGAP + 40 > desk.g_w * 5L / 4) {
@@ -1765,7 +1729,6 @@ void uniconify(DOC *d, short *rect)
         d->iconified = 0;
         d->wh = wind_create(win_kind(), desk.g_x, desk.g_y, desk.g_w, desk.g_h);
         if (d->wh < 0) { alert(1, 3, AL_NO_WINDOWS, AB_OK); return; }
-        wind_set_str(d->wh, WF_INFO, " ");
         wind_open(d->wh, d->ic_x, d->ic_y, d->ic_w, d->ic_h);
     }
     set_name(d);

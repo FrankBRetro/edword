@@ -7,17 +7,33 @@ from PIL import Image
 def convert(src, dst):
     b = open(src, 'rb').read()
     magic, w, h, planes = struct.unpack('>4h', b[:8])
-    data = b[8:]
+    n = w * h // 8 * planes
+    data, tail = b[8:8 + n], b[8 + n:]
+    if planes == 16:                     # Falcon true colour: RGB 5-6-5, a word each
+        im = Image.new('RGB', (w, h))
+        px = im.load()
+        for y in range(h):
+            for x in range(w):
+                v = (data[(y * w + x) * 2] << 8) | data[(y * w + x) * 2 + 1]
+                px[x, y] = (((v >> 11) & 31) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31)
+        im.save(dst)
+        return
     if planes == 1:
         im = Image.frombytes('1', (w, h), data)
         im = Image.eval(im.convert('L'), lambda v: 255 - v)     # 1 bits are black
         im.save(dst)
         return
-    # interleaved bit planes (ST medium / low resolution); default palette
-    pal = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 0)] if planes == 2 else \
-          [(255, 255, 255), (255, 0, 0), (0, 255, 0), (255, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255),
-           (170, 170, 170), (85, 85, 85), (255, 85, 85), (85, 255, 85), (255, 255, 85), (85, 85, 255),
-           (255, 85, 255), (85, 255, 255), (0, 0, 0)]
+    # interleaved bit planes (ST medium / low resolution, Falcon 256 colours);
+    # the palette saved after the pixels, else the default one
+    if tail[:4] == b'PAL\0':
+        pal = [tuple(tail[4 + 4 * i + 1:4 + 4 * i + 4]) for i in range(1 << planes)]
+    else:
+        pal = None
+    if pal is None:
+        pal = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 0)] if planes == 2 else \
+              [(255, 255, 255), (255, 0, 0), (0, 255, 0), (255, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255),
+               (170, 170, 170), (85, 85, 85), (255, 85, 85), (85, 255, 85), (255, 255, 85), (85, 85, 255),
+               (255, 85, 255), (85, 255, 255), (0, 0, 0)]
     im = Image.new('RGB', (w, h))
     px = im.load()
     words = w // 16

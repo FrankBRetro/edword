@@ -1,0 +1,12 @@
+# The second script of the manual's screenshots, on a high-colour screen:
+# two documents, each with a colour theme of its own (see manual/build.sh).
+OPEN DEMO.RTF
+CMD NEW
+TYPE A second document.\nEach window can have a colour theme of its own.
+CMD TILEH
+THEMEDOC 13
+CMD CYCLE
+THEMEDOC 8
+WAIT 2
+SHOT themed
+QUIT

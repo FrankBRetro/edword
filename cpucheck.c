@@ -72,6 +72,7 @@ void cpu_check(void)
         case 2: case 7: ui_lang = LANG_FR; break;
         case 4: ui_lang = LANG_ES; break;
         case 5: ui_lang = LANG_IT; break;
+        case 15: ui_lang = LANG_CS; break;
         }
     p = put(a, "[3][");
     for (t = L(AL_WRONG_CPU); *t; t++)

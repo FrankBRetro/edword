@@ -591,6 +591,12 @@ static void pv_draw(const GRECT *clip)
         t[7].ob_flags = (short)(OF_LASTOB | (aes_3d ? OF_FL3DBAK : 0));
         t[7].ob_x = (short)(Y.lx - Y.bar.g_x); t[7].ob_y = (short)((Y.bar.g_h - hchar) / 2);
         t[7].ob_width = (short)(strlen(pg) * wchar); t[7].ob_height = hchar;
+        if (theme_on()) {                   /* drawn in the colour theme's colours */
+            static USERBLK ub[7];
+            theme_userdef(&t[0], &ub[0], 0);
+            for (i = 0; i < 6; i++) theme_userdef(&t[i + 1], &ub[i + 1], (long)lab[i]);
+            t[7].ob_flags &= ~OF_FL3DMASK;
+        }
         objc_draw(t, 0, 1, r.g_x, r.g_y, r.g_w, r.g_h);
         p[0] = Y.bar.g_x; p[2] = Y.bar.g_x + Y.bar.g_w - 1;
         p[1] = p[3] = Y.bar.g_y + Y.bar.g_h - 1;
@@ -600,7 +606,8 @@ static void pv_draw(const GRECT *clip)
     r = Y.area;
     if (!rc_and(clip, &r)) return;
     clip_to(&r);
-    t_fill(&Y.area, 1, 2);
+    if (theme_on()) t_fill(&Y.area, theme_pen(TH_DESK), 0);       /* the desk around the page */
+    else t_fill(&Y.area, 1, 2);
     pv_geom(&Y, &n, &den, &ox, &oy);
     W = pt2px_x(PS(pv.d).w) * n / den;
     H = pt2px_y(PS(pv.d).h) * n / den;

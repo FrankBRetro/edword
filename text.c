@@ -406,8 +406,11 @@ void fmt_date(char *out, int style, int y, int m, int day, int hh, int mm)
 {
     if (m < 1 || m > 12) m = 1;
     switch (style) {
-    case DT_LONG:    sprintf(out, "%d %s %d", day, date_months[m - 1], y); break;
-    case DT_DAYLONG: sprintf(out, "%s %d %s %d", date_days[weekday(y, m, day)], day, date_months[m - 1], y); break;
+    /* Czech writes the day as an ordinal: 27. října 2026 */
+    case DT_LONG:    sprintf(out, "%d%s %s %d", day, st_cset == ST_CS_CZECH ? "." : "", date_months[m - 1], y); break;
+    case DT_DAYLONG: sprintf(out, "%s %d%s %s %d", date_days[weekday(y, m, day)], day, st_cset == ST_CS_CZECH ? "." : "",
+                             date_months[m - 1], y); break;
+    case DT_DOTS:    sprintf(out, "%02d.%02d.%04d", day, m, y); break;
     case DT_ISO:     sprintf(out, "%04d-%02d-%02d", y, m, day); break;
     case DT_TIME:    sprintf(out, "%02d:%02d", hh, mm); break;
     case DT_US:      sprintf(out, "%02d/%02d/%04d", m, day, y); break;

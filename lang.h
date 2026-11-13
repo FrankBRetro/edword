@@ -87,6 +87,7 @@ enum {
     M_ZOOMIN,
     M_ZOOMOUT,
     M_ZOOMFIT,
+    M_ZOOMPAGE,
     M_TOOLBAR,
     M_TILEV,
     M_TILEH,
@@ -150,6 +151,8 @@ enum {
     S_VERSION,
     S_ABOUT_LINE1,
     S_ABOUT_ATARI,
+    S_ABOUT_EWR,
+    S_EXPORT_HINT_EWR,
     S_ABOUT_LINE2,
     S_ABOUT_LINE3,
     S_ABOUT_THES,
@@ -334,6 +337,7 @@ enum {
     S_NOT_FOUND,
     S_N_REPLACED,
     S_SPELL_TITLE,
+    S_SPELL_DONE,
     S_NOT_IN_DIC,
     S_CHANGE_TO,
     S_SUGGESTIONS,
@@ -526,11 +530,24 @@ enum {
     T_NL_CONTENTS,
     T_NL_ORG,
     T_NL_PAGE,
+    M_THEME,
+    S_THEME_TITLE,
+    S_THEME,
+    S_THEME_CUSTOM,
+    S_THEME_THISDOC,
+    S_THEME_ALLDOCS,
+    S_THEME_HINT,
+    S_TH_FACE,
+    S_TH_LIGHT,
+    S_TH_DARK,
+    S_TH_TEXT,
+    S_TH_MARGIN,
+    S_TH_DESK,
     S_COUNT
 };
 
-#define NLANG 5
-enum { LANG_EN, LANG_DE, LANG_ES, LANG_IT, LANG_FR };
+#define NLANG 6
+enum { LANG_EN, LANG_DE, LANG_ES, LANG_IT, LANG_FR, LANG_CS };
 extern int ui_lang;
 extern const char *const lang_name[NLANG];
 const char *L(int id);

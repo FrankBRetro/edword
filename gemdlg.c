@@ -90,14 +90,12 @@ static void dlg_style(DLG *g)
             if (i == 0 || o->ob_type == G_STRING || o->ob_type == G_IBOX) o->ob_flags |= OF_FL3DBAK;
             else if (o->ob_type == G_BUTTON) o->ob_flags |= (o->ob_flags & OF_EXIT) ? OF_FL3DACT : OF_FL3DIND;
             else if (o->ob_type == G_FTEXT) {
-                o->ob_spec.tedinfo->te_color = 0x11F0;  /* white field, black frame */
-                o->ob_spec.tedinfo->te_thickness = -1;
-                if (is_magic) {
-                    /* MagiC's 3D input field: a background object with a
-                     * frame 2 pixels outside it, drawn sunken */
-                    o->ob_flags |= OF_FL3DBAK;
-                    o->ob_spec.tedinfo->te_thickness = 2;
-                }
+                /* as TOS 4's own dialogs: the underscores on the grey, no
+                 * white box and no frame (MagiC's sunken frame took the
+                 * top of the text off in a row this high) */
+                o->ob_flags |= OF_FL3DBAK;
+                o->ob_spec.tedinfo->te_color = 0x1100;
+                o->ob_spec.tedinfo->te_thickness = 0;
             }
         }
     }
@@ -179,7 +177,7 @@ void dlg_tree_end(DLG *g)
 int dlg_load(DLG *g, int tree)
 {
     if (dlg_tree(g, tree)) return 1;
-    alert(1, 3, AL_NO_RSC, DAB_OK);
+    alert(1, 3, AL_NO_RSC, AB_OK);
     return 0;
 }
 
@@ -373,7 +371,8 @@ static int alt_letter(short key)
 short dlg_run(DLG *g)
 {
     short x, y, w, h, wx, wy, ww, wh, ex = -1, edit, idx = 0, next, cont, kind = NAME | MOVER | CLOSER;
-    short msg[8], mx, my, mb, ks, key, br, ev, title = -1, i, dy = 0;
+    short msg[8], mx, my, mb, ks, key, br, ev, title = -1, i, dy = 0, st0;
+    long sp0;
     int cur_on = 0;
     const char *tname = NULL;
     static char wtitle[60];
@@ -388,6 +387,7 @@ short dlg_run(DLG *g)
 #endif
     if (dlg_busy) { dlg_front(); return -1; }
     if (!win_dialogs) return dlg_modal(g);
+    st0 = g->o[0].ob_state; sp0 = g->o[0].ob_spec.index;
     /* the title goes into the window's title bar */
     for (i = 0; i < g->nit; i++) if (g->it[i].type == T_TITLE) { title = g->it[i].obj; tname = g->it[i].s; }
     if (title > 0) {
@@ -526,6 +526,16 @@ done:
     dlg_wh = -1;
     open_dlg = NULL;
     dlg_busy = 0;
+    /* the tree as it was, so the dialog can be shown again (Print after
+     * an alert, Apply in the colour theme) */
+    for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
+    g->o[0].ob_height -= hchar / 2 + hchar / 4;
+    if (title > 0) {
+        g->o[title].ob_flags &= ~OF_HIDETREE;
+        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != title) g->o[i].ob_y += dy;
+        g->o[0].ob_height += dy;
+    }
+    g->o[0].ob_state = st0; g->o[0].ob_spec.index = sp0;
     return dlg_finish(g, ex & 0x7fff);
 }
 
@@ -1212,12 +1222,22 @@ static void prefs_more(void)
     dd[40] = 0;
     if (!dlg_load(&g, RT_PREFS2)) return;
     for (i = 0; i < 3; i++) { kp[i] = (short)(PF2_KEEP0 + i); dlg_set(&g, kp[i], lay_keep == i); }
+    for (i = 0; i < NLANG; i++) dlg_set(&g, PF2_DICT0 + i, spell_lang == i);
+    dlg_set(&g, PF2_LIVE, pref_live);
+    for (i = 0; i < 3; i++) dlg_set(&g, PF2_PDF1 + i, pdf_scale == i + 1);
     dlg_edtext(&g, PF2_DOCDIR, dd);
     g.cancel = PF2_CANCEL;
     ok = PF2_OK;
     dlg_tree_end(&g);
     if (dlg_run(&g) != ok) return;
     for (i = 0; i < 3; i++) if (dlg_on(&g, kp[i])) lay_keep = i;
+    pref_live = dlg_on(&g, PF2_LIVE);
+    for (i = 0; i < 3; i++) if (dlg_on(&g, PF2_PDF1 + i)) pdf_scale = i + 1;
+    for (i = 0; i < NLANG; i++)
+        if (dlg_on(&g, PF2_DICT0 + i) && i != spell_lang) {     /* another dictionary: loaded when next needed */
+            spell_unload_main();
+            spell_lang = i;
+        }
     if (strncmp(dd, pref_docdir, 40)) {
         strncpy(pref_docdir, dd, sizeof pref_docdir - 1);
         docdir_changed();
@@ -1226,27 +1246,24 @@ static void prefs_more(void)
 
 int dlg_prefs(void)
 {
-    static const int order[NDATEFMT] = { DT_SHORT, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
-    static char dl[NDATEFMT][32], mins[3];
+    static const int order[NDATEFMT_ST] = { DT_SHORT, DT_DOTS, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
+    static char dl[NDATEFMT_ST][32], mins[3];
     DLG g;
-    short lang[NLANG], dict[NLANG], dr[NDATEFMT], pp[NPAPER], land, tbar, live, col, ps[3], dm[4], ason, asm1, ok, more, r;
+    short lang[NLANG], dr[NDATEFMT_ST], pp[NPAPER], land, tbar, col, dm[4], ason, asm1, ok, more, r;
     int i, v;
 
-    for (i = 0; i < NDATEFMT; i++) fmt_now(dl[i], order[i]);
+    for (i = 0; i < NDATEFMT_ST; i++) fmt_now(dl[i], order[i]);
     sprintf(mins, "%d", pref_asmin);
     if (!dlg_load(&g, RT_PREFS)) return 0;
     for (i = 0; i < NLANG; i++) {
         lang[i] = (short)(PF_LANG0 + i); dlg_set(&g, lang[i], ui_lang == i);
-        dict[i] = (short)(PF_DICT0 + i); dlg_set(&g, dict[i], spell_lang == i);
     }
-    for (i = 0; i < NDATEFMT; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
+    for (i = 0; i < NDATEFMT_ST; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
     for (i = 0; i < NPAPER; i++) { pp[i] = (short)(PF_PAPER0 + i); dlg_set(&g, pp[i], pref_paper == i); }
     dlg_set(&g, PF_PORTRAIT, !pref_land);
     dlg_set(&g, land = PF_LAND, pref_land);
     dlg_set(&g, tbar = PF_TOOLBAR, pref_toolbar);
-    dlg_set(&g, live = PF_LIVE, pref_live);
     dlg_set(&g, col = PF_COLOURS, colour_on);
-    for (i = 0; i < 3; i++) { ps[i] = (short)(PF_PDF1 + i); dlg_set(&g, ps[i], pdf_scale == i + 1); }
     for (i = 0; i < 4; i++) { dm[i] = (short)(PF_DISP0 + i); dlg_set(&g, dm[i], pref_display == i); }
     dlg_set(&g, ason = PF_ASON, pref_autosave);
     dlg_edtext(&g, PF_ASMIN, mins);
@@ -1263,19 +1280,12 @@ int dlg_prefs(void)
     v = atoi(mins);
     pref_asmin = v < 1 ? 1 : v > 99 ? 99 : v;
     pref_asmode = dlg_on(&g, asm1);
-    for (i = 0; i < NDATEFMT; i++) if (dlg_on(&g, dr[i])) pref_date = order[i];
+    for (i = 0; i < NDATEFMT_ST; i++) if (dlg_on(&g, dr[i])) pref_date = order[i];
     for (i = 0; i < NPAPER; i++) if (dlg_on(&g, pp[i])) pref_paper = i;
     pref_land = dlg_on(&g, land);
     pref_toolbar = dlg_on(&g, tbar);
-    pref_live = dlg_on(&g, live);
     colour_on = dlg_on(&g, col);
-    for (i = 0; i < 3; i++) if (dlg_on(&g, ps[i])) pdf_scale = i + 1;
     for (i = 0; i < NLANG; i++) if (dlg_on(&g, lang[i]) && i != ui_lang) set_language(i);
-    for (i = 0; i < NLANG; i++)
-        if (dlg_on(&g, dict[i]) && i != spell_lang) {     /* another dictionary: loaded when next needed */
-            spell_unload_main();
-            spell_lang = i;
-        }
     if (r == more) prefs_more();        /* this page's choices kept, then the next */
     return 1;
 }
@@ -1351,7 +1361,9 @@ int dlg_indents(DOC *d, int *left, int *first)
 /*  Tables                                                            */
 /* ================================================================= */
 
-/* insert: rows, columns, border; properties: also the column widths */
+/* insert: rows, columns, border; properties: also the column widths.
+ * 1: OK; 0: cancelled; or (Table Settings) the command of the row,
+ * column or table button pressed */
 int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
 {
     static char rb[4], cb[3], wb[MAX_COLS][4];
@@ -1377,7 +1389,13 @@ int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
         g.cancel = DTP_CANCEL; ok = DTP_OK;
     }
     dlg_tree_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    i = dlg_run(&g);
+    if (!insert) {                          /* a row, a column, the table */
+        static const short ob[5] = { DTP_ROWINS, DTP_ROWDEL, DTP_COLINS, DTP_COLDEL, DTP_TBLDEL };
+        static const short cm[5] = { C_ROWINS, C_ROWDEL, C_COLINS, C_COLDEL, C_TBLDEL };
+        for (n = 0; n < 5; n++) if (i == ob[n]) return cm[n];
+    }
+    if (i != ok) return 0;
     n = atoi(rb);
     *rows = n < 1 ? 1 : n > 200 ? 200 : n;
     n = atoi(cb);
@@ -1594,7 +1612,7 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int 
         }
         for (k = 0; k < np && !sel[k]; k++) ;
         if (k < np) break;
-        alert(1, 1, AL_NO_PAGES, DAB_OK);
+        alert(1, 1, AL_NO_PAGES, AB_OK);
     }
     c = atoi(cb);
     *copies = c < 1 ? 1 : c > 99 ? 99 : c;
@@ -1657,4 +1675,97 @@ int dlg_template(int *kind)
     for (i = 0; i < 3; i++) strcpy(tpl_addr[i], ad[i]);
     strcpy(tpl_title, ti);
     return 1;
+}
+
+/* ================================================================= */
+/*  Colour theme                                                      */
+/* ================================================================= */
+
+/* the theme from the popup, or each colour by hand; Apply shows it
+ * without closing. 1: changed (and kept) */
+/* The colour theme. On a screen without a palette it can be for the top
+ * document's window alone ("This document") or for every window that has
+ * none of its own ("All documents"); on a palette screen it is for all.
+ * While the dialog is up, theme_id and theme_rgb hold the theme being
+ * edited (the picture shows them); the one for all is kept aside. */
+int dlg_theme(void)
+{
+    static const short fo[TH_NROLES][3] = {
+        { DTH_R0, DTH_G0, DTH_B0 }, { DTH_R1, DTH_G1, DTH_B1 }, { DTH_R2, DTH_G2, DTH_B2 },
+        { DTH_R3, DTH_G3, DTH_B3 }, { DTH_R4, DTH_G4, DTH_B4 }, { DTH_R5, DTH_G5, DTH_B5 } };
+    static char f[TH_NROLES][3][4], pick[24];
+    static DLG g;
+    static USERBLK pv;
+    unsigned char grgb[TH_NROLES][3], wrgb[TH_NROLES][3], erg[TH_NROLES][3];
+    DOC *d = top_doc();
+    int gid = theme_id, per = theme_per_window() && d, slot = d ? d->slot : -1;
+    int wid = per ? theme_window(slot, wrgb) : -1, shown = 0, i, k, v, eid, mine;
+    short r, x, y;
+
+    if (!theme_possible()) return 0;
+    memcpy(grgb, theme_rgb, sizeof grgb);
+    if (!dlg_load(&g, RT_THEME)) return 0;
+    theme_userdef(&g.o[DTH_PREVIEW], &pv, 2);   /* the picture of it */
+    if (wid >= 0) { theme_id = wid; memcpy(theme_rgb, wrgb, sizeof wrgb); }   /* this window's own */
+    dlg_set(&g, DTH_THISDOC, wid >= 0);
+    dlg_set(&g, DTH_ALLDOCS, wid < 0);
+    if (!per) {                                  /* a palette: one theme for all */
+        g.o[DTH_THISDOC].ob_state |= OS_DISABLED;
+        g.o[DTH_ALLDOCS].ob_state |= OS_DISABLED;
+    }
+    theme_preview_pens();
+    for (i = 0; i < TH_NROLES; i++)
+        for (k = 0; k < 3; k++) dlg_edtext(&g, fo[i][k], f[i][k]);
+    g.cancel = DTH_CANCEL;
+    dlg_tree_end(&g);
+    for (;;) {
+        for (i = 0; i < TH_NROLES; i++)
+            for (k = 0; k < 3; k++) sprintf(f[i][k], "%d", theme_rgb[i][k]);
+        sprintf(pick, "%.17s", theme_id == THEME_CUSTOM ? L(S_THEME_CUSTOM) : theme_name(theme_id));
+        dlg_str(&g, DTH_PICK, pick);
+        r = dlg_run(&g);
+        if (r == DTH_PICK) {
+            objc_offset(g.o, DTH_PICK, &x, &y);
+            v = popup_rsc(RT_POPTHEME, theme_id < NTHEMES ? theme_id : -1, x, (short)(y + g.o[DTH_PICK].ob_height));
+            if (v >= 0 && v < NTHEMES) { theme_pick(v); theme_preview_pens(); shown = 1; }
+            continue;
+        }
+        if (r != DTH_APPLY && r != DTH_OK) {
+            /* Cancel: as it was, on screen too if Apply showed another */
+            theme_id = gid;
+            memcpy(theme_rgb, grgb, sizeof grgb);
+            if (per) theme_set_window(slot, wid, wid >= 0 ? wrgb : NULL);
+            theme_apply();
+            if (shown) form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+            return 0;
+        }
+        /* the colours as typed: a theme of its own if they're not one */
+        for (i = 0; i < TH_NROLES; i++)
+            for (k = 0; k < 3; k++) {
+                v = atoi(f[i][k]);
+                v = v < 0 ? 0 : v > 255 ? 255 : v;
+                if (v != theme_rgb[i][k]) { theme_rgb[i][k] = (unsigned char)v; theme_id = THEME_CUSTOM; }
+            }
+        /* this window's, or everyone's (and then this window follows it) */
+        eid = theme_id;
+        memcpy(erg, theme_rgb, sizeof erg);
+        mine = per && dlg_on(&g, DTH_THISDOC);
+        if (mine) {
+            theme_set_window(slot, eid, erg);
+            theme_id = gid;
+            memcpy(theme_rgb, grgb, sizeof grgb);
+        } else {
+            if (per) theme_set_window(slot, -1, NULL);
+            gid = eid;
+            memcpy(grgb, erg, sizeof grgb);
+        }
+        theme_apply();
+        if (r == DTH_OK) return 1;
+        shown = 1;
+        form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+        pump_redraws();
+        theme_id = eid;                          /* still editing it */
+        memcpy(theme_rgb, erg, sizeof erg);
+        theme_preview_pens();
+    }
 }

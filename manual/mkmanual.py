@@ -5,7 +5,8 @@
 usage: mkmanual.py LANG OUT.PDF   (run from the EdWord source folder)
 
 The source is plain text with a little markup:
-  @key value        title page settings (title, subtitle, intro, shotnote, contents)
+  @key value        title page settings (title, subtitle, intro, shotnote, contents);
+                    {VERSION} is the program's version, major.minor, from gemui.h
   # Chapter         ## Section
   ![shot] caption   a screenshot from manual/shots/LANG/shot.png
   | a | b |         table rows (the first row is the heading)
@@ -21,7 +22,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, Image,
-                                Table, TableStyle, KeepTogether, PageBreak, ListFlowable, ListItem)
+                                Table, TableStyle, KeepTogether, PageBreak, CondPageBreak, ListFlowable, ListItem)
 from reportlab.platypus.tableofcontents import TableOfContents
 
 FONTDIR = '/usr/share/fonts/truetype/dejavu'
@@ -41,7 +42,9 @@ ACCENT = colors.HexColor('#2b4a6f')
 RULE = colors.HexColor('#b8c2cc')
 SHADE = colors.HexColor('#eef1f4')
 
-body = ParagraphStyle('body', fontName='Serif', fontSize=10, leading=14, textColor=INK, spaceAfter=6)
+body = ParagraphStyle('body', fontName='Serif', fontSize=10, leading=14, textColor=INK, spaceAfter=6,
+                      allowWidows=0, allowOrphans=0)     # no single line left behind or carried over
+body_lead = ParagraphStyle('body_lead', parent=body, keepWithNext=1)
 cell = ParagraphStyle('cell', parent=body, fontSize=9, leading=12, spaceAfter=0)
 cellh = ParagraphStyle('cellh', parent=cell, fontName='Sans-Bold', textColor=ACCENT)
 h1 = ParagraphStyle('h1', fontName='Sans-Bold', fontSize=18, leading=22, textColor=ACCENT, spaceBefore=4, keepWithNext=1,
@@ -119,6 +122,12 @@ class Doc(BaseDocTemplate):
             self.notify('TOCEntry', (fl.toc_level, text, self.page, key))
 
 
+def version():
+    """the program's version, major and minor (3.5.0 -> 3.5), from gemui.h"""
+    m = re.search(r'#define ED_VERSION "(\d+)\.(\d+)', open('gemui.h').read())
+    return '%s.%s' % (m.group(1), m.group(2))
+
+
 def build(lang, out):
     ui = load_strings(lang)
     src = open('manual/src/%s.txt' % lang, encoding='utf-8').read().split('\n')
@@ -126,14 +135,23 @@ def build(lang, out):
     meta = {'title': 'EdWord', 'subtitle': 'Manual', 'intro': '', 'shotnote': '', 'contents': 'Contents'}
     story, para, rows, items = [], [], [], []
 
+    def lead_in():
+        # the heading and the sentence just before a list or table go with it
+        lead = []
+        while story and isinstance(story[-1], Paragraph) and story[-1].style in (body_lead, h2, h1):
+            lead.insert(0, story.pop())
+        return lead
+
     def flush():
         nonlocal para, rows, items
         if para:
-            story.append(Paragraph(inline(' '.join(para), ui), body)); para = []
+            text = ' '.join(para)
+            # a paragraph that introduces a list or table stays with it
+            story.append(Paragraph(inline(text, ui), body_lead if text.rstrip().endswith(':') else body)); para = []
         if items:
-            story.append(ListFlowable([ListItem(Paragraph(inline(t, ui), body), leftIndent=12)
-                                       for t in items], bulletType='bullet', start='•', leftIndent=12,
-                                      bulletFontName='Sans', bulletFontSize=8))
+            story.append(KeepTogether(lead_in() + [ListFlowable([ListItem(Paragraph(inline(t, ui), body), leftIndent=12)
+                                                    for t in items], bulletType='bullet', start='•', leftIndent=12,
+                                                   bulletFontName='Sans', bulletFontSize=8)]))
             items = []
         if rows:
             data = [[Paragraph(inline(c, ui), cellh if i == 0 else cell) for c in r] for i, r in enumerate(rows)]
@@ -145,13 +163,17 @@ def build(lang, out):
                                    ('BACKGROUND', (0, 0), (-1, 0), SHADE),
                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                                    ('TOPPADDING', (0, 0), (-1, -1), 3), ('BOTTOMPADDING', (0, 0), (-1, -1), 3)]))
-            story.append(t); story.append(Spacer(1, 8)); rows = []
+            # a table on one page if it fits on one (a long one splits, its heading row repeated)
+            if len(rows) <= 24: story.append(KeepTogether(lead_in() + [t, Spacer(1, 8)]))
+            else: story.extend([t, Spacer(1, 8)])
+            rows = []
 
     body_started = False
+    first_ch = True
     for line in src:
         if line.startswith('@'):
             k, _, v = line[1:].partition(' ')
-            meta[k] = v.strip()
+            meta[k] = v.strip().replace('{VERSION}', version())
             continue
         if not body_started and line.startswith('#'):
             body_started = True
@@ -164,7 +186,10 @@ def build(lang, out):
             story.append(p); continue
         if line.startswith('# '):
             flush()
-            if len(story) > 4: story.append(PageBreak())
+            # a new page for a chapter unless the last one ended high on its page:
+            # no page with a few lines and the rest white
+            if len(story) > 4: story.append(PageBreak() if first_ch else CondPageBreak(10 * cm))
+            first_ch = False
             p = Paragraph(inline(line[2:], ui), h1); p.toc_level = 0
             story.append(p); continue
         m = re.match(r'!\[(\w+)\]\s*(.*)$', line)
@@ -178,7 +203,7 @@ def build(lang, out):
             frame.setStyle(TableStyle([('BOX', (0, 0), (-1, -1), 0.6, RULE),
                                        ('LEFTPADDING', (0, 0), (-1, -1), 1), ('RIGHTPADDING', (0, 0), (-1, -1), 1),
                                        ('TOPPADDING', (0, 0), (-1, -1), 1), ('BOTTOMPADDING', (0, 0), (-1, -1), 1)]))
-            story.append(KeepTogether([Spacer(1, 4), frame, Paragraph(inline(m.group(2), ui), cap)]))
+            story.append(KeepTogether(lead_in() + [Spacer(1, 4), frame, Paragraph(inline(m.group(2), ui), cap)]))
             continue
         if line.startswith('|'):
             if para or items: flush()
@@ -193,6 +218,22 @@ def build(lang, out):
 
     doc = Doc(out, meta)
     doc.multiBuild(story)
+
+
+class GroupedTOC(TableOfContents):
+    """the contents with each chapter's entries kept together on a page"""
+    def wrap(self, availWidth, availHeight):
+        super().wrap(availWidth, availHeight)
+        rows, start = [], None
+        for i, (level, text, page, key) in enumerate(self._lastEntries):
+            if level == 0:
+                if start is not None: rows.append((start, i - 1))
+                start = i
+        if start is not None: rows.append((start, len(self._lastEntries) - 1))
+        if rows and not any(self.getLevelStyle(l).spaceBefore for l in (0, 1)):
+            self._table.setStyle(TableStyle([('NOSPLIT', (0, a), (-1, b)) for a, b in rows if b > a]))
+            self.width, self.height = self._table.wrapOn(self.canv, availWidth, availHeight)
+        return self.width, self.height
 
 
 def cover(story, meta, ui):
@@ -210,11 +251,11 @@ def cover(story, meta, ui):
     story.append(NextPageTemplate('main'))
     story.append(PageBreak())
     story.append(Paragraph(meta['contents'], h1))
-    toc = TableOfContents()
+    toc = GroupedTOC()
     toc.levelStyles = [toc1, toc2]
     toc.dotsMinLevel = 0
     story.append(toc)
-    story.append(PageBreak())
+    # the first chapter starts its own page (no blank page after the contents)
 
 
 if __name__ == '__main__':

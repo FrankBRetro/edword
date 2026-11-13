@@ -1,28 +1,32 @@
-@title EdWord 3.0
-@subtitle Manuale d'uso
-@intro Un elaboratore di testi per l'Atari ST con font GDOS, tabelle, grafici, immagini, disegni, controllo ortografico in cinque lingue, sinonimi ed esportazione in PDF, anche per Amiga, Mac e Windows.
-@shotnote Le schermate sono state fatte in alta risoluzione ST senza GDOS, quindi si vede solo il font di sistema. Con GDOS il documento appare con i suoi font reali. Le versioni per Amiga, Mac e Windows hanno l'aspetto del proprio sistema ma funzionano allo stesso modo (vedere "EdWord su altri computer").
+@title EdWord {VERSION}
+@subtitle Manuale per Atari ST, STE, TT e Falcon
+@intro Un elaboratore di testi per computer Atari con font GDOS, tabelle, grafici, immagini, disegni, temi colori, controllo ortografico in sei lingue, sinonimi ed esportazione in RTF e PDF.
+@shotnote Le schermate sono state fatte su un Falcon a 640x400 con 256 colori, con TOS 4 e senza GDOS, quindi si vede solo il font di sistema. Con GDOS il documento appare con i suoi font reali. EdWord funziona in ogni risoluzione da 640 pixel di larghezza, anche in monocromatico; "Colori e schermi" dice che cosa aggiunge ogni numero di colori.
 @contents Indice
 
 # Per cominciare
 
 ## Requisiti
-EdWord funziona su qualsiasi Atari ST, STE, TT o Falcon (e negli emulatori) con almeno 1 MB di memoria, in una modalità video larga almeno 640 pixel: media o alta risoluzione ST, o superiore. Per avere altri font oltre a quello di sistema serve un GDOS (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS o G+Plus); i font vettoriali danno il risultato migliore. Le versioni per Amiga, Mac e Windows sono descritte alla fine di questo manuale.
+EdWord funziona su qualsiasi Atari ST, STE, Mega ST, TT o Falcon, sui cloni e negli emulatori, con almeno 1 MB di memoria, in una modalità video larga almeno 640 pixel: media o alta risoluzione ST o superiore, con qualsiasi numero di colori. Funziona con TOS da 1 a 4, MultiTOS, MagiC (con i suoi dialoghi 3D, caselle di controllo e pulsanti di scelta), XaAES e MyAES. Caricare un GDOS (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS o G+Plus) per avere più del font di sistema; i font vettoriali danno i risultati migliori.
 
 ## Installazione
-Copiare questi file in una stessa cartella:
-- `EDWORD.PRG` - il programma.
-- `EDWORD.DIC` - il dizionario ortografico (inglese britannico).
-- `EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC` - i dizionari tedesco, spagnolo, italiano e francese, se servono.
-- `EDWORD.THS` - il dizionario dei sinonimi (inglese).
-- `MANUALIT.PDF` (e `MANUALEN`, `MANUALDE`, `MANUALES`, `MANUALFR`) - questo manuale.
-EdWord crea nella stessa cartella `EDWORD.INF` (le preferenze) e `USER.UDC` (le parole aggiunte).
+La cartella `EDWORD` del pacchetto contiene tutto ciò che serve a EdWord; copiarla così com'è sull'Atari:
+- `EDWORD.PRG` - il programma, per qualsiasi processore dal 68000 in su.
+- `EDWORD.RSC` - i menu e i dialoghi, e `EDWORDDE.RSC`, `EDWORDES.RSC`, `EDWORDIT.RSC`, `EDWORDFR.RSC` e `EDWORDCS.RSC` per le altre lingue. EdWord ne ha bisogno accanto a sé.
+- `EDWORD.DIC` - il dizionario ortografico (inglese britannico), e `EDWORD.THS`, il dizionario dei sinonimi (inglese).
+- `MANUALEN.PDF` - il manuale in inglese (questo si trova in `LANG\IT`).
+Le altre cartelle del pacchetto contengono ciò che si può aggiungere se serve:
+| Cartella | Contenuto |
+| `CPU\030`, `CPU\030F`, `CPU\040`, `CPU\CF` | un `EDWORD.PRG` più veloce per un 68030, un 68030 con FPU, un 68040 o 68060, o un ColdFire (FireBee): copiarlo sopra quello in `EDWORD` |
+| `LANG\DE`, `ES`, `IT`, `FR`, `CS` | il dizionario e il manuale di ogni lingua, e un `EDWORD.INF` che avvia EdWord in quella lingua (copiarlo solo la prima volta) |
+| `TEST` | `EDWTEST.PRG`, il programma di prova (vedi "Provare EdWord") |
+EdWord crea `EDWORD.INF` (le preferenze) e `USER.UDC` (le parole proprie) nella sua cartella. Una versione più veloce avviata su un processore su cui non può funzionare lo dice e si ferma.
 
 ## Avvio
-Fare doppio clic su `EDWORD.PRG`. Si può anche trascinarvi sopra un documento, oppure installarlo come applicazione per `*.RTF`. Tenere premuto **Control** all'avvio per non caricare i font GDOS (modalità sicura), oppure **Alternate** perché i font vettoriali siano scalati con `vst_point` invece di `vst_arbpt`.
+Fare doppio clic su `EDWORD.PRG`. Si può anche trascinarvi sopra un documento o installarlo come applicazione per i file `*.EWR`. Tenere premuto **Control** all'avvio per saltare i font GDOS (modalità sicura), o **Alternate** per dimensionare i font vettoriali con `vst_point` se il GDOS ha problemi con `vst_arbpt`.
 
 ## Lingua
-EdWord parla inglese, tedesco, spagnolo, italiano e francese. Al primo avvio usa la lingua del TOS; si può cambiare in qualsiasi momento in {M_PREFS}. Il dizionario ortografico si sceglie lì a parte; quello dei sinonimi è inglese.
+EdWord parla inglese, tedesco, spagnolo, italiano, francese e ceco. Al primo avvio usa la lingua del TOS; si può cambiarla in qualsiasi momento in {M_PREFS}. Il dizionario ortografico si sceglie a parte ({M_PREFS} > {S_PREFS_MORE}); quello dei sinonimi è inglese. Il ceco richiede un font di sistema ceco (con le lettere ceche della code page Kamenický): in ceco i documenti usano quelle lettere e le date si possono scrivere 27.10.2026.
 
 # La finestra
 
@@ -31,7 +35,7 @@ EdWord parla inglese, tedesco, spagnolo, italiano e francese. Al primo avvio usa
 Ogni documento ha la sua finestra; se ne possono aprire fino a 32. Sotto il titolo, la **riga informativa** mostra font, dimensione e stile al cursore, l'allineamento, l'elenco e il titolo del paragrafo, il numero di pagina, lo zoom e la vista.
 
 ## La barra strumenti
-La barra si mostra o si nasconde per ogni finestra con {MT_WINDOW} > {M_TOOLBAR} (Control+T). Da sinistra a destra:
+La barra strumenti si mostra o nasconde per ogni finestra con {MT_VIEW} > {M_TOOLBAR} (Control+T). Le sue icone sono a colori sugli schermi con 16 colori o più. Da sinistra a destra:
 | Icona | Funzione |
 | Annulla, Ripeti | annulla o ripete l'ultima modifica |
 | B I U | grassetto, corsivo, sottolineato |
@@ -48,9 +52,11 @@ Le opzioni attive appaiono premute; le icone che al momento non si possono usare
 ![zoompop] Il menu dello zoom sulla barra.
 
 ## Zoom
-La pagina si può vedere al 50, 75, 100, 125, 150 o 200 per cento: con la lente sulla barra, oppure con {M_ZOOMIN} (F8) e {M_ZOOMOUT} (F7) nel menu {MT_WINDOW}.
+La pagina può essere mostrata al 50, 75, 100, 125, 150 o 200 per cento: usare la lente della barra strumenti, o {M_ZOOMIN} (F8) e {M_ZOOMOUT} (F7) nel menu {MT_VIEW}. {M_ZOOMFIT} (Shift+F8) fa riempire alla pagina la larghezza della finestra, e {M_ZOOMPAGE} mostra la pagina intera, anche in altezza (fino al 10 per cento in una finestra piccola); entrambi seguono la finestra quando se ne cambia la dimensione.
 
 ![zoom] Il documento al 150 per cento.
+
+![fitpage] {M_ZOOMPAGE}.
 
 ## Righelli e guide
 {M_RULERS} (Control+Shift+R) mostra righelli in centimetri sopra e a sinistra della vista pagina; {M_GUIDES} disegna i margini e le colonne con linee punteggiate che non vengono stampate. Entrambe le scelte vengono ricordate. Un doppio clic sul righello in alto apre {M_INDENTS}, su quello a sinistra {M_PAGE}.
@@ -61,7 +67,9 @@ La pagina si può vedere al 50, 75, 100, 125, 150 o 200 per cento: con la lente 
 Le barre di scorrimento, i tasti freccia e il trascinamento di una selezione scorrono il documento; viene ridisegnata solo la parte che entra in vista, quindi lo scorrimento è veloce. {MT_EDIT} > {M_PREVPAGE} e {M_NEXTPAGE} (Control con le frecce su e giù) passano di pagina in pagina e {M_GOTOPAGE} (Control+J) va a qualsiasi pagina.
 
 ## Tre viste
-{MT_WINDOW} > {M_VDOC} (F4) mostra le pagine formattate. {M_SPLIT} (Control+Y) aggiunge sotto i **codici di formato** del testo; entrambe le metà sono modificabili e un clic passa dall'una all'altra. {M_VCODES} (F6) mostra solo i codici, con il font di sistema: è il modo più veloce per lavorare su documenti lunghi. I codici digitati vengono applicati quando si fa una pausa o si torna a fare clic sulla pagina.
+{MT_VIEW} > {M_VDOC} (F4) mostra le pagine formattate. {M_SPLIT} (Control+Y) aggiunge sotto la pagina i **codici di formato** del testo; entrambe le metà sono modificabili e un clic passa dall'una all'altra. {M_VCODES} (F6) mostra solo i codici, nel font di sistema: è il modo più veloce di modificare documenti lunghi. I codici digitati vengono applicati quando ci si ferma o si fa di nuovo clic nella pagina.
+
+![m_view] Il menu {MT_VIEW}.
 
 ![split] Vista divisa: sopra la pagina, sotto i suoi codici.
 
@@ -83,14 +91,25 @@ I codici sono interruttori; ciascuno vale fino al successivo dello stesso tipo:
 | `[[` | una "[" vera |
 I codici sono in inglese in tutte le lingue. Una parentesi che non è un codice noto resta testo normale.
 
+## Temi colori
+Sugli schermi con **256 colori o più**, {MT_VIEW} > {M_THEME} colora le parti della finestra proprie di EdWord: le barre strumenti, la riga informativa, i righelli, i codici e lo sfondo intorno alle pagine (anche nell'anteprima). Scegliere uno dei temi, come Classic, Lagoon o Terracotta, o impostare ciascuno dei suoi sei colori da 0 a 255; l'immagine nel dialogo mostra il risultato mentre si sceglie. {S_APPLY} lo mostra subito nelle finestre e {S_CANCEL} ripristina i colori. Atari è l'aspetto abituale di EdWord. I dialoghi, i menu e le cornici delle finestre appartengono al sistema e mantengono i suoi colori, e le pagine non cambiano.
+
+![theme] Il dialogo {S_THEME_TITLE}.
+
+Sugli schermi **high colour o true colour** (15, 16, 24 o 32 bit), *{S_APPLY_TO}* assegna il tema solo a *{S_THEME_THISDOC}*, la finestra che era in primo piano, o a *{S_THEME_ALLDOCS}*, le finestre senza un tema proprio. Sugli schermi con tavolozza (fino a 256 colori) c'è un tema per tutte le finestre, e questi pulsanti sono grigi. Il tema per tutte viene salvato in `EDWORD.INF`.
+
+![themed] Due documenti, ciascuno con il proprio tema colori (Lagoon e Squash), su uno schermo high colour.
+
 # File
 
 ![m_file] Il menu {MT_FILE}.
 
 ## Nuovo, apri e salva
-{M_NEW} (Control+N) apre un documento vuoto, {M_SAVEDOC} (Control+S) e {M_SAVEAS} (Control+Shift+S) scrivono RTF. L'RTF conserva tutto: font, stili, colori, formati di paragrafo, elenchi, tabelle, grafici, colonne, formati di pagina, intestazioni e piè di pagina, immagini e disegni. Gli altri programmi di videoscrittura leggono il testo, gli stili, i paragrafi, gli elenchi e le tabelle; le aggiunte proprie di EdWord sono salvate in modo che le ignorino.
+{M_NEW} (Control+N) apre un documento vuoto. {M_SAVEDOC} (Control+S) e {M_SAVEAS} (Control+Shift+S) scrivono un **documento EdWord** (`.EWR`). Conserva tutto: font, stili, colori, formati di paragrafo, elenchi, tabelle, grafici, colonne, formati di pagina, intestazioni e piè di pagina, immagini e disegni.
 
-{M_OPEN} (Control+O) legge qualsiasi documento che EdWord conosce e ne riconosce il formato dal contenuto: RTF, testo semplice, Markdown, 1st Word Plus e Protext. Un documento che non è RTF si apre come nuovo documento non salvato, quindi al salvataggio viene chiesto un nome.
+Un documento EdWord è RTF al suo interno, con le aggiunte di EdWord in gruppi che gli altri programmi saltano e un numero di versione del formato. Così un EdWord più vecchio apre un documento di uno più nuovo (tralasciando solo ciò che non conosce), un EdWord più nuovo apre ogni documento più vecchio, e gli altri elaboratori di testi possono leggere un file `.EWR` come RTF.
+
+{M_OPEN} (Control+O) mostra i documenti EdWord; legge qualsiasi documento che EdWord conosce, riconoscendone il formato dal contenuto: EdWord, RTF, testo semplice, Markdown, 1st Word Plus e Protext. Un documento che non è di EdWord si apre come nuovo, quindi salvandolo viene chiesto un nome per il file `.EWR`.
 
 ## Importare ed esportare
 {M_IMPORT} e {M_EXPORT} aprono ciascuno una finestra che resta aperta mentre si lavora. Scegliere il formato e le sue opzioni, poi il file con il pulsante della finestra. Le opzioni che non valgono per il formato scelto sono grigie.
@@ -104,6 +123,7 @@ I codici sono in inglese in tutte le lingue. Una parentesi che non è un codice 
 ![exportwin] La finestra {M_EXPORT}.
 
 | Formato | Che cosa si conserva |
+| RTF | RTF standard per altri elaboratori di testi (Word, LibreOffice, TextEdit): testo, stili, colori, paragrafi, elenchi, tabelle, colonne, formati di pagina, intestazioni e piè di pagina; le immagini come immagini PNG nel testo, accanto al paragrafo vicino a cui si trovavano. Disegni e grafici vengono tralasciati |
 | Testo | le parole; fine riga e caratteri a scelta |
 | Markdown (`.md`) | titoli, grassetto e corsivo, elenchi, citazioni, blocchi di codice, tabelle, linee e collegamenti |
 | 1st Word Plus (`.DOC`) | grassetto, corsivo e sottolineato, il righello (larghezza e giustificazione), intestazioni, piè di pagina, interruzioni di pagina |
@@ -119,7 +139,7 @@ Quando {M_OPEN} trova un file di testo semplice, chiede come leggerlo. EdWord ri
 
 ![preview] L'anteprima di stampa.
 
-{M_PRINT} (Control+P) chiede le pagine e il numero di copie e stampa con il driver di stampa GDOS (dispositivo 21), alla risoluzione della stampante.
+{M_PRINT} (Control+P) chiede le pagine e il numero di copie e stampa tramite il driver di stampa GDOS (dispositivo 21), alla risoluzione della stampante, a colori se il driver ha 8 colori o più.
 
 L'esportazione in PDF scrive il documento come file PDF stampabile da qualsiasi computer. Ogni pagina viene disegnata in memoria alla risoluzione scelta in {M_PREFS} e salvata come immagine, quindi il PDF non ha bisogno di font; le immagini mantengono i loro colori. Un indicatore mostra l'avanzamento. Gli indicatori compaiono anche quando aprire, importare, salvare o esportare richiede più di un istante, e mentre si carica un'immagine o un dizionario.
 
@@ -163,7 +183,7 @@ Il menu {MT_FONT} riunisce i font e le dimensioni più comuni. {M_SIZEOTHER} imp
 ![fontsel] Il selettore dei font.
 
 ## Stile e colore
-Il menu {MT_STYLE} imposta {M_PLAIN}, {M_BOLD} (Control+B), {M_ITALIC} (Control+I) e {M_UNDER} (Control+Shift+U), e il colore del testo. I colori si conservano in RTF e PDF e si vedono sullo schermo per quanto lo permette la risoluzione; si possono disattivare in {M_PREFS}.
+Il menu {MT_STYLE} imposta {M_PLAIN}, {M_BOLD} (Control+B), {M_ITALIC} (Control+I) e {M_UNDER} (Control+Shift+U), e il colore del testo. I colori si conservano nei documenti EdWord, in RTF e in PDF; sullo schermo si vedono tutti e otto con 16 colori o più (meno con 4, nessuno in monocromatico). Si possono disattivare in {M_PREFS}.
 
 ![m_style] Il menu {MT_STYLE}.
 
@@ -204,10 +224,10 @@ Le impostazioni di paragrafo valgono per il paragrafo del cursore o per tutti i 
 ![columns] Una pagina a due colonne.
 
 ## Interruzioni
-{MT_INSERT} > {M_PGBRK} (Control+Return) comincia una pagina nuova; {M_COLBRK} (Control+Shift+Return) passa alla colonna successiva.
+{MT_INSERT} > {M_PGBRK} (Control+Return) inizia una nuova pagina; {M_COLBRK} (Control+Shift+Return) passa alla colonna successiva. {MT_VIEW} > {M_REPAG} (F2) impagina di nuovo.
 
 ## Intestazione e piè di pagina
-{M_HEADFOOT} dà a ogni pagina una riga di intestazione e una di piè di pagina, a sinistra, al centro o a destra, nella dimensione scelta. I campi `{page}`, `{pages}`, `{date}`, `{time}` e `{file}` vengono compilati su ogni pagina. Si possono omettere sulla prima pagina.
+{M_HEADFOOT} dà a ogni pagina una riga di intestazione e una di piè di pagina, a sinistra, centrate o a destra, della dimensione scelta. I campi `{page}`, `{pages}`, `{date}`, `{time}` e `{file}` vengono compilati in ogni pagina. Si possono omettere sulla prima pagina. {MT_INSERT} > {M_PAGENUM} mette i numeri di pagina nell'intestazione o nel piè di pagina in un solo passo.
 
 ![headfoot] Intestazione e piè di pagina.
 
@@ -228,7 +248,7 @@ In una cella si scrive come in un paragrafo; il testo va a capo dentro la cella 
 ![table] Una tabella con la griglia.
 
 ## Modificare una tabella
-Con il cursore in una tabella, {M_TBLPROP} imposta il numero di righe e colonne, la larghezza di ogni colonna in millimetri e la griglia. {M_ROWINS}, {M_ROWDEL}, {M_COLINS}, {M_COLDEL} e {M_TBLDEL} modificano la tabella del cursore. Una tabella può avere fino a 12 colonne.
+Con il cursore in una tabella, {M_TBLPROP} imposta il numero di righe e colonne, la larghezza di ogni colonna in millimetri e le linee della griglia; i suoi pulsanti inseriscono o eliminano anche la riga o la colonna al cursore, o eliminano la tabella. Una tabella può avere fino a 12 colonne.
 
 ![tblprop] {S_TBL_PROP_TITLE}.
 
@@ -237,16 +257,16 @@ Una tabella di numeri può avere un **grafico**: a torta, a barre, a torta 3D o 
 
 ![chartmenu] Il menu del grafico.
 
-Le righe sono le categorie e le colonne di numeri le serie. Una prima riga di parole (o di anni) dà il nome alle serie e una prima colonna di parole alle categorie. Il grafico segue i numeri mentre si scrive, viene stampato e va nel PDF; usa i colori dove lo schermo li ha.
+Le righe sono le categorie e le colonne di numeri le serie. Una prima riga di parole (o anni) dà il nome alle serie e una prima colonna di parole alle categorie. Il grafico segue i numeri mentre si scrive, viene stampato e va nel PDF; sullo schermo è a colori con 16 colori o più, a retini altrimenti.
 
 ![chart] Un grafico a barre sotto la sua tabella.
 
 # Immagini e disegni
 
 ## Immagini
-{MT_INSERT} > {M_PICTURE} mette un'immagine sulla pagina del cursore. EdWord legge GEM IMG (monocromatica, a colori, XIMG e true color), PNG (di ogni tipo; le parti trasparenti diventano bianche) e IFF ILBM (anche HAM e 24 bit). Sugli schermi a 15 bit di colore o più l'immagine appare nei suoi colori, altrimenti con una retinatura che ne conserva i toni; così viene stampata, e conserva i colori nell'RTF e in un PDF a colori.
+{MT_INSERT} > {M_PICTURE} mette un'immagine nella pagina con il cursore. EdWord legge GEM IMG (monocromatico, a colori, XIMG e true colour), PNG (di ogni tipo; le parti trasparenti diventano bianche) e IFF ILBM (anche HAM e 24 bit). Sugli schermi high colour o true colour l'immagine appare con i suoi colori; con 4, 16 o 256 colori viene retinata con i colori dello schermo (più sono, più è fedele), e in monocromatico in bianco e nero con una retinatura che ne conserva le sfumature. Si stampa allo stesso modo e conserva i suoi colori nei documenti EdWord e in un PDF a colori.
 
-![picture] Un'immagine con il testo intorno.
+![picture] Un'immagine a colori su uno schermo a 256 colori, con il testo che vi scorre intorno.
 
 Un clic su un'immagine o un disegno lo seleziona: agli angoli compaiono le maniglie. **Trascinarlo** per spostarlo (anche su un'altra pagina) e **trascinare una maniglia** per ridimensionarlo; le immagini mantengono le proporzioni se non si tiene premuto Shift. I tasti cursore spostano di poco l'oggetto selezionato (con Shift, di un punto), Delete lo elimina ed Esc lo deseleziona.
 
@@ -257,7 +277,7 @@ Un doppio clic su un'immagine, o Return, apre le sue impostazioni: posizione e d
 ![drawprops] Impostazioni di un disegno.
 
 ## Disegni
-{MT_INSERT} > {M_DRAWING} mette un disegno vuoto e apre la **finestra di disegno**. Scegliere una forma - rettangolo, rettangolo arrotondato, ellisse, linea o triangolo - e trascinare sulla tela per disegnarla. *{S_DT_SELECT}* sceglie una forma: trascinarla per spostarla o trascinarne la maniglia per ridimensionarla; Tab passa da una forma all'altra e i tasti cursore spostano quella scelta. {S_DT_FILL} (nessuno, bianco, grigio o pieno), {S_DT_WIDTH} (spessore da 0 a 5) e il colore valgono per la forma scelta e per quelle nuove. {S_DT_FRONT} porta una forma davanti alle altre e {S_DELETE} la elimina. Un disegno contiene fino a 16 forme. Ogni modifica si vede subito nel documento; {S_DT_DONE} chiude la finestra. Un doppio clic su un disegno lo riapre.
+{MT_INSERT} > {M_DRAWING} mette un disegno vuoto e apre la **finestra di disegno**. Scegliere una forma - rettangolo, rettangolo arrotondato, ellisse, linea, triangolo o mano libera - e trascinare sulla tela per disegnarla. *{S_DT_SELECT}* seleziona una forma: trascinarla per spostarla o trascinarne la maniglia d'angolo per cambiarne la dimensione; Tab passa da una forma all'altra e i tasti cursore spostano quella selezionata. {S_DT_FILL} (nessuno, bianco, grigio o pieno), {S_DT_WIDTH} (spessore da 0 a 5) e il colore valgono per la forma selezionata e per le nuove. {S_DT_FRONT} porta una forma davanti alle altre e {S_DELETE} la elimina. Un disegno contiene fino a 16 forme. Ogni modifica si vede subito nel documento; {S_DT_DONE} chiude la finestra. Fare doppio clic su un disegno per modificarlo di nuovo.
 
 ![drawedit] La finestra di disegno.
 
@@ -269,7 +289,7 @@ Segnare i titoli con {MT_PARA} > da {M_HEAD1} a {M_HEAD3}, mettere il cursore do
 ![m_tools] Il menu {MT_TOOLS}.
 
 ## Controllo ortografico
-{M_SPELL} (Control+K) controlla il documento dal cursore in una finestra che resta aperta. Per ogni parola sconosciuta si può digitare una correzione o scegliere un suggerimento; {S_IGNORE} la salta, {S_IGNORE_ALL} la salta per questa sessione e {S_ADD} la aggiunge al dizionario utente.
+{M_SPELL} (Control+K) controlla il documento dal cursore in una finestra che resta aperta. Per ogni parola sconosciuta si può digitare una correzione o scegliere un suggerimento; {S_IGNORE} la salta, {S_IGNORE_ALL} la salta per questa sessione e {S_ADD} la aggiunge al dizionario utente. Alla fine del documento il controllo prosegue dall'inizio fino al punto da cui era partito; la finestra dice allora che il controllo è terminato, e {S_STOP} la chiude.
 
 ![spell] Il controllo ortografico.
 
@@ -282,8 +302,8 @@ Con {M_LIVESPELL} attivo, le parole sconosciute vengono sottolineate con una lin
 
 ![livepopup] Suggerimenti per una parola sottolineata.
 
-## Cinque lingue
-L'impostazione *{S_DICTIONARY}* in {M_PREFS} sceglie inglese, tedesco, spagnolo, italiano o francese per il controllo ortografico (il file del dizionario deve stare nella cartella di EdWord). Il controllo tedesco accetta le parole composte da due parole note, quelli francese e italiano le forme elise come *l'homme* e *dell'anno*, e i suggerimenti usano le lettere accentate della lingua.
+## Sei lingue
+L'impostazione *{S_DICTIONARY}* ({M_PREFS} > {S_PREFS_MORE}) sceglie inglese, tedesco, spagnolo, italiano, francese o ceco per l'ortografia (il file del dizionario deve trovarsi nella cartella di EdWord). Il controllo tedesco accetta parole composte da due parole note, quelli francese e italiano forme elise come *l'homme* e *dell'anno*, e i suggerimenti usano le lettere accentate della lingua.
 
 ## Dizionari utente
 Le parole aggiunte vanno in `USER.UDC`. Con {M_UDLOAD} e {M_UDNEW} si possono tenere fino a quattro dizionari utente, per esempio uno per argomento; nel menu si sceglie quale riceve le parole nuove.
@@ -299,9 +319,11 @@ Mettere il cursore su una parola e scegliere {M_THES} (Shift+F7). La finestra el
 ![summary] {S_SUMMARY_TITLE}.
 
 ## Preferenze
-{M_PREFS} imposta la lingua, il formato della data, la carta dei nuovi documenti, la barra strumenti delle nuove finestre, il controllo durante la digitazione, il dizionario, i colori del testo, la risoluzione del PDF, lo schermo (carta, scuro, verde o ambra) e il salvataggio automatico. Sono salvate in `EDWORD.INF`.
+{M_PREFS} imposta la lingua, il formato della data, la carta per i nuovi documenti, la barra strumenti per le nuove finestre, i colori del testo, la visualizzazione (carta, scura, verde o ambra) e il salvataggio automatico. {S_PREFS_MORE} porta alla seconda pagina: interruzioni di pagina, controllo durante la scrittura, il dizionario, la risoluzione del PDF e la cartella dei documenti. Vengono salvate in `EDWORD.INF`.
 
 ![prefs] {S_PREFS_TITLE}.
+
+![prefs2] {S_PREFS_TITLE}: la seconda pagina.
 
 # Finestre
 
@@ -313,32 +335,28 @@ Mettere il cursore su una parola e scegliere {M_THES} (Shift+F7). La finestra el
 
 ![tileh] {M_TILEH}.
 
+# Colori e schermi
+EdWord funziona su ogni schermo da 640 pixel di larghezza. Più colori aggiungono questo:
+| Schermo | Che cosa aggiunge |
+| Monocromatico (2 colori) | tutto funziona; le immagini sono retinate in bianco e nero, i colori del testo non si vedono |
+| 4 colori (media ST) | alcuni colori del testo; la visualizzazione verde; immagini retinate a 4 colori |
+| 16 colori | le icone della barra a colori; tutti gli otto colori del testo; grafici a colori; la visualizzazione ambra; immagini retinate a 16 colori |
+| 256 colori | temi colori per le barre, la riga informativa, righelli, codici e sfondo; immagini retinate a 256 colori |
+| High colour o true colour (da 15 a 32 bit) | immagini con i loro colori; un tema colori per ogni finestra di documento |
+I dialoghi, gli avvisi, i menu e le cornici delle finestre li disegna il sistema con i suoi colori su ogni schermo.
+
+# Provare EdWord
+`EDWTEST.PRG` (nella cartella `TEST` del pacchetto) è EdWord con una prova incorporata. Metterlo nella cartella `EDWORD` e avviarlo: in inglese, sceglie ogni comando di menu utilizzabile su un documento, scrive e modifica nella vista pagina, nella vista divisa e nella modifica rapida, crea e modifica una tabella, copia e incolla, salva un documento EdWord, lo esporta in ogni formato, chiude tutto e riapre i file, controllando man mano. I dialoghi vengono chiusi con il loro pulsante abituale, i selettori di file annullati, e le preferenze non cambiano. Poi termina.
+
+Quello che ha fatto si trova in `EDTEST.LOG`, una riga alla volta: *pass* o *FAIL* per ogni controllo, il conteggio alla fine e *DONE* come ultima riga (se EdWord si è fermato a metà strada, l'ultima riga mostra dove). I suoi file vanno nella cartella `EDTEST`. Un `TEST.SCR` accanto sostituisce la prova con un proprio script.
+
 # Informazioni su EdWord
 
 ![about] La finestra di informazioni.
 
 {MT_DESK} > {M_ABOUT} mostra la versione. Chi compila EdWord dai sorgenti può impostare il numero di versione e la frase sottostante dalla riga di comando: `make ED_VERSION=3.1 ED_ABOUT="Per il nostro club"`.
 
-# EdWord su altri computer
-Lo stesso EdWord funziona su Amiga, Mac e Windows. Documenti, impaginazione, RTF, PDF, controllo ortografico e sinonimi si comportano esattamente come sull'ST, quindi un documento appare uguale ovunque; menu, tasti e finestre di dialogo seguono le convenzioni di ciascun sistema.
-
-## Amiga
-Due programmi: **EdWord** per AmigaOS 2.04 o successivo ed **EdWord13** per Workbench 1.2 e 1.3, entrambi su qualsiasi 68000 o superiore. Copiare il programma e la sua icona con i dizionari e i sinonimi in uno stesso cassetto; le preferenze stanno accanto, in `EdWord.prefs`. Si può usare qualsiasi font bitmap Amiga in `FONTS:`.
-
-EdWord apre un proprio schermo ad alta risoluzione con 16 colori. *{S_AMI_SCREEN}* in {M_PREFS} sceglie uno schermo interlacciato, uno come quello del Workbench, qualsiasi modo video (da Workbench 2.1) o lo schermo del Workbench stesso, dove chiudere l'ultimo documento fa uscire da EdWord. Il primo menu è *{S_AMI_PROJECT}*; le scorciatoie usano il tasto Amiga destro (N, O, S, A per salva con nome, P, W, Q; Z, Y, X, C, V; F e G per cercare). Con i tasti cursore, Shift va agli estremi della riga o salta una finestra, Alt per parole e per pagine, Ctrl agli estremi del documento, e Shift+Alt estende la selezione. Si stampa con `printer.device` e la stampante scelta nelle preferenze di stampa.
-
-## Mac
-EdWord per macOS 11 o successivo, su Apple silicon e Intel, usa tutti i font del Mac in qualsiasi dimensione. I menu seguono le convenzioni del Mac, con i soliti tasti Comando e un menu Aiuto che apre questo manuale; Importa ed Esporta sono pannelli mobili. Si stampa con la finestra di stampa standard, che salva anche in PDF, e le immagini vanno negli appunti e ne vengono come immagini.
-
-## Windows
-Un unico programma, `EdWord.exe`, funziona su ogni Windows da Windows 95 a Windows 11 e non ha bisogno di altri file oltre ai dizionari e ai sinonimi. I documenti sono finestre dentro la finestra principale di EdWord: se ne ingrandisce una, oppure si affiancano, si dispongono a cascata o si riducono a icona dal menu {MT_WINDOW}. Si può usare qualsiasi font TrueType. Il testo è disegnato nelle posizioni date dall'impaginazione, quindi schermo, stampa e PDF coincidono.
-
-I menu sono {MT_FILE}, {MT_EDIT}, {MT_INSERT}, {MT_FONT}, {MT_STYLE}, {MT_PARA}, {MT_TOOLS}, {MT_WINDOW} e {S_W_HELP}, con i soliti tasti di Windows: Ctrl+N, O, S, P, W, Z, Y, X, C, V, A, F, B, I e U, Ctrl+Maiusc+S per {M_SAVEAS}, F3 per cercare di nuovo e Alt+F4 per uscire. Maiusc con i tasti cursore estende la selezione; Ctrl sposta per parole e, con Home e Fine, agli estremi del documento. Il **tasto destro del mouse** apre un menu: suggerimenti ortografici su una parola sottolineata, taglia, copia e incolla sul testo, proprietà ed elimina su un'immagine o un disegno.
-
-{M_PRINT} usa la finestra di stampa di Windows, quindi si può scegliere qualsiasi stampante. Copia mette il testo negli appunti come RTF e come testo semplice, così gli altri programmi di videoscrittura lo incollano con la sua formattazione, e le immagini come bitmap; Incolla prende RTF, testo o una bitmap dagli altri programmi. I documenti si possono trascinare sulla finestra di EdWord. Preferenze, dizionari utente e copie dei documenti senza nome stanno in `EdWord.ini` e accanto, nella cartella dei dati delle applicazioni.
-
 # Tasti
-Sull'ST:
 | Tasto | Funzione |
 | Control+N, O, S, U, Q | nuovo, apri, salva, chiudi, esci |
 | Control+Shift+S | salva con nome |
@@ -355,12 +373,12 @@ Sull'ST:
 | F9, F10 | elenco puntato, elenco numerato |
 | Control+K, Shift+F7 | ortografia, sinonimi |
 | F4, Control+Y, F6 | vista pagina, vista divisa, {M_VCODES} |
-| F7, F8 | riduci, ingrandisci |
+| F7, F8, Shift+F8 | riduci, ingrandisci, adatta alla larghezza |
+| F2 | reimpagina |
 | Control+T, Control+Shift+R | barra strumenti, righelli |
 | Control+Z, Control+W | riduci a icona, finestra successiva |
 | Tab, Shift+Tab (in una tabella) | cella successiva, cella precedente |
 | Esc | chiude una finestra strumento, deseleziona un'immagine |
-I tasti di Amiga, Mac e Windows sono descritti in "EdWord su altri computer".
 
 # Limiti
 - 32 documenti alla volta.

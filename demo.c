@@ -11,11 +11,13 @@
  *   SHOT name            screenshot once the windows are redrawn
  *   DSHOT name           screenshot of the next dialog or popup
  *   DSHOT2 name          ... and of the dialog that the next one opens
+ *   DSHOTAT k name       ... of the kth dialog from now (1 the next)
  *   DFILE name           the next file selector answers name (in EdWord's folder)
  *   SAVE name            save the top document as RTF
  *   PAGETOP n y          scroll to y pixels below the top of page n
  *   DEXIT n              the next dialog leaves by its nth exit button
- *                        (0: the default one), a popup with item n
+ *                        (0: the default one), a popup with item n; more
+ *                        DEXIT lines: the dialogs after it, in turn
  *   MENU n name          drop down menu n and take a screenshot
  *   TYPE text            type text into the top document
  *   KEY scan ascii shift a key press
@@ -31,14 +33,33 @@
  *   LONGPRESS word       hold the button on the word (spelling popup)
  *   CLICK x y n          a click at screen x y
  *   REDRAW               redraw the whole screen
+ *   THEMEDOC n           give the top window colour theme n of its own
  *   WAIT n               do nothing for n ticks
  *   PRTIME c             time printing page 1 at 300 dpi (c: in colour), in the log
  *   STROKE x y x y ...   a freehand stroke through those screen points (drawing window)
  *   QUIT
+ *
+ * The test build ("make EDTEST=1", EDWTEST.PRG) runs the same way, in
+ * English, from TEST.SCR or, without one, the script built into it below,
+ * and writes what happened to EDTEST.LOG; its files go in EDTEST\. More
+ * lines for it:
+ *
+ *   LOG text             a line in the log
+ *   ALLMENUS             every enabled menu command on the top document
+ *   KEYS text            type text as keys (\n: Return), in any view
+ *   MARK                 remember the top document's length
+ *   CHECK TEXT s | NOTEXT s | LEN n | SAME | DOCS n | TABLES n | OBJS n |
+ *         FILE name | VIEW n          pass or fail, in the log
+ *   EXPORT fmt name      export the top document (0 RTF, 1 text, 2 Markdown,
+ *                        3 1st Word Plus, 4 Protext, 5 PDF)
+ *   MKDIR name           make a folder in EdWord's
+ *   CLOSEALL             close every document, unsaved
  */
 #ifdef EDDEMO
 #include <gem.h>
 #include <osbind.h>
+#include <mint/falcon.h>
+#include <mint/cookie.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,8 +68,9 @@
 
 int demo_on;
 static char  *script, *line_p;
-static char   dshot[16], dshot2[16];      /* this dialog's picture, the one after it */
-static int    dexit = -1, wait_ticks;
+#define NPEND 8
+static char   dshot[NPEND][16];           /* the pictures of the next dialogs: this one's, the one after... */
+static int    dexit[NPEND], ndexit, wait_ticks;   /* how the next dialogs are left, in turn */
 static char   dfile[40];
 
 /* the file selector's answer: the name from DFILE, or cancel */
@@ -69,11 +91,12 @@ static long shot_copy(void) { memcpy(shot_dst, shot_src, shot_len); return 0; }
 static void shot_file(const char *name)
 {
     char path[300];
-    long fh, n;
-    short hdr[4];
-    short rez = Getrez();
-    int planes = rez == 2 || rez == 6 ? 1 : rez == 1 ? 2 : 4;
+    long fh, n, vdo = 0;
+    short hdr[4], ext[57];
+    int planes, i;
     void *buf;
+    vq_extnd(vhandle, 1, ext);                   /* Getrez() can't tell a Falcon's modes */
+    planes = ext[4] > 0 ? ext[4] : 1;
     sprintf(path, "%sSHOTS", progdir);
     (void)Dcreate(path);
     sprintf(path, "%sSHOTS\\%s.SCR", progdir, name);
@@ -88,6 +111,22 @@ static void shot_file(const char *name)
     hdr[1] = scr_w; hdr[2] = scr_h; hdr[3] = (short)planes;
     Fwrite((short)fh, sizeof hdr, hdr);
     Fwrite((short)fh, n, buf);
+    /* with a palette, its colours after the pixels: "PAL", then 0x00RRGGBB
+     * for each pixel value (the Falcon's own, or the ST's 16) */
+    if (planes >= 2 && planes <= 8) {
+        long pal[256];
+        int np = 1 << planes;
+        (void)Getcookie(0x5F56444FL, &vdo);      /* '_VDO' */
+        if ((vdo >> 16) >= 3) VgetRGB(0, np, pal);
+        else
+            for (i = 0; i < np && i < 16; i++) {
+                int c = Setcolor(i, -1), r = (c >> 8) & 15, g = (c >> 4) & 15, b = c & 15;
+                r = ((r & 7) << 1) | (r >> 3); g = ((g & 7) << 1) | (g >> 3); b = ((b & 7) << 1) | (b >> 3);   /* STE order */
+                pal[i] = ((long)(r * 17) << 16) | ((long)(g * 17) << 8) | (b * 17);
+            }
+        Fwrite((short)fh, 4, "PAL");
+        Fwrite((short)fh, 4L * np, pal);
+    }
     Fclose((short)fh);
     free(buf);
 }
@@ -99,13 +138,253 @@ void demo_shot(const char *name)
     graf_mouse(M_ON, NULL);
 }
 
+#ifdef EDTEST
+#include <stdarg.h>
+/* ---- the test build ------------------------------------------------- */
+static const char test_script[] =
+    "LOG EdWord test run: menus, editing in each view, saving and loading\n"
+    "MKDIR EDTEST\n"
+    "CMD NEW\n"
+    "CHECK DOCS 1\n"
+    "TYPE The quick brown fox jumps over the lazy dog.\\nA second paragraph with a mispelt wurd in it.\\n\n"
+    "CHECK TEXT quick brown\n"
+    "MARK\n"
+    "LOG -- page view\n"
+    "VIEW 0\n"
+    "CHECK VIEW 0\n"
+    "GO END\n"
+    "KEYS Typed in the page view.\\n\n"
+    "CHECK TEXT Typed in the page view.\n"
+    "KEY 0e 8 0\n"
+    "KEY 0e 8 0\n"
+    "CHECK NOTEXT Typed in the page view.\n"
+    "FIND quick\n"
+    "CMD BOLD\n"
+    "CMD ITALIC\n"
+    "CMD UNDER\n"
+    "CMD JCENTRE\n"
+    "CMD UNDO\n"
+    "CMD REDO\n"
+    "CMD ZOOMPAGE\n"
+    "CMD ZOOMFIT\n"
+    "CMD ZOOMPAGE\n"
+    "CHECK VIEW 0\n"
+    "LOG -- split view\n"
+    "VIEW 1\n"
+    "CHECK VIEW 1\n"
+    "GO END\n"
+    "KEYS Typed in the split view.\\n\n"
+    "CHECK TEXT Typed in the split view.\n"
+    "LOG -- quick edit\n"
+    "VIEW 2\n"
+    "CHECK VIEW 2\n"
+    "GO END\n"
+    "KEYS Typed in quick edit.\\n\n"
+    "VIEW 0\n"
+    "CHECK TEXT Typed in quick edit.\n"
+    "LOG -- tables, pictures, clipboard\n"
+    "GO END\n"
+    "CMD TBLINS\n"
+    "CHECK TABLES 1\n"
+    "KEYS 12\n"
+    "CMD ROWINS\n"
+    "CMD COLINS\n"
+    "CMD TBLPROP\n"
+    "CMD COLDEL\n"
+    "CMD ROWDEL\n"
+    "CHECK TABLES 1\n"
+    "GO END\n"
+    "CMD SELALL\n"
+    "CMD COPY\n"
+    "GO END\n"
+    "CMD PASTE\n"
+    "CHECK LEN 200\n"
+    "LOG -- every menu command\n"
+    "GO START\n"
+    "ALLMENUS\n"
+    "LOG -- saving and loading\n"
+    "VIEW 0\n"
+    "MARK\n"
+    "DFILE EDTEST\\TEST.EWR\n"
+    "CMD SAVEAS\n"
+    "CHECK FILE EDTEST\\TEST.EWR\n"
+    "EXPORT 0 EDTEST\\TEST.RTF\n"
+    "EXPORT 1 EDTEST\\TEST.TXT\n"
+    "EXPORT 2 EDTEST\\TEST.MD\n"
+    "EXPORT 3 EDTEST\\TEST.DOC\n"
+    "EXPORT 4 EDTEST\\TEST.PRO\n"
+    "EXPORT 5 EDTEST\\TEST.PDF\n"
+    "CLOSEALL\n"
+    "CHECK DOCS 0\n"
+    "OPEN EDTEST\\TEST.EWR\n"
+    "CHECK DOCS 1\n"
+    "CHECK SAME\n"
+    "CHECK TABLES 1\n"
+    "CHECK TEXT Typed in the split view.\n"
+    "OPEN EDTEST\\TEST.RTF\n"
+    "CHECK DOCS 2\n"
+    "CHECK TEXT Typed in quick edit.\n"
+    "OPEN EDTEST\\TEST.TXT\n"
+    "CHECK TEXT quick brown\n"
+    "CLOSEALL\n"
+    "QUIT\n";
+
+static char *next_word(char **p);
+static int  npass, nfail;
+static long marked = -1;
+
+void test_note(const char *fmt, ...)
+{
+    char path[300];
+    FILE *f;
+    va_list ap;
+    sprintf(path, "%sEDTEST.LOG", progdir);
+    f = fopen(path, "a");                 /* a line at a time: a crash leaves the last one */
+    if (!f) return;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputs("\r\n", f);
+    fclose(f);
+}
+
+static void result(int ok, const char *what)
+{
+    if (ok) npass++; else nfail++;
+    test_note("%s %s", ok ? "pass   " : "FAIL   ", what);
+}
+
+void test_cmd_begin(const char *name) { test_note("run     %s", name); }
+
+/* after each command: a document still there and laid out */
+void test_cmd_end(const char *name)
+{
+    DOC *d = top_doc();
+    char t[80];
+    sprintf(t, "%s", name);
+    if (!d) { result(0, t); test_note("        no document after it"); return; }
+    if (d->len < 0 || d->cursor < 0 || d->cursor > d->len || (d->len > 0 && d->nlines <= 0)) {
+        result(0, t);
+        test_note("        len %ld, cursor %ld, %ld lines", d->len, d->cursor, d->nlines);
+        return;
+    }
+    sprintf(t, "%s  (%ld characters, %d pages)", name, d->len, doc_npages(d));
+    result(1, t);
+}
+
+static int ndocs(void)
+{
+    int i, n = 0;
+    for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i)) n++;
+    return n;
+}
+
+static int has_text(DOC *d, const char *s)
+{
+    long e;
+    return d && find_next(d, 0, s, 0, &e) >= 0;
+}
+
+static void check(char *s)
+{
+    char *what = next_word(&s), t[120];
+    DOC *d = top_doc();
+    int ok = 0;
+    if (!strcmp(what, "TEXT")) ok = has_text(d, s);
+    else if (!strcmp(what, "NOTEXT")) ok = d && !has_text(d, s);
+    else if (!strcmp(what, "LEN")) ok = d && d->len >= atol(s);
+    else if (!strcmp(what, "SAME")) ok = d && d->len == marked;
+    else if (!strcmp(what, "DOCS")) ok = ndocs() == atoi(s);
+    else if (!strcmp(what, "TABLES")) ok = d && d->a.ntbl >= atoi(s);
+    else if (!strcmp(what, "OBJS")) ok = d && d->a.nobj >= atoi(s);
+    else if (!strcmp(what, "VIEW")) ok = d && d->view == atoi(s);
+    else if (!strcmp(what, "FILE")) {
+        char path[300];
+        long n;
+        unsigned char *b;
+        sprintf(path, "%s%s", progdir, s);
+        b = load_file(path, &n);
+        ok = b && n > 0;
+        free(b);
+        sprintf(t, "%s %s (%ld bytes)", what, s, ok ? n : 0L);
+        result(ok, t);
+        return;
+    }
+    sprintf(t, "%s %.80s", what, s);
+    if (d && (!strcmp(what, "LEN") || !strcmp(what, "SAME")))
+        sprintf(t + strlen(t), " (%ld characters, marked %ld)", d->len, marked);
+    result(ok, t);
+}
+
+static void keys(const char *s)
+{
+    for (; *s; s++) {
+        if (s[0] == '\\' && s[1] == 'n') { handle_key(0, 0x1C0D); s++; }
+        else handle_key(0, (short)(unsigned char)*s);
+        pump_redraws();
+    }
+}
+
+static void close_all(void)
+{
+    int i;
+    tools_close_all();
+    for (i = 0; i < MAX_DOCS; i++)
+        if (DOC_USED(i)) { docs[i]->dirty = 0; docs[i]->cv.dirty = 0; close_doc(docs[i]); }
+    pump_redraws();
+}
+
+static void test_line(char *cmd, char *s)
+{
+    DOC *d = top_doc();
+    if (!strcmp(cmd, "LOG")) test_note("%s", s);
+    else if (!strcmp(cmd, "CHECK")) check(s);
+    else if (!strcmp(cmd, "KEYS")) keys(s);
+    else if (!strcmp(cmd, "MARK")) marked = d ? d->len : -1;
+    else if (!strcmp(cmd, "MKDIR")) { char path[300]; sprintf(path, "%s%s", progdir, s); (void)Dcreate(path); }
+    else if (!strcmp(cmd, "CLOSEALL")) close_all();
+    else if (!strcmp(cmd, "ALLMENUS")) {
+        /* not these: they'd end the run, print on paper, or need the user */
+        static const short skip[] = { C_QUIT, C_CLOSE, C_PRINT, C_NEW, C_TEMPLATE, C_ICONIFY, C_ICONALL, 0 };
+        test_all_menus(skip);
+    } else if (!strcmp(cmd, "EXPORT") && d) {
+        char name[40], t[80];
+        int fmt = atoi(next_word(&s));
+        strncpy(dfile, s, 39); dfile[39] = 0;
+        sprintf(t, "export %d %s", fmt, s);
+        test_note("run     %s", t);
+        result(export_doc(d, fmt, 1, CS_ATARI, name), t);
+    }
+}
+
+static void test_end(void)
+{
+    test_note("%d passed, %d failed%s", npass, nfail, nfail ? "" : ": all well");
+    test_note("DONE");
+}
+#endif
+
 int demo_start(void)
 {
     char path[300];
     long n;
+#ifdef EDTEST
+    sprintf(path, "%sEDTEST.LOG", progdir);
+    remove(path);
+    test_note("EdWord %s test build", ED_VERSION);
+    sprintf(path, "%sTEST.SCR", progdir);
+    script = (char *)load_file(path, &n);
+    if (!script) {                            /* the script built in */
+        n = (long)strlen(test_script);
+        script = (char *)malloc(n + 1);
+        if (!script) return 0;
+        memcpy(script, test_script, n);
+    }
+#else
     sprintf(path, "%sDEMO.SCR", progdir);
     script = (char *)load_file(path, &n);
     if (!script) return 0;
+#endif
     script = (char *)realloc(script, n + 1);
     script[n] = 0;
     line_p = script;
@@ -120,12 +399,12 @@ int demo_start(void)
 /* a dialog has been drawn: take its picture and say how to leave it */
 int demo_dialog(OBJECT *tree, short x, short y, short w, short h)
 {
-    short i, def = -1, nexit = 0, want = (short)dexit;
+    short i, def = -1, nexit = 0, want = (short)(ndexit ? dexit[0] : -1);
     (void)x; (void)y; (void)w; (void)h;
-    if (dshot[0]) { demo_shot(dshot); dshot[0] = 0; }
-    strcpy(dshot, dshot2);
-    dshot2[0] = 0;
-    dexit = -1;
+    if (dshot[0][0]) demo_shot(dshot[0]);
+    memmove(dshot[0], dshot[1], sizeof dshot - sizeof dshot[0]);
+    dshot[NPEND - 1][0] = 0;
+    if (ndexit) { memmove(dexit, dexit + 1, sizeof dexit - sizeof dexit[0]); ndexit--; }
     for (i = 0; ; i++) {
         if ((tree[i].ob_flags & OF_DEFAULT) && want != -2) def = i;
         if (tree[i].ob_flags & OF_EXIT) {
@@ -143,7 +422,7 @@ int demo_dialog(OBJECT *tree, short x, short y, short w, short h)
 
 int demo_alert(void)
 {
-    if (dshot[0]) dshot[0] = 0;
+    if (dshot[0][0]) dshot[0][0] = 0;
     return 1;
 }
 
@@ -216,13 +495,21 @@ static void run_line(char *s)
     char *cmd = next_word(&s);
     DOC *d = top_doc();
     edlog("demo: %s %s", cmd, s);
+#ifdef EDTEST
+    if (strcmp(cmd, "LOG") && strcmp(cmd, "CHECK") && strcmp(cmd, "ALLMENUS")) test_note("        %s %s", cmd, s);
+    test_line(cmd, s);
+#endif
     if (!strcmp(cmd, "OPEN")) { char path[300]; sprintf(path, "%s%s", progdir, s); open_path(path, strstr(s, ".TXT") != NULL); }
     else if (!strcmp(cmd, "CMD")) { int c = cmd_by_name(s); if (c) do_cmd(c); }
     else if (!strcmp(cmd, "LIVE")) { int c = cmd_by_name(s); demo_on = 0; if (c) do_cmd(c); }   /* as the user would: the script ends */
     else if (!strcmp(cmd, "SHOT")) { pump_redraws(); evnt_timer(50L); pump_redraws(); demo_shot(s); }
-    else if (!strcmp(cmd, "DSHOT")) { strncpy(dshot, s, 15); dshot[15] = 0; }
-    else if (!strcmp(cmd, "DSHOT2")) { strncpy(dshot2, s, 15); dshot2[15] = 0; }
-    else if (!strcmp(cmd, "DEXIT")) dexit = atoi(s);
+    else if (!strcmp(cmd, "DSHOT")) { strncpy(dshot[0], s, 15); dshot[0][15] = 0; }
+    else if (!strcmp(cmd, "DSHOT2")) { strncpy(dshot[1], s, 15); dshot[1][15] = 0; }
+    else if (!strcmp(cmd, "DSHOTAT")) {
+        int k = atoi(next_word(&s)) - 1;
+        if (k >= 0 && k < NPEND) { strncpy(dshot[k], s, 15); dshot[k][15] = 0; }
+    }
+    else if (!strcmp(cmd, "DEXIT")) { if (ndexit < NPEND) dexit[ndexit++] = atoi(s); }
     else if (!strcmp(cmd, "DRAWSEL")) draw_select_shape(atoi(s));
     else if (!strcmp(cmd, "DFILE")) { strncpy(dfile, s, 39); dfile[39] = 0; }
     else if (!strcmp(cmd, "MENU")) { int i = atoi(next_word(&s)); menu_shot(i, s); }
@@ -246,12 +533,25 @@ static void run_line(char *s)
     else if (!strcmp(cmd, "QUIT")) {
         char path[300];
         long fh;
+#ifdef EDTEST
+        test_end();
+#endif
         sprintf(path, "%sSHOTS", progdir);
         (void)Dcreate(path);
         sprintf(path, "%sSHOTS\\DONE", progdir);
         fh = Fcreate(path, 0);
         if (fh >= 0) Fclose((short)fh);
         quit_now = 1;
+    }
+    else if (!strcmp(cmd, "THEMEDOC") && d) {    /* THEMEDOC n: the top window's own theme n */
+        unsigned char g[TH_NROLES][3];
+        int gid = theme_id;
+        memcpy(g, theme_rgb, sizeof g);
+        theme_pick(atoi(s));
+        theme_set_window(d->slot, theme_id, theme_rgb);
+        theme_id = gid;
+        memcpy(theme_rgb, g, sizeof g);
+        form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
     }
     else if (!strcmp(cmd, "REDRAW")) { form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h); }
     else if (!strcmp(cmd, "KEY")) {

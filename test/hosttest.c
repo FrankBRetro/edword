@@ -874,6 +874,51 @@ int main(int argc, char **argv)
             CHECK(rtf_import(&d2, path) && d2.nimg == 1 && d2.imgs[0].rgb &&
                   !memcmp(d2.imgs[0].rgb, d.imgs[0].rgb, 40 * 30 * 3) && !memcmp(d2.imgs[0].bits, d.imgs[0].bits, 5 * 30),
                   "colours read back from RTF");
+            {   /* Czech: the Czech letters (Kamenicky) through UTF-8, RTF (1250) and back */
+                DOC dc, dc2;
+                char *t;
+                long n;
+                char dt[40];
+                st_cset = ST_CS_CZECH;
+                doc_init(&dc);
+                import_str(&dc, "P\xc5\x99\xc3\xadli\xc5\xa1 \xc5\xbelu\xc5\xa5ou\xc4\x8dk\xc3\xbd k\xc5\xaf\xc5\x88 \xc4\x8c\xc5\x98", CS_AUTO, 0);
+                CHECK(dc.len >= 3 && dc.text[1].ch == 0xA9 && dc.text[2].ch == 0xA1, "Czech letters in the Czech set");
+                CHECK(st_upper(0xA9) == 0x9E && st_lower(0x80) == 0x87 && st_isalpha(0xAB), "Czech letter case");
+                sprintf(path, "%s/czech.ewr", argv[2]);
+                CHECK(rtf_export(&dc, path), "Czech document saved");
+                t = (char *)load_file(path, &n);
+                CHECK(t && strstr(t, "\\ansicpg1250") && strstr(t, "\\u345\\'f8"), "Czech RTF in Windows-1250");
+                free(t);
+                doc_init(&dc2);
+                CHECK(rtf_import(&dc2, path) && dc2.len == dc.len && dc2.text[1].ch == 0xA9 && dc2.text[dc.len - 1].ch == 0x9E,
+                      "Czech letters read back");
+                fmt_date(dt, DT_DOTS, 2026, 10, 27, 0, 0);
+                CHECK(!strcmp(dt, "27.10.2026"), "date as 27.10.2026");
+                st_cset = ST_CS_ATARI;
+                doc_init(&dc2);
+                CHECK(rtf_import(&dc2, path) && dc2.text[1].ch == 'r', "Czech read without the Czech set: plain letters");
+                doc_free(&dc); doc_free(&dc2);
+            }
+            {   /* standard RTF for other programs: the picture as PNG, none of ours */
+                unsigned char *keep;
+                long n;
+                char *t;
+                doc_layout(&d);
+                sprintf(path, "%s/pic_std.rtf", argv[2]);
+                CHECK(rtf_export_std(&d, path), "standard RTF with a colour picture");
+                t = (char *)load_file(path, &n);
+                CHECK(t && strstr(t, "\\pngblip") && !strstr(t, "\\edobj") && !strstr(t, "\\edword"),
+                      "standard RTF: a PNG picture and no EdWord groups");
+                free(t);
+                keep = d.imgs[0].rgb; d.imgs[0].rgb = NULL;          /* in black and white */
+                sprintf(path, "%s/pic_mono_std.rtf", argv[2]);
+                CHECK(rtf_export_std(&d, path), "standard RTF with a black and white picture");
+                d.imgs[0].rgb = keep;
+                sprintf(path, "%s/pic.rtf", argv[2]);
+                t = (char *)load_file(path, &n);
+                CHECK(t && strstr(t, "{\\*\\edword1}"), "EdWord's own file says its version");
+                free(t);
+            }
             {   /* printed in colour: the picture in passes of the printer's inks */
                 PRTOUT pc;
                 int k, ninks = 0;

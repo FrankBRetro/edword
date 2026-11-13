@@ -4,6 +4,7 @@
  *           UTF-8 or plain ASCII). Runs on a PC or on the ST.
  *
  *   mkdic words.txt EDWORD.DIC
+ *   mkdic -cs words.txt EDWORDCS.DIC      (Czech: the Czech character set)
  *
  * Possessive forms (word's) are dropped: the checker accepts them when
  * the stem is known. Words that can't be written in the ST character
@@ -55,7 +56,8 @@ int main(int argc, char **argv)
     long n = 0, cap = 0, i, nu = 0, nb, dl = 0, *offs;
     unsigned char *data;
 
-    if (argc < 3) { fprintf(stderr, "usage: mkdic words.txt EDWORD.DIC\n"); return 2; }
+    if (argc > 1 && !strcmp(argv[1], "-cs")) { st_cset = ST_CS_CZECH; argv++; argc--; }
+    if (argc < 3) { fprintf(stderr, "usage: mkdic [-cs] words.txt EDWORD.DIC\n"); return 2; }
     in = fopen(argv[1], "r");
     if (!in) { perror(argv[1]); return 1; }
     while (fgets(line, sizeof line, in)) {

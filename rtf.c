@@ -14,6 +14,14 @@
  *      {\*\edsh\edst..\edsf..\edsc..\edsl..\edsxa..\edsya..\edsxb..\edsyb..}
  *      {\*\edimg\ediw..\edih.. hex rows}{\*\edimgname NAME}}
  * Files that don't start with {\rtf are loaded as plain text.
+ *
+ * EdWord's own documents (.EWR) are this RTF with all of those groups and
+ * {\*\edword N}, the version of the format. Every addition to it goes in
+ * a {\*\ed...} group, so an older EdWord skips what it doesn't know and
+ * a newer one reads an older file as it is; any other RTF reader opens an
+ * .EWR as plain RTF too. rtf_export_std() writes standard RTF for other
+ * programs: none of EdWord's groups, and the pictures as PNG \pict
+ * pictures in the text (not where they were on the page).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +40,15 @@ typedef struct { int num, idx; } FMAP;
 static struct {
     int just, sl, slmult, li, fi, list, toc, tocent, intbl;
 } pst;
+
+static int  rtf_cp = 1252;            /* the file's \\ansicpg */
+
+/* a \\'xx byte in the file's code page, in our character set */
+static unsigned char from_win(unsigned char ch)
+{
+    if (rtf_cp == 1252 && st_cset == ST_CS_ATARI) return win_to_st(ch);
+    return uni_to_st(win_to_uni(ch, rtf_cp == 1250 ? 1250 : 1252));
+}
 
 static FMAP fmap[64];
 static int  nfmap, deffnum;
@@ -281,7 +298,7 @@ static void put_text(DOC *d, RSTATE *s, unsigned char ch)
     if (s->dest == D_HF0 || s->dest == D_HF1) {
         char *t = HF(d).text[s->dest - D_HF0];
         size_t n = strlen(t);
-        if (n < sizeof HF(d).text[0] - 1) { t[n] = (char)win_to_st(ch); t[n + 1] = 0; }
+        if (n < sizeof HF(d).text[0] - 1) { t[n] = (char)from_win(ch); t[n + 1] = 0; }
         return;
     }
     if (s->dest == D_FONTTBL) {
@@ -298,7 +315,7 @@ static void put_text(DOC *d, RSTATE *s, unsigned char ch)
     }
     if (s->dest != D_NORMAL) return;
     if (ucskip > 0) { ucskip--; return; }
-    put_st(d, s, win_to_st(ch));
+    put_st(d, s, from_win(ch));
 }
 
 static const char *skipdest[] = {
@@ -585,6 +602,7 @@ static void control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
     else if (!strcmp(w, "fs") && hasp) s->size = clampi(p / 2, 4, 120);
     else if (!strcmp(w, "f") && hasp) s->fnum = (int)p;
     else if (!strcmp(w, "deff") && hasp) deffnum = (int)p;
+    else if (!strcmp(w, "ansicpg") && hasp) rtf_cp = (int)p;
     else if (!strcmp(w, "uc") && hasp) s->uc = (int)p;
     else if (!strcmp(w, "u") && hasp) { put_st(d, s, uni_to_st(p < 0 ? p + 65536L : p)); ucskip = s->uc; }
     else if (!strcmp(w, "emdash") || !strcmp(w, "endash")) put_st(d, s, '-');
@@ -625,6 +643,7 @@ int rtf_import(DOC *d, const char *path)
         return ok;
     }
 
+    rtf_cp = 1252;
     nfmap = 0; deffnum = 0; fnlen = 0; ffamily = -1; fcurnum = 0; ucskip = 0; nctab = 0;
     nlid = 0; nls = 0; ncellx = 0; curtbl = 0; lastrow_tbl = 0; rowdirty = 1;
     memset(&eim, 0, sizeof eim);
@@ -698,10 +717,131 @@ int rtf_import(DOC *d, const char *path)
 
 /* ---- export -------------------------------------------------------- */
 
+static int std_rtf;      /* rtf_export_std(): standard RTF, none of our groups */
+
+/* ---- a picture as PNG, in hex, for standard RTF: stored (uncompressed)
+ * deflate blocks, which every PNG reader takes ---- */
+static unsigned long crc_tab[256];
+static unsigned long pcrc, pad_a, pad_b;
+static FILE *pf_;
+static int pcol;
+
+static void crc_init(void)
+{
+    unsigned long c;
+    int n, k;
+    if (crc_tab[1]) return;
+    for (n = 0; n < 256; n++) {
+        c = (unsigned long)n;
+        for (k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320UL ^ (c >> 1) : c >> 1;
+        crc_tab[n] = c;
+    }
+}
+
+static void pbyte(unsigned v)
+{
+    v &= 255;
+    pcrc = crc_tab[(pcrc ^ v) & 255] ^ (pcrc >> 8);
+    fprintf(pf_, "%02x", v);
+    if (++pcol == 64) { fputs("\r\n", pf_); pcol = 0; }
+}
+static void pbyte_z(unsigned v)          /* in the zlib data: the Adler-32 too */
+{
+    pad_a = (pad_a + (v & 255)) % 65521UL;
+    pad_b = (pad_b + pad_a) % 65521UL;
+    pbyte(v);
+}
+static void p32(unsigned long v) { pbyte((unsigned)(v >> 24)); pbyte((unsigned)(v >> 16)); pbyte((unsigned)(v >> 8)); pbyte((unsigned)v); }
+static void chunk_start(unsigned long len, const char *type)
+{
+    p32(len);
+    pcrc = 0xFFFFFFFFUL;
+    pbyte((unsigned char)type[0]); pbyte((unsigned char)type[1]); pbyte((unsigned char)type[2]); pbyte((unsigned char)type[3]);
+}
+static void chunk_end(void) { unsigned long c = pcrc ^ 0xFFFFFFFFUL; p32(c); }
+
+static void write_png_hex(FILE *f, const IMG *im)
+{
+    int colour = im->rgb != NULL;
+    long rl = colour ? (long)im->w * 3 : im->rb, raw = (rl + 1) * im->h, nblk = (raw + 65534) / 65535, left, r, c, k;
+    long blk;
+    crc_init();
+    pf_ = f; pcol = 0;
+    pbyte(0x89); pbyte('P'); pbyte('N'); pbyte('G'); pbyte(13); pbyte(10); pbyte(26); pbyte(10);
+    chunk_start(13, "IHDR");
+    p32((unsigned long)im->w); p32((unsigned long)im->h);
+    pbyte(colour ? 8 : 1); pbyte(colour ? 2 : 0); pbyte(0); pbyte(0); pbyte(0);
+    chunk_end();
+    chunk_start((unsigned long)(2 + nblk * 5 + raw + 4), "IDAT");
+    pbyte(0x78); pbyte(0x01);
+    pad_a = 1; pad_b = 0;
+    left = raw; blk = 0;
+    for (r = 0; r < im->h; r++)
+        for (c = -1; c < rl; c++) {
+            unsigned v;
+            if (blk == 0) {                       /* the next stored block */
+                blk = left < 65535 ? left : 65535;
+                pbyte(left <= 65535 ? 1 : 0);
+                pbyte((unsigned)blk); pbyte((unsigned)(blk >> 8));
+                pbyte((unsigned)~blk); pbyte((unsigned)(~blk >> 8));
+            }
+            if (c < 0) v = 0;                     /* each row: filter none */
+            else if (colour) v = im->rgb[r * rl + c];
+            else {                                /* PNG grey: 0 black, ours 1 */
+                v = (unsigned)~im->bits[r * im->rb + c] & 255;
+                k = im->w & 7;
+                if (c == rl - 1 && k) v &= (0xFF00U >> k) & 255;
+            }
+            pbyte_z(v);
+            blk--; left--;
+        }
+    p32((pad_b << 16) | pad_a);
+    chunk_end();
+    chunk_start(0, "IEND");
+    chunk_end();
+    if (pcol) fputs("\r\n", f);
+}
+
+/* the pictures for standard RTF, each in a paragraph of its own before the
+ * paragraph it was beside */
+static void std_pictures(FILE *f, DOC *d, long k, long next)
+{
+    int i;
+    for (i = 0; i < d->a.nobj; i++) {
+        OBJ *o = &d->a.objs[i];
+        long li, at = d->len;
+        if (o->type != OB_IMG || o->img < 0 || o->img >= d->nimg) continue;
+        for (li = 0; li < d->nlines; li++) {
+            LINE *ln = &d->lines[li];
+            if (ln->page > o->page || (ln->page == o->page && (long)(ln->py + ln->lh) * TWIPS > o->y)) { at = ln->start; break; }
+        }
+        while (at > 0 && !ISBRK(d->text[at - 1].ch)) at--;
+        if (at < k || at >= next) continue;      /* not this paragraph's */
+        fprintf(f, "\\pard\\plain{\\pict\\pngblip\\picw%d\\pich%d\\picwgoal%ld\\pichgoal%ld\r\n",
+                d->imgs[o->img].w, d->imgs[o->img].h, o->w, o->h);
+        write_png_hex(f, &d->imgs[o->img]);
+        fputs("}\\par\r\n", f);
+    }
+}
+
+/* a character beyond ASCII: in the code page, or as Unicode if it has none
+ * (\\uc1, the default: one character after \\uN for older readers) */
+static void put_high(FILE *f, unsigned char ch)
+{
+    unsigned char w = st_to_win(ch);
+    long u;
+    /* Czech letters as Unicode too (with the code page's letter after it,
+     * for readers that don't know \\u): not every reader minds \\ansicpg */
+    if (w != '?' && st_cset == ST_CS_ATARI) { fprintf(f, "\\'%02x", w); return; }
+    u = st_to_uni(ch);
+    fprintf(f, "\\u%ld", u > 32767 ? u - 65536L : u);
+    if (w != '?') fprintf(f, "\\'%02x", w); else fputc('?', f);
+}
+
 static void put_rtf_char(FILE *f, unsigned char ch)
 {
     if (ch == '\\' || ch == '{' || ch == '}') { fputc('\\', f); fputc(ch, f); }
-    else if (ch >= 128) fprintf(f, "\\'%02x", st_to_win(ch));
+    else if (ch >= 128) put_high(f, ch);
     else fputc(ch, f);
 }
 
@@ -716,9 +856,12 @@ static void write_hf(FILE *f, DOC *d)
     if (!hf->first && (hf->text[0][0] || hf->text[1][0])) fputs("\\titlepg\r\n", f);
     for (i = 0; i < 2; i++) {
         if (!hf->text[i][0]) continue;
-        fprintf(f, "{\\*\\edhf%d\\edj%d\\edfs%d\\edfirst%d ", i, hf->just[i], hf->size, hf->first);
-        for (t = hf->text[i]; *t; t++) put_rtf_char(f, (unsigned char)*t);
-        fprintf(f, "}\r\n{\\%s\\pard%s\\plain\\f%d\\fs%d ", i ? "footer" : "header",
+        if (!std_rtf) {
+            fprintf(f, "{\\*\\edhf%d\\edj%d\\edfs%d\\edfirst%d ", i, hf->just[i], hf->size, hf->first);
+            for (t = hf->text[i]; *t; t++) put_rtf_char(f, (unsigned char)*t);
+            fputs("}\r\n", f);
+        }
+        fprintf(f, "{\\%s\\pard%s\\plain\\f%d\\fs%d ", i ? "footer" : "header",
                 jq[hf->just[i] % 3], default_font(), hf->size * 2);
         for (t = hf->text[i]; *t; t++) {
             if (!strncmp(t, "{page}", 6)) { fputs("\\chpgn ", f); t += 5; }
@@ -811,12 +954,13 @@ static void para_props(FILE *f, DOC *d, const PARA *p, int intbl, int number)
     if (p->left || p->list) fprintf(f, "\\li%d", (p->left || p->first ? p->left : 24) * 20);
     if (p->first || p->list) fprintf(f, "\\fi%d", (p->left || p->first ? p->first : -18) * 20);
     if (p->toc) fprintf(f, "\\outlinelevel%d", p->toc - 1);
-    if (p->tocent) fprintf(f, "{\\*\\edtoc%d}", p->tocent);
+    if (p->tocent && !std_rtf) fprintf(f, "{\\*\\edtoc%d}", p->tocent);
     if (p->tocent == TOCE_ENTRY) fprintf(f, "\\tqr\\tldot\\tx%ld", twips_w(d) - (long)p->left * 20);
+    if (p->list && !std_rtf) fprintf(f, "{\\*\\edlist%d}", p->list == LIST_BULLET ? 1 : 2);
     if (p->list == LIST_BULLET)
-        fputs("{\\*\\edlist1}{\\*\\pn\\pnlvlblt\\pnindent360{\\pntxtb\\'95}}", f);
+        fputs("{\\*\\pn\\pnlvlblt\\pnindent360{\\pntxtb\\'95}}", f);
     else if (p->list == LIST_NUMBER)
-        fputs("{\\*\\edlist2}{\\*\\pn\\pnlvlbody\\pndec\\pnstart1\\pnindent360{\\pntxta .}}", f);
+        fputs("{\\*\\pn\\pnlvlbody\\pndec\\pnstart1\\pnindent360{\\pntxta .}}", f);
     fputs("\\ltrpar ", f);     /* the space ends a control word, not a group */
 }
 
@@ -832,11 +976,11 @@ static void row_def(FILE *f, DOC *d, const PARA *p)
         x += (long)t->w[i] * 20;
         fprintf(f, "\\cellx%ld", x);
     }
-    if (t->chart) fprintf(f, "{\\*\\edchart\\edct%d\\edcp%d\\edcw%d\\edch%d}", t->chart, t->cpos, t->cw, t->ch);
+    if (t->chart && !std_rtf) fprintf(f, "{\\*\\edchart\\edct%d\\edcp%d\\edcw%d\\edch%d}", t->chart, t->cpos, t->cw, t->ch);
     fputs("\r\n", f);
 }
 
-int rtf_export(DOC *d, const char *path)
+static int rtf_write(DOC *d, const char *path)
 {
     FILE *f = fopen(path, "wb");
     long k;
@@ -845,14 +989,14 @@ int rtf_export(DOC *d, const char *path)
 
     if (!f) return 0;
     doc_norm_para(d);
-    fprintf(f, "{\\rtf1\\ansi\\ansicpg1252\\deff0\r\n{\\fonttbl");
+    fprintf(f, "{\\rtf1\\ansi\\ansicpg%d\\deff0\r\n{\\fonttbl", st_codepage());
     for (i = 0; i < nfonts; i++) {
         char l[40];
         int fam;
         lower(l, fonts[i].name, sizeof l);
         fam = i == 0 ? 2 : family_of(l);
-        fprintf(f, "{\\f%d\\f%s %s;}", i, fam == 2 ? "modern" : fam == 1 ? "roman" : "swiss",
-                fonts[i].name);
+        fprintf(f, "{\\f%d\\f%s\\fcharset%d %s;}", i, fam == 2 ? "modern" : fam == 1 ? "roman" : "swiss",
+                st_cset == ST_CS_CZECH ? 238 : 0, fonts[i].name);
     }
     fprintf(f, "}\r\n{\\colortbl;");
     for (i = 0; i < NCOLORS; i++)
@@ -861,14 +1005,15 @@ int rtf_export(DOC *d, const char *path)
             pg->w * 20, pg->h * 20, pg->ml * 20, pg->mr * 20, pg->mt * 20, pg->mb * 20,
             pg->landscape ? "\\landscape" : "");
     if (pg->cols > 1) fprintf(f, "\\cols%d\\colsx%d\r\n", pg->cols, pg->colgap * 20);
-    if (pg->wrapcol > 0) fprintf(f, "{\\*\\edwrapcol%d}\r\n", pg->wrapcol);
-    for (i = 0; i < d->a.novr; i++) {
+    if (!std_rtf) fprintf(f, "{\\*\\edword%d}\r\n", EWR_VERSION);
+    if (pg->wrapcol > 0 && !std_rtf) fprintf(f, "{\\*\\edwrapcol%d}\r\n", pg->wrapcol);
+    for (i = 0; i < d->a.novr && !std_rtf; i++) {
         PGOVR *o = &d->a.ovr[i];
         fprintf(f, "{\\*\\edpage\\edpg%d\\edfol%d\\edml%d\\edmr%d\\edmt%d\\edmb%d\\edcols%d\\edgap%d}\r\n",
                 o->page, o->following, o->ml, o->mr, o->mt, o->mb, o->cols, o->colgap);
     }
     write_hf(f, d);
-    write_objects(f, d);
+    if (!std_rtf) write_objects(f, d);
 
     for (k = 0; k < d->len; k++) {
         CELL *c = &d->text[k];
@@ -881,6 +1026,11 @@ int rtf_export(DOC *d, const char *path)
             }
             prevlist = p->list;
             prevleft = p->left;
+            if (std_rtf && d->a.nobj) {
+                long e = k;
+                while (e < d->len && !ISBRK(d->text[e].ch)) e++;
+                std_pictures(f, d, k, e + 1);
+            }
             if (intbl) row_def(f, d, p);
             para_props(f, d, p, intbl, number);
             pf = -1;
@@ -903,7 +1053,7 @@ int rtf_export(DOC *d, const char *path)
         case '\t':      fputs("\\tab ", f); break;
         case '\\': case '{': case '}': fputc('\\', f); fputc(c->ch, f); break;
         default:
-            if (c->ch >= 128) fprintf(f, "\\'%02x", st_to_win(c->ch));
+            if (c->ch >= 128) put_high(f, c->ch);
             else fputc(c->ch, f);
         }
     }
@@ -916,4 +1066,23 @@ int rtf_export(DOC *d, const char *path)
     if (i) return 0;
     d->dirty = 0;
     return 1;
+}
+
+/* EdWord's own file: everything, readable by any version of EdWord */
+int rtf_export(DOC *d, const char *path)
+{
+    std_rtf = 0;
+    return rtf_write(d, path);
+}
+
+/* standard RTF for other programs (the document stays as it was: not
+ * saved, still dirty if it was) */
+int rtf_export_std(DOC *d, const char *path)
+{
+    int dirty = d->dirty, ok;
+    std_rtf = 1;
+    ok = rtf_write(d, path);
+    std_rtf = 0;
+    d->dirty = dirty;
+    return ok;
 }

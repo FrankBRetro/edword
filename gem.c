@@ -114,7 +114,7 @@ static void load_prefs(void)
         val = eq + 1;
         val[strcspn(val, "\r\n")] = 0;
         v = atoi(val);
-        if (!strcmp(line, "date") && v >= 0 && v < NDATEFMT) pref_date = v;
+        if (!strcmp(line, "date") && v >= 0 && (v < NDATEFMT || v == DT_DOTS)) pref_date = v;
         else if (!strcmp(line, "toolbar")) pref_toolbar = v != 0;
         else if (!strcmp(line, "colour")) colour_on = v != 0;
         else if (!strcmp(line, "pdfscale") && v >= 1 && v <= 3) pdf_scale = v;
@@ -129,6 +129,7 @@ static void load_prefs(void)
         else if (!strcmp(line, "spelllang") && v >= 0 && v < NLANG) pref_spell = v;
         else if (!strcmp(line, "rulers")) pref_rulers = v != 0;
         else if (!strcmp(line, "guides")) pref_guides = v != 0;
+        else if (!strncmp(line, "theme", 5)) theme_load(line, val);
         else if (!strcmp(line, "keep") && v >= KEEP_ANY && v <= KEEP_TOGETHER) lay_keep = v;
         else if (!strcmp(line, "docdir")) { strncpy(pref_docdir, val, sizeof pref_docdir - 1); }
         else if (!strcmp(line, "tplname")) strncpy(tpl_name, val, sizeof tpl_name - 1);
@@ -143,6 +144,9 @@ void save_prefs(void)
 {
     char path[300];
     FILE *f;
+#ifdef EDTEST
+    return;                             /* the test leaves EDWORD.INF as it was */
+#endif
     prefs_path(path);
     f = fopen(path, "w");
     if (!f) { alert(1, 3, AL_NO_INF, AB_OK); return; }
@@ -153,6 +157,7 @@ void save_prefs(void)
             pref_autosave, pref_asmin, pref_asmode, pref_display, ui_lang, pref_live, pref_rulers, pref_guides, spell_lang);
     fprintf(f, "keep=%d\ndocdir=%s\ntplname=%s\ntpladdr1=%s\ntpladdr2=%s\ntpladdr3=%s\ntpltitle=%s\n",
             lay_keep, pref_docdir, tpl_name, tpl_addr[0], tpl_addr[1], tpl_addr[2], tpl_title);
+    theme_save(f);
     fclose(f);
 }
 
@@ -167,89 +172,22 @@ static int tos_language(void)
     case 2: case 7: return LANG_FR;     /* France, Swiss French */
     case 4: return LANG_ES;
     case 5: return LANG_IT;
+    case 15: return LANG_CS;            /* Czech (EmuTOS) */
     }
     return LANG_EN;
 }
 
 /* ================================================================= */
-/*  Menu bar, built at run time in the current language               */
+/*  Menu bar, from the resource file of the current language          */
 /* ================================================================= */
 
-#define MAXOBJ 260
-#define NMENU  10
+static OBJECT *mtree;                  /* the resource file's menu bar */
+static short  mcmd[MN_COUNT], cmdobj[NCMD];
+static int    font_items, win_items;    /* fonts and document windows listed */
+static short  winmap[MAX_DOCS];         /* menu entry -> document slot */
 #define MAXFONTMENU 24
-
-typedef struct { int text; const char *key; short cmd; } MI;    /* text < 0: separator */
-#define SEP { -1, NULL, -1 }
-#define DYN 0x4000                     /* text is an index into dyn[] */
-
-static OBJECT mtree_own[MAXOBJ], *mtree = mtree_own;   /* the resource file's, or built here */
-static short  mcmd[MAXOBJ], cmdobj[NCMD];
-static short  nobj;
-static char   items[MAXOBJ][44];
-static char   titles[NMENU][16];
-static char   dashes[NMENU][44];
-static char   dyn[100][32];            /* fonts, sizes, colours, windows, dictionaries */
-static int    font_items;
-
-/* The menus follow the Atari conventions: the first menu is the
- * program's, Control+U closes and Control+W cycles the windows,
- * Control+F finds and Control+G finds again, Undo undoes. A shifted
- * shortcut is shown with the Shift arrow. */
-static const MI m_desk[] = { { M_ABOUT, NULL, C_ABOUT }, SEP,
-    { M_ACC, NULL, 0 }, { M_ACC, NULL, 0 }, { M_ACC, NULL, 0 }, { M_ACC, NULL, 0 }, { M_ACC, NULL, 0 },
-    { M_ACC, NULL, 0 }, { 0, NULL, 0 } };
-static const MI m_file[] = {
-    { M_NEW, "^N", C_NEW }, { M_TEMPLATE, NULL, C_TEMPLATE }, { M_OPEN, "^O", C_OPEN }, { M_IMPORT, NULL, C_IMPORT }, { M_CLOSE, "^U", C_CLOSE }, SEP,
-    { M_SAVEDOC, "^S", C_SAVE }, { M_SAVEAS, "^\001S", C_SAVEAS }, { M_EXPORT, NULL, C_EXPORT }, SEP,
-    { M_PAGE, NULL, C_PAGE }, { M_HEADFOOT, NULL, C_HEADFOOT }, { M_PREVIEW, "^\001P", C_PREVIEW },
-    { M_PRINT, "^P", C_PRINT }, SEP,
-    { M_QUIT, "^Q", C_QUIT }, { 0, NULL, 0 } };
-static const MI m_edit[] = {
-    { M_UNDO, "Undo", C_UNDO }, { M_REDO, "\001Undo", C_REDO }, SEP,
-    { M_CUT, "^X", C_CUT }, { M_COPY, "^C", C_COPY }, { M_PASTE, "^V", C_PASTE }, { M_SELALL, "^A", C_SELALL }, SEP,
-    { M_FIND, "^F", C_FIND }, { M_FINDNEXT, "^G", C_FINDNEXT }, SEP,
-    { M_PREVPAGE, "^\001", C_PREVPAGE }, { M_NEXTPAGE, "^\002", C_NEXTPAGE }, { M_GOTOPAGE, "^J", C_GOTOPAGE }, SEP,
-    { M_REPAG, "F2", C_REPAG },
-    { 0, NULL, 0 } };
-static const MI m_insert[] = {
-    { M_DATE, "^D", C_INSDATE }, { M_TIME, NULL, C_INSTIME }, SEP,
-    { M_PGBRK, "^Ret", C_PGBRK }, { M_COLBRK, "^\001Ret", C_COLBRK }, { M_PAGENUM, NULL, C_PAGENUM }, SEP,
-    { M_TBLINS, NULL, C_TBLINS }, { M_TBLPROP, NULL, C_TBLPROP }, { M_ROWINS, NULL, C_ROWINS },
-    { M_ROWDEL, NULL, C_ROWDEL }, { M_COLINS, NULL, C_COLINS }, { M_COLDEL, NULL, C_COLDEL },
-    { M_TBLDEL, NULL, C_TBLDEL }, { M_CHART, NULL, C_CHART }, SEP,
-    { M_PICTURE, NULL, C_PICTURE }, { M_DRAWING, NULL, C_DRAWING }, SEP,
-    { M_TOC, NULL, C_TOC }, SEP, { M_INSFILE, NULL, C_INSFILE }, { 0, NULL, 0 } };
-static MI m_font[NSIZES + MAXFONTMENU + 8];
-static MI m_style[NCOLORS + 8];
-static const MI m_para[] = {
-    { M_JLEFT, "^L", C_JLEFT }, { M_JCENTRE, "^E", C_JCENTRE }, { M_JRIGHT, "^R", C_JRIGHT },
-    { M_JFULL, "^\001J", C_JFULL }, SEP,
-    { M_SP1, NULL, C_SP1 }, { M_SP15, NULL, C_SP15 }, { M_SP2, NULL, C_SP2 }, SEP,
-    { M_INDENTS, NULL, C_INDENTS }, { M_HANGING, NULL, C_HANGING }, { M_BULLETS, "F9", C_BULLETS },
-    { M_NUMBERS, "F10", C_NUMBERS }, SEP,
-    { M_HEAD1, NULL, C_HEAD1 }, { M_HEAD2, NULL, C_HEAD2 }, { M_HEAD3, NULL, C_HEAD3 }, { M_BODY, NULL, C_BODY }, SEP,
-    { M_WRAPCOL, NULL, C_WRAPCOL }, { 0, NULL, 0 } };
-static MI m_tools[] = {
-    { M_SPELL, "^K", C_SPELL }, { M_LIVESPELL, NULL, C_LIVESPELL }, { M_THES, "\001F7", C_THES },
-    { M_SUMMARY, NULL, C_SUMMARY }, SEP,
-    { M_UDLOAD, NULL, C_UDLOAD }, { M_UDNEW, NULL, C_UDNEW }, SEP,
-    { DYN + 60, NULL, C_UD0 }, { DYN + 61, NULL, C_UD0 + 1 }, { DYN + 62, NULL, C_UD0 + 2 }, { DYN + 63, NULL, C_UD0 + 3 },
-    SEP, { M_PREFS, NULL, C_PREFS }, { 0, NULL, 0 } };
-/* the view, apart from the Window menu: TOS 1-4 can't drop down a menu
- * that tall (see menu_rows_fit) */
-static const MI m_view[] = {
-    { M_VDOC, "F4", C_VDOC }, { M_SPLIT, "^Y", C_SPLIT }, { M_VCODES, "F6", C_VCODES }, SEP,
-    { M_ZOOMIN, "F8", C_ZOOMIN }, { M_ZOOMOUT, "F7", C_ZOOMOUT }, { M_ZOOMFIT, "\001F8", C_ZOOMFIT }, SEP,
-    { M_TOOLBAR, "^T", C_TOOLBAR }, { M_RULERS, "^\001R", C_RULERS }, { M_GUIDES, NULL, C_GUIDES }, { 0, NULL, 0 } };
-#define NWINFIX 9
-static const MI m_window_fixed[NWINFIX] = {
-    { M_TILEV, NULL, C_TILEV }, { M_TILEH, NULL, C_TILEH }, { M_CASCADE, NULL, C_CASCADE }, SEP,
-    { M_ICONIFY, "^Z", C_ICONIFY }, { M_ICONALL, NULL, C_ICONALL }, { M_BOTTOM, NULL, C_BOTTOM },
-    { M_CYCLE, "^W", C_CYCLE }, SEP };
-static MI m_window[NWINFIX + MAX_DOCS + 2];
-static int win_items;                   /* document windows listed in the menu */
-static short winmap[MAX_DOCS];          /* menu entry -> document slot */
+/* the commands may not run into the fonts' numbers, nor the fonts into the sizes' */
+typedef char cmd_ranges_ok[(C_LAST <= C_FONT0 && C_FONT0 + MAXFONTMENU <= C_SIZE0) ? 1 : -1];
 
 /* The rows a drop-down menu of this many characters' width may have.
  * TOS 1-4 save the screen under a drop-down in a buffer a quarter of
@@ -268,34 +206,6 @@ static int menu_rows_fit(int wchars)
     return (int)(rows < screen_rows ? rows : screen_rows);
 }
 
-/* the Window menu: as many documents as fit, then "More windows..." */
-static void build_window_menu(void)
-{
-    int i, n = 0, rows = menu_rows_fit(28), room;
-    for (i = 0; i < NWINFIX; i++) m_window[n++] = m_window_fixed[i];
-    room = rows - n;
-    if (room > MAX_DOCS) room = MAX_DOCS;
-    if (room > 24) room = 24;
-    win_items = room >= MAX_DOCS ? MAX_DOCS : room - 1;
-    if (win_items < 1) win_items = 1;
-    for (i = 0; i < win_items; i++) {
-        m_window[n].text = DYN + 70 + i; m_window[n].key = NULL; m_window[n].cmd = (short)(C_WIN0 + i); n++;
-    }
-    if (win_items < MAX_DOCS) { m_window[n].text = M_WINMORE; m_window[n].key = NULL; m_window[n].cmd = C_WINMORE; n++; }
-    m_window[n].text = 0; m_window[n].cmd = 0; m_window[n].key = NULL;
-}
-
-static short mk(short parent, short type, short x, short y, short w, short h)
-{
-    OBJECT *o = &mtree[nobj];
-    memset(o, 0, sizeof *o);
-    o->ob_next = o->ob_head = o->ob_tail = -1;
-    o->ob_type = type;
-    o->ob_x = x; o->ob_y = y; o->ob_width = w; o->ob_height = h;
-    if (parent >= 0) objc_add(mtree, parent, nobj);
-    return nobj++;
-}
-
 static void pad_item(char *dst, const char *src, int width)
 {
     int n = (int)strlen(src);
@@ -303,55 +213,6 @@ static void pad_item(char *dst, const char *src, int width)
     memcpy(dst, src, n);
     while (n < width) dst[n++] = ' ';
     dst[n] = 0;
-}
-
-static const char *mi_text(const MI *m)
-{
-    if (m->text & DYN) return dyn[m->text & 0xFF];
-    return L(m->text);
-}
-
-/* the Font menu: the selector, sizes, then as many fonts as fit */
-static int menu_rows_fit(int wchars);
-static void build_font_menu(void)
-{
-    int i, n = 0, rows = menu_rows_fit(28), room;
-    m_font[n].text = M_FONTSEL; m_font[n].key = "^\001F"; m_font[n].cmd = C_FONTSEL; n++;
-    m_font[n].text = M_SIZEOTHER; m_font[n].key = NULL; m_font[n].cmd = C_SIZEOTHER; n++;
-    m_font[n].text = -1; m_font[n].cmd = -1; m_font[n].key = NULL; n++;
-    for (i = 0; i < NSIZES; i++) {
-        sprintf(dyn[i], "%d %s", sizes[i], L(S_POINT));
-        m_font[n].text = DYN + i; m_font[n].key = NULL; m_font[n].cmd = (short)(C_SIZE0 + i); n++;
-    }
-    m_font[n].text = -1; m_font[n].cmd = -1; m_font[n].key = NULL; n++;
-    room = rows - n;
-    if (room > MAXFONTMENU) room = MAXFONTMENU;
-    font_items = nfonts <= room ? nfonts : room - 1;
-    if (font_items < 1) font_items = 1;
-    for (i = 0; i < font_items; i++) {
-        sprintf(dyn[10 + i], "%.24s", fonts[i].name);
-        m_font[n].text = DYN + 10 + i; m_font[n].key = NULL; m_font[n].cmd = (short)(C_FONT0 + i); n++;
-    }
-    if (font_items < nfonts) { m_font[n].text = M_MOREFONTS; m_font[n].key = NULL; m_font[n].cmd = C_MOREFONTS; n++; }
-    m_font[n].text = 0; m_font[n].cmd = 0;
-}
-
-static void build_style_menu(void)
-{
-    int i, n = 0;
-    static const short cmds[4] = { C_PLAIN, C_BOLD, C_ITALIC, C_UNDER };
-    static const int txt[4] = { M_PLAIN, M_BOLD, M_ITALIC, M_UNDER };
-    static const char *keys[4] = { NULL, "^B", "^I", "^\001U" };
-    for (i = 0; i < 4; i++) {
-        m_style[n].text = txt[i]; m_style[n].key = keys[i]; m_style[n].cmd = cmds[i]; n++;
-        if (i == 0) { m_style[n].text = -1; m_style[n].cmd = -1; m_style[n].key = NULL; n++; }
-    }
-    m_style[n].text = -1; m_style[n].cmd = -1; m_style[n].key = NULL; n++;
-    for (i = 0; i < NCOLORS; i++) {
-        sprintf(dyn[50 + i], "%s", L(S_COL_BLACK + i));
-        m_style[n].text = DYN + 50 + i; m_style[n].key = NULL; m_style[n].cmd = (short)(C_COLOR0 + i); n++;
-    }
-    m_style[n].text = 0; m_style[n].cmd = 0;
 }
 
 /* the menu bar from the resource file: the fonts and windows that fit,
@@ -365,7 +226,6 @@ static int build_menu_rsc(void)
     short b;
     if (!rsc_load(ui_lang, 1) || !(t = rsc_tree(RT_MENU))) return 0;
     mtree = t;
-    nobj = MN_COUNT;
     memset(mcmd, 0, sizeof mcmd);
     memset(cmdobj, 0, sizeof cmdobj);
     for (i = 0; i < (int)(sizeof cm / sizeof cm[0]); i++) {
@@ -418,94 +278,7 @@ static int build_menu_rsc(void)
     return 1;
 }
 
-static void build_menu(void)
-{
-    static const int tid[NMENU] = { MT_DESK, MT_FILE, MT_EDIT, MT_INSERT, MT_FONT, MT_STYLE, MT_PARA, MT_TOOLS, MT_VIEW, MT_WINDOW };
-    const MI *menus[NMENU];
-    short root, bar, active, screen, tx[NMENU], x = 0, i, k, total = 0;
-
-    if (build_menu_rsc()) return;
-    mtree = mtree_own;
-    build_font_menu();
-    build_style_menu();
-    build_window_menu();
-    for (i = 0; i < win_items; i++) strcpy(dyn[70 + i], "-");
-    for (i = 0; i < MAX_UDICT; i++) strcpy(dyn[60 + i], L(S_NO_UDICT));
-    menus[0] = m_desk; menus[1] = m_file; menus[2] = m_edit; menus[3] = m_insert; menus[4] = m_font;
-    menus[5] = m_style; menus[6] = m_para; menus[7] = m_tools; menus[8] = m_view; menus[9] = m_window;
-
-    nobj = 0;
-    memset(mcmd, 0, sizeof mcmd);
-    memset(cmdobj, 0, sizeof cmdobj);
-    for (i = 0; i < NMENU; i++) {
-        sprintf(titles[i], " %.12s ", L(tid[i]));
-        total += (short)strlen(titles[i]) * wchar;
-    }
-    if (total > scr_w - 4 * wchar) {       /* one space before each title when two don't fit */
-        total = 0;
-        for (i = 0; i < NMENU; i++) {
-            sprintf(titles[i], " %.12s", L(tid[i]));
-            total += (short)strlen(titles[i]) * wchar;
-        }
-    }
-    root   = mk(-1, G_IBOX, 0, 0, scr_w, scr_h);
-    bar    = mk(root, G_BOX, 0, 0, scr_w, hchar + 2);
-    mtree[bar].ob_spec.index = 0x00001100L;
-    active = mk(bar, G_IBOX, 2 * wchar, 0, total, hchar + 3);
-    for (i = 0; i < NMENU; i++) {
-        short w = (short)strlen(titles[i]) * wchar;
-        short t = mk(active, G_TITLE, x, 0, w, hchar + 3);
-        mtree[t].ob_spec.free_string = titles[i];
-        tx[i] = x;
-        x += w;
-    }
-    screen = mk(root, G_IBOX, 0, hchar + 3, scr_w, scr_h - hchar - 3);
-
-    for (i = 0; i < NMENU; i++) {
-        const MI *m = menus[i];
-        short n = 0, maxl = 0, w, h, dx, box, first = (short)nobj;
-        (void)first;
-        for (k = 0; m[k].text; k++) {
-            short l = 0;
-            if (m[k].text >= 0) {
-                l = (short)(strlen(mi_text(&m[k])) + 4);
-                if (m[k].key) l = (short)(l + strlen(m[k].key) + 2);
-            }
-            if (l > maxl) maxl = l;
-            n++;
-        }
-        if (maxl > 42) maxl = 42;
-        if (maxl < 12) maxl = 12;
-        memset(dashes[i], '-', maxl);
-        dashes[i][maxl] = 0;
-        w = maxl * wchar; h = n * hchar;
-        dx = 2 * wchar + tx[i];
-        if (dx + w > scr_w - 2) dx = scr_w - 2 - w;
-        box = mk(screen, G_BOX, dx, 0, w, h);
-        mtree[box].ob_spec.index = 0x00FF1100L;
-        for (k = 0; k < n; k++) {
-            short o = mk(box, G_STRING, 0, k * hchar, w, hchar);
-            if (m[k].text < 0) {
-                mtree[o].ob_spec.free_string = dashes[i];
-                mtree[o].ob_state |= OS_DISABLED;
-            } else {
-                char *s = items[o];
-                char line[48];
-                int tl;
-                sprintf(line, "  %s", mi_text(&m[k]));
-                pad_item(s, line, maxl);
-                if (m[k].key) {
-                    tl = (int)strlen(m[k].key);
-                    memcpy(s + maxl - tl - 1, m[k].key, tl);
-                }
-                mtree[o].ob_spec.free_string = s;
-            }
-            mcmd[o] = m[k].cmd < 0 ? 0 : m[k].cmd;
-            if (m[k].cmd > 0 && m[k].cmd < NCMD) cmdobj[m[k].cmd] = o;
-        }
-    }
-    mtree[nobj - 1].ob_flags |= OF_LASTOB;
-}
+static void build_menu(void) { build_menu_rsc(); }
 
 static void check(int cmd, int on)  { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_icheck(mtree, cmdobj[cmd], on ? 1 : 0); }
 static void enable(int cmd, int on) { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_ienable(mtree, cmdobj[cmd], on ? 1 : 0); }
@@ -542,6 +315,7 @@ void update_menu(DOC *d)
     for (i = C_UNDO; i <= C_WRAPCOL; i++) enable(i, hasdoc);
     for (i = C_SAVE; i <= C_CLOSE; i++) enable(i, d != NULL);
     enable(C_SPELL, hasdoc); enable(C_THES, hasdoc); enable(C_SUMMARY, hasdoc);
+    enable(C_THEME, theme_possible());
     xfer_refresh();
     if (!d) return;
     if (hasdoc) {
@@ -555,6 +329,7 @@ void update_menu(DOC *d)
         enable(C_ZOOMIN, d->view != VIEW_CODES && d->zoom < zooms[NZOOM - 1]);
         enable(C_ZOOMOUT, d->view != VIEW_CODES && d->zoom > zooms[0]);
         enable(C_ZOOMFIT, d->view != VIEW_CODES);
+        enable(C_ZOOMPAGE, d->view != VIEW_CODES);
     }
     for (i = 0; i < font_items; i++) check(C_FONT0 + i, i == d->ins.font);
     for (i = 0; i < NSIZES; i++) check(C_SIZE0 + i, sizes[i] == d->ins.size);
@@ -574,7 +349,8 @@ void update_menu(DOC *d)
     }
     check(C_VDOC, d->view == VIEW_DOC); check(C_SPLIT, d->view == VIEW_SPLIT); check(C_VCODES, d->view == VIEW_CODES);
     check(C_TOOLBAR, d->toolbar);
-    check(C_ZOOMFIT, d->fitw);
+    check(C_ZOOMFIT, d->fitw == FIT_WIDTH);
+    check(C_ZOOMPAGE, d->fitw == FIT_PAGE);
     check(C_RULERS, pref_rulers);
     check(C_GUIDES, pref_guides);
     check(C_ICONIFY, d->iconified);
@@ -623,6 +399,10 @@ void set_language(int lang)
 {
     int i;
     ui_lang = lang >= 0 && lang < NLANG ? lang : 0;
+    /* in Czech, documents use the Czech letters of a Czech system font,
+     * and dates are written 27.10.2026 */
+    if (ui_lang == LANG_CS && st_cset != ST_CS_CZECH && pref_date == DT_SHORT) pref_date = DT_DOTS;
+    st_cset = ui_lang == LANG_CS ? ST_CS_CZECH : ST_CS_ATARI;
     for (i = 0; i < 12; i++) mnames[i] = L(S_MONTH1 + i);
     for (i = 0; i < 7; i++) dnames[i] = L(S_DAY0 + i);
     date_months = mnames;
@@ -664,7 +444,7 @@ int tool_route_key(short wh, short ks, short key)
     return 0;
 }
 
-static void tools_close_all(void)
+void tools_close_all(void)
 {
     int i;
     for (i = 0; tools[i]; i++) tools[i]->close();
@@ -730,6 +510,7 @@ static DOC *new_doc(void)
             doc_init(docs[i]);
             docs[i]->used = 1;
             docs[i]->slot = i;
+            theme_set_window(i, -1, NULL);       /* a new window: the theme for all */
             return docs[i];
         }
     alert(1, 1, AL_FOUR_DOCS, AB_OK, MAX_DOCS);
@@ -810,6 +591,7 @@ static int ends_with(const char *s, const char *ext)
 }
 
 static int file_type(const char *path, int text) { return file_detect(path, text); }
+static int is_ewr(const char *path);
 
 /* a document slot that wasn't used after all */
 static void release_doc(DOC *d)
@@ -882,11 +664,13 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
         return ok;
     }
     base_name(d, path);
-    if (type == FT_RTF) strncpy(d->path, path, sizeof d->path - 1);
+    /* EdWord's own file is saved where it was; anything else (an RTF
+     * too) is saved as one, under a new name */
+    if (type == FT_RTF && is_ewr(path)) strncpy(d->path, path, sizeof d->path - 1);
     prog_part(650, 1000);
     doc_loaded(d);
     busy_end();
-    if (type != FT_RTF) d->dirty = 1;      /* saved as RTF, under a new name */
+    if (type != FT_RTF) d->dirty = 1;
     open_window(d);
     close_pristine(d);
     return 1;
@@ -897,6 +681,13 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
 void open_path(const char *path, int text)
 {
     read_into(path, file_type(path, text), CS_AUTO, 0, NULL, 1);
+}
+
+/* EdWord's own document (.EWR) */
+static int is_ewr(const char *path)
+{
+    const char *e = strrchr(path, '.');
+    return e && (e[1] == 'E' || e[1] == 'e') && (e[2] == 'W' || e[2] == 'w') && (e[3] == 'R' || e[3] == 'r') && !e[4];
 }
 
 static void default_name(DOC *d, const char *ext, char *def)
@@ -913,8 +704,8 @@ static void default_name(DOC *d, const char *ext, char *def)
 static int save_as(DOC *d)
 {
     char path[256], def[40];
-    default_name(d, ".RTF", def);
-    if (!ask_file(L(S_FS_SAVE), "*.RTF", def, path)) return 0;
+    default_name(d, ".EWR", def);
+    if (!ask_file(L(S_FS_SAVE), "*.EWR", def, path)) return 0;
     strcpy(d->path, path);
     base_name(d, path);
     return 1;
@@ -994,7 +785,7 @@ int export_doc(DOC *d, int fmt, int crlf, int cs, char *written)
     case FT_MD:   ok = md_export(d, path, crlf, cs); break;
     case FT_FWP:  ok = fwp_export(d, path); break;
     case FT_PT:   ok = pt_export(d, path); break;
-    default:      ok = rtf_export(d, path); break;
+    default:      ok = rtf_export_std(d, path); break;
     }
     busy_end();
     return ok;
@@ -1215,8 +1006,11 @@ static void cmd_table(DOC *d, int cmd)
         cols = T->ncols;
         border = T->border;
         memcpy(w, T->w, sizeof w);
-        if (!dlg_table(d, 0, &rows, &cols, w, &border)) return;
-        ok = tbl_resize(d, pos, rows, cols, w, border);
+        switch (ok = dlg_table(d, 0, &rows, &cols, w, &border)) {
+        case 0: return;
+        case 1: ok = tbl_resize(d, pos, rows, cols, w, border); break;
+        default: cmd_table(d, ok); return;              /* a row, a column, the table */
+        }
         break;
     }
     case C_ROWINS: ok = tbl_row_insert(d, pos, 1); break;
@@ -1294,9 +1088,18 @@ void do_cmd(int cmd)
     case C_ABOUT:  dlg_about(); return;
     case C_NEW:    cmd_new(); return;
     case C_TEMPLATE: cmd_template(); return;
-    case C_OPEN:   if (ask_file(L(S_FS_OPEN), "*.RTF", NULL, path)) open_path(path, 0); return;
+    case C_OPEN:   if (ask_file(L(S_FS_OPEN), "*.EWR", NULL, path)) open_path(path, 0); return;
     case C_IMPORT: import_open(); return;
     case C_EXPORT: export_open(); return;
+    case C_THEME:
+        if (dlg_theme()) {
+            int i;
+            save_prefs();
+            (void)i;
+            /* everything again: the documents, the preview, the drawing window */
+            form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+        }
+        return;
     case C_RULERS:
     case C_GUIDES:
         if (cmd == C_RULERS) pref_rulers = !pref_rulers; else pref_guides = !pref_guides;
@@ -1506,7 +1309,8 @@ void do_cmd(int cmd)
         set_zoom(d, z);
         break;
     }
-    case C_ZOOMFIT: set_fit_width(d, !d->fitw); break;
+    case C_ZOOMFIT: set_fit_width(d, d->fitw == FIT_WIDTH ? 0 : FIT_WIDTH); break;
+    case C_ZOOMPAGE: set_fit_width(d, d->fitw == FIT_PAGE ? 0 : FIT_PAGE); break;
     case C_TOOLBAR: set_toolbar(d, !d->toolbar); break;
     case C_SPELL:   spell_run(d); break;
     case C_THES:    thes_run(d); break;
@@ -1547,7 +1351,7 @@ void handle_msg(short *msg)
     switch (msg[0]) {
     case MN_SELECTED:
         menu_tnormal(mtree, msg[3], 1);
-        if (msg[4] >= 0 && msg[4] < MAXOBJ) do_cmd(mcmd[msg[4]]);
+        if (msg[4] >= 0 && msg[4] < MN_COUNT) do_cmd(mcmd[msg[4]]);
         return;
     case AP_TERM:
         cmd_quit();
@@ -1796,6 +1600,10 @@ int main(int argc, char *argv[])
     if (no_arbpt) edlog("Alternate held: outline fonts sized with vst_point");
 
     load_prefs();
+#ifdef EDTEST
+    /* the test build: in English, nothing saved behind the user's back */
+    pref_lang = LANG_EN; pref_spell = LANG_EN; pref_autosave = 0;
+#endif
     set_language(pref_lang >= 0 ? pref_lang : tos_language());
     spell_lang = pref_spell >= 0 ? pref_spell : ui_lang;    /* the dictionary: the menus' language at first */
 
@@ -1854,7 +1662,6 @@ int main(int argc, char *argv[])
     vst_alignment(vhandle, 0, 0, &dmy, &dmy);           /* left, baseline */
     vst_color(vhandle, 1);
     wind_get(0, WF_WORKXYWH, &desk.g_x, &desk.g_y, &desk.g_w, &desk.g_h);
-    icons_init();
     if (!rsc_load(ui_lang, 1)) {
         /* the menus and dialogs are in EDWORD*.RSC: nothing to work with */
         busy_ptr(0);
@@ -1865,6 +1672,7 @@ int main(int argc, char *argv[])
         appl_exit();
         return 1;
     }
+    theme_init();
     build_menu();
     menu_bar(mtree, 1);
     update_menu(NULL);
@@ -1910,6 +1718,7 @@ int main(int argc, char *argv[])
 
     edlog("quitting");
     tools_close_all();
+    theme_exit();
     display_restore();
     menu_bar(mtree, 0);
     rsc_free();
@@ -1922,19 +1731,48 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#ifdef EDTEST
+/* the test build: every enabled command of the menus in turn, on the top
+ * document, the dialogs left by their default buttons and the file
+ * selectors cancelled; skip: commands not to run (0-terminated) */
+void test_all_menus(const short *skip)
+{
+    short i, k;
+    for (i = 0; i < MN_COUNT; i++) {
+        int c = mcmd[i], s = 0;
+        char t[40];
+        if (!c || mtree[i].ob_type != G_STRING) continue;
+        sprintf(t, "%.38s", mtree[i].ob_spec.free_string);
+        for (k = 0; t[k] == ' '; k++) ;
+        memmove(t, t + k, strlen(t + k) + 1);
+        if (strstr(t, "  ")) *strstr(t, "  ") = 0;       /* not the shortcut */
+        for (k = (short)strlen(t); k > 0 && t[k - 1] == ' '; k--) t[k - 1] = 0;
+        for (k = 0; skip[k]; k++) if (skip[k] == c) s = 1;
+        if (s) { test_note("skip    %s", t); continue; }
+        if (mtree[i].ob_state & OS_DISABLED) { test_note("skip    %s (disabled here)", t); continue; }
+        test_cmd_begin(t);
+        do_cmd(c);
+        update_menu(top_doc());
+        pump_redraws();
+        test_cmd_end(t);
+    }
+}
+#endif
+
 /* the demo script draws menus itself */
 OBJECT *menu_tree(void) { return mtree; }
 short menu_title_obj(int i)
 {
     short k, n = 0;
-    for (k = 0; k < nobj; k++)
+    for (k = 0; k < MN_COUNT; k++)
         if (mtree[k].ob_type == G_TITLE) { if (n == i) return k; n++; }
     return -1;
 }
 short menu_box_obj(int i)
 {
     short k, n = 0, screen = -1;
-    for (k = 0; k < nobj; k++) if (mtree[k].ob_type == G_IBOX && mtree[k].ob_y == hchar + 3) screen = k;
+    screen = MN_SCREEN;
+    (void)k;
     if (screen < 0) return -1;
     for (k = mtree[screen].ob_head; k != screen && k >= 0; k = mtree[k].ob_next) {
         if (n == i) return k;
@@ -1957,7 +1795,7 @@ int cmd_by_name(const char *s)
         { "NUMBERS", C_NUMBERS }, { "HEAD1", C_HEAD1 }, { "HEAD2", C_HEAD2 }, { "HEAD3", C_HEAD3 }, { "BODY", C_BODY },
         { "WRAPCOL", C_WRAPCOL }, { "SPELL", C_SPELL }, { "LIVESPELL", C_LIVESPELL }, { "THES", C_THES },
         { "SUMMARY", C_SUMMARY }, { "PREFS", C_PREFS }, { "VDOC", C_VDOC }, { "SPLIT", C_SPLIT }, { "VCODES", C_VCODES },
-        { "ZOOMIN", C_ZOOMIN }, { "ZOOMOUT", C_ZOOMOUT }, { "ZOOMFIT", C_ZOOMFIT }, { "TOOLBAR", C_TOOLBAR }, { "TILEV", C_TILEV },
+        { "ZOOMIN", C_ZOOMIN }, { "ZOOMOUT", C_ZOOMOUT }, { "ZOOMFIT", C_ZOOMFIT }, { "ZOOMPAGE", C_ZOOMPAGE }, { "TOOLBAR", C_TOOLBAR }, { "TILEV", C_TILEV },
         { "TILEH", C_TILEH }, { "CASCADE", C_CASCADE }, { "ICONIFY", C_ICONIFY }, { "OBJPROP", C_OBJPROP },
         { "OBJEDIT", C_OBJEDIT }, { "CHART", C_CHART }, { "EXPTXT", C_EXPTXT }, { "IMPORT", C_IMPORT }, { "INSFILE", C_INSFILE },
         { "CUT", C_CUT }, { "COPY", C_COPY }, { "PASTE", C_PASTE }, { "SAVEAS", C_SAVEAS }, { "OPEN", C_OPEN },
@@ -1965,7 +1803,7 @@ int cmd_by_name(const char *s)
         { "OBJDEL", C_OBJDEL }, { "PICTUREDLG", C_PICTURE }, { "UDLOAD", C_UDLOAD }, { "UDNEW", C_UDNEW },
         { "CYCLE", C_CYCLE }, { "BOTTOM", C_BOTTOM }, { "ICONALL", C_ICONALL }, { "MOREFONTS", C_MOREFONTS },
         { "PRINT", C_PRINT }, { "EXPMD", C_EXPMD }, { "EXPFWP", C_EXPFWP }, { "EXPPT", C_EXPPT }, { "EXPORT", C_EXPORT }, { "PREVPAGE", C_PREVPAGE },
-        { "NEXTPAGE", C_NEXTPAGE }, { "GOTOPAGE", C_GOTOPAGE }, { "REPAG", C_REPAG }, { "PAGENUM", C_PAGENUM }, { "RULERS", C_RULERS }, { "GUIDES", C_GUIDES },
+        { "NEXTPAGE", C_NEXTPAGE }, { "GOTOPAGE", C_GOTOPAGE }, { "REPAG", C_REPAG }, { "PAGENUM", C_PAGENUM }, { "RULERS", C_RULERS }, { "GUIDES", C_GUIDES }, { "THEME", C_THEME },
         { NULL, 0 } };
     int i;
     for (i = 0; t[i].n; i++) if (!strcmp(t[i].n, s)) return t[i].c;

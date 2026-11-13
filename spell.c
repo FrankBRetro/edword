@@ -149,8 +149,8 @@ void spell_unload_main(void)
 /* the main dictionary's file name for a language (EDWORD.DIC: English) */
 const char *spell_dic_name(int lang)
 {
-    static const char *n[] = { "EDWORD.DIC", "EDWORDDE.DIC", "EDWORDES.DIC", "EDWORDIT.DIC", "EDWORDFR.DIC" };
-    return lang >= 1 && lang <= 4 ? n[lang] : n[0];
+    static const char *n[] = { "EDWORD.DIC", "EDWORDDE.DIC", "EDWORDES.DIC", "EDWORDIT.DIC", "EDWORDFR.DIC", "EDWORDCS.DIC" };
+    return lang >= 1 && lang <= 5 ? n[lang] : n[0];
 }
 
 int spell_main_loaded(void) { return mdata != NULL; }

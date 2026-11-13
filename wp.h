@@ -432,11 +432,19 @@ long st_to_uni(unsigned char c);
 unsigned char st_lower(unsigned char c);
 unsigned char st_upper(unsigned char c);
 int  st_isalpha(unsigned char c);
+/* the character set of documents: the ST's, or the ST's with the Czech
+ * letters (Kamenicky) in 0x80-0xAB, for a Czech system font */
+enum { ST_CS_ATARI, ST_CS_CZECH };
+extern int st_cset;
+long win_to_uni(unsigned char c, int cp);      /* cp 1252 or 1250 */
+int  st_codepage(void);                        /* 1252, or 1250 in Czech */
 int  nearest_color(int r, int g, int b);
 
 /* rtf.c */
 int rtf_import(DOC *d, const char *path);
 int rtf_export(DOC *d, const char *path);
+int rtf_export_std(DOC *d, const char *path);   /* standard RTF, for other programs */
+#define EWR_VERSION 1           /* {\*\edword N}: EdWord's own file format, .EWR */
 
 /* text.c */
 enum { CS_AUTO, CS_ATARI, CS_WIN, CS_UTF8, CS_UTF16 };
@@ -521,7 +529,8 @@ int  pt_export(DOC *d, const char *path);
 int  pt_detect(const unsigned char *b, long n);
 int  font_family_find(int family);      /* rtf.c: 0 sans, 1 serif, 2 mono */
 int  font_is_mono(int font);
-enum { DT_SHORT, DT_US, DT_LONG, DT_DAYLONG, DT_ISO, DT_TIME, NDATEFMT = DT_TIME };
+enum { DT_SHORT, DT_US, DT_LONG, DT_DAYLONG, DT_ISO, DT_TIME, DT_DOTS, NDATEFMT = DT_TIME };
+#define NDATEFMT_ST 6           /* the Atari version's: DT_DOTS (27.10.2026) too */
 extern const char **date_months, **date_days;   /* set for the UI language */
 void fmt_date(char *out, int style, int y, int m, int day, int hh, int mm);
 void fmt_now(char *out, int style);

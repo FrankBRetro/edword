@@ -7,8 +7,10 @@ more). Written in C for `m68k-atari-mint-gcc` + gemlib. There is no resource
 file: menus and dialogs are built in code and lay themselves out, so they fit
 in every language.
 
-The full user documentation, with screenshots, is in `manual/MANUALEN.PDF`
-(also `MANUALDE`, `MANUALES`, `MANUALIT` and `MANUALFR`).
+The full user documentation of the Atari version, with screenshots of a
+256-colour screen, is in `manual/MANUALEN.PDF` (also `MANUALDE`, `MANUALES`,
+`MANUALIT` and `MANUALFR`); it says which features need 16, 256 or high
+colour. The other versions are described in this file.
 
 ## Installing
 Copy `EDWORD.PRG`, its resource files (`EDWORD.RSC`, `EDWORDDE.RSC`,
@@ -62,7 +64,8 @@ FPU.
 - **Zoom** 50-200 % in the page view, from the toolbar or F7/F8, and **Fit
   Page Width** (View menu, the toolbar's zoom popup, Shift+F8 on the ST):
   the page fills the window's width and follows it when the window changes
-  size.
+  size. On the ST, **Fit Whole Page** (View menu, the zoom popup) shows
+  the whole page, its height too, down to 10 %.
 - **Multi-level undo and redo** (100 steps; Undo key, Shift+Undo), covering
   text, formats, tables, page settings, pictures and drawings.
 - **Bullet and numbered lists** (F9, F10).
@@ -78,8 +81,15 @@ FPU.
 - **Version in the About box**, with the version and the sentence under it
   settable from make: `make ED_VERSION=3.1 ED_ABOUT="Built for our club"`.
 - **Five languages** for the user interface and the manual: English, German,
-  Spanish, Italian, French. The TOS language is used at first; Preferences
-  changes it. Spelling and thesaurus stay British English.
+  Spanish, Italian, French — and on the ST a sixth, **Czech** (menus,
+  dialogs and spelling; no manual yet). The TOS language is used at first;
+  Preferences changes it. The thesaurus stays British English.
+- **Czech (ST)** needs a Czech system font: the Czech letters are those of
+  the Kamenický code page in 0x80-0xAB, the rest of the Atari character set
+  as it is. In Czech, documents use that character set (RTF and EWR files
+  are written in Windows-1250 with the letters as Unicode too, so other
+  programs read them right), dates can be written 27.10.2026 (the first
+  choice in Czech), and the Czech dictionary is `EDWORDCS.DIC`.
 - **Resource files (ST)**: the menu bar, every dialog (and the dialogs in
   the Find, Spelling, Thesaurus, Import and Export windows and the progress
   window), the font selector, the toolbar with its icons and the size,
@@ -90,6 +100,21 @@ FPU.
   they take the 3D look; under MagiC the check boxes, radio buttons and
   edit fields are MagiC's own. On 16 colours and more the toolbar's icons
   are in colour.
+- **Colour themes (ST, 256 colours and more)**: View > Colour Theme... picks
+  one of the Windows 95 schemes, under other names (Aubergine, Blush,
+  Classic, Damson, Drizzle, Dune, Harvest, Lagoon, Lavender, Nautical, Pine,
+  Shale, Squash, Sycamore, Tempest, Terracotta), or each of its six colours
+  by hand. It colours EdWord's own furniture: the toolbars, the status line,
+  the rulers, the quick codes and the desk around the pages. The dialogs,
+  menus and window frames stay the AES's, and so do its colours (the
+  theme's are pens 250-255); the pages are drawn as before.
+  The dialog shows a small picture of a window in the theme, which follows
+  each theme picked (Cancel puts the colours back).
+- **Menus that TOS can drop down**: TOS 1-4 keep the screen under a menu in
+  a buffer a quarter of the screen's size and don't check it, so
+  tools/mkrsc.py refuses a menu too big for it in any language. The table's
+  rows and columns are in Table Settings, the headings in the Style menu
+  and Repaginate in the View menu.
 - **Pictures placed to the pixel**: positions and sizes are kept in twips
   (1/20 point), so a picture or drawing lands on the screen pixel you drop
   it on at any zoom; Shift+arrow keys move a selected one by one pixel.
@@ -115,8 +140,9 @@ FPU.
   categories, the columns of numbers the series; a first row of words or
   years names the series and a first column of words the categories.
   Charts follow the numbers as you type, print, and go into the PDF.
-- **Spelling in five languages**: German, Spanish, Italian and French
-  dictionaries besides English (Preferences ▸ Dictionary). The checker
+- **Spelling in five languages** (six on the ST): German, Spanish, Italian,
+  French and, on the ST, Czech dictionaries besides English (Preferences ▸
+  More ▸ Dictionary on the ST, Preferences ▸ Dictionary elsewhere). The checker
   accepts German compound words made of two known words and French and
   Italian elided forms (l'homme, dell'anno), and suggests words with the
   language's accented letters.
@@ -128,6 +154,16 @@ FPU.
   (CF_DIB).
 - Everything new is saved in RTF (standard RTF where there is one, EdWord's
   own groups otherwise) and appears in the print preview and the PDF.
+- **EdWord documents (.EWR, ST)**: Save writes EdWord's own file, which is
+  RTF with all of EdWord's groups and `{\*\edword N}`, the version of the
+  format. Everything EdWord adds goes in a `{\*\ed…}` group that a reader
+  skips if it doesn't know it, so an older EdWord opens a newer file (without
+  what it doesn't know) and a newer one an older file, and other programs
+  open an .EWR as RTF. Open shows .EWR files; an RTF or any other file opened
+  is saved as an .EWR under a new name. **Export ▸ RTF** writes standard RTF
+  for other programs (Word, TextEdit, LibreOffice): none of EdWord's groups,
+  and the pictures as PNG pictures in the text, in the paragraph beside
+  which they were (not placed on the page; drawings are left out).
 - **File ▸ Import… and File ▸ Export…** each open a window that stays
   open while you work (a floating panel on the Mac). Choose the format —
   RTF, Text, Markdown, 1st Word Plus, Protext, or PDF for export; Automatic
@@ -422,11 +458,24 @@ the Windows API (memory from HeapAlloc, files on CreateFile).
 
 ## Building
 ```
-make                         # EDWORD.PRG
+make                         # every processor's version, then DIST: DIST/EDWORD ready
+                             #   to copy to an Atari, DIST/CPU/<cpu> the faster
+                             #   programs, DIST/LANG/<lang> each language's dictionary
+                             #   and manual; and all of it in EDWORD-<version>.zip
+make EDWORD.PRG              # just the 68000 version
 make EDLOG=1                 # ... with the start-up log (EDWLOG.PRG in the package)
 make ED_VERSION=3.1 ED_ABOUT="Built for our club"
                              # version number and About-box sentence
 make EDDEMO=1                # ... that runs DEMO.SCR (manual screenshots)
+make EDTEST=1                # EDWTEST.PRG, the test build (in DIST/TEST too): in
+                             #   English it runs every enabled menu command, types
+                             #   and edits in the page view, the split view and
+                             #   quick edit, makes a table, copies and pastes,
+                             #   saves an .EWR, exports every format, closes and
+                             #   loads them back, checking as it goes; the log is
+                             #   EDTEST.LOG (pass/FAIL lines, a count, DONE), its
+                             #   files go in EDTEST\; TEST.SCR beside it replaces
+                             #   the built-in script (demo.c lists the commands)
 make CPU=030                 # EDW030.PRG; also CPU=030F, CPU=040, CPU=CF
 make cpus                    # all four (objects in build/<cpu>)
 make rsc                     # EDWORD*.RSC and edrsc.h from lang/strings.txt
@@ -454,9 +503,11 @@ pictures hosttest reads. The thesaurus is rebuilt from the Open
 English WordNet YAML sources with `tools/mkthes.py`.
 
 The manuals are made by `manual/build.sh`: it builds the demo version, runs
-`manual/demo.scr` in Hatari under EmuTOS in each language to take the
-screenshots, and typesets `manual/src/*.txt` with ReportLab
-(`manual/mkmanual.py`).
+`manual/demo.scr` in Hatari on a Falcon with TOS 4.04 in 640x400 with 256
+colours, with EdWord set to each language in turn, to take the screenshots
+(saved with their palette), and typesets `manual/src/*.txt` with ReportLab
+(`manual/mkmanual.py`):
+`HATARI=… TOS4=…/tos404.img sh manual/build.sh` (`LANGS="en de"` for some).
 
 ## Files
 | File | Purpose |
@@ -468,10 +519,11 @@ screenshots, and typesets `manual/src/*.txt` with ReportLab
 | `gemtwin.c` | Find and Replace, Spelling and Thesaurus windows; the spelling popup |
 | `gemobj.c` | pictures and drawings: selecting, moving, resizing, the drawing window |
 | `gemtool.c` | font selector and print preview windows |
+| `gemtheme.c` | colour themes for the toolbars, status line, rulers and desk |
 | `gemclip.c` | GEM clipboard, Insert > File, auto-save |
 | `gemrend.c` | GDOS/Speedo fonts, metrics, page drawing, PDF glyphs |
-| `gemicon.c` | toolbar icons |
-| `demo.c` | the screenshot script (EDDEMO builds only) |
+| `tools/icons.h` | toolbar icons (made into EDWORD*.RSC by mkrsc.py) |
+| `demo.c` | the screenshot script (EDDEMO builds only) and the test build's runner (EDTEST) |
 | `doc.c` | text model, paragraph formats, tables, page formats, objects |
 | `layout.c` | lines, pages, columns, tables, text flow around objects, hit testing |
 | `edit.c` | selection, typing, styles, clipboard, table editing |
@@ -522,8 +574,6 @@ screenshots, and typesets `manual/src/*.txt` with ReportLab
   a machine still opens, dithered, everywhere else. EmuTOS doesn't answer
   `vq_scrninfo`, so there only the Falcon's own high-colour mode is used.
 - The Amiga clipboard takes text only (no pictures yet).
-- The manuals describe 3.0 before the changes listed from *Markdown* onward
-  and will be updated once the app is finished.
 
 ## Licence
 EdWord is free software under the MIT licence: Copyright (c) 2026 Francis C
@@ -531,7 +581,7 @@ Bullen. See `LICENSE` for the full text. Every source file carries a short
 copyright line with `SPDX-License-Identifier: MIT`.
 
 The word lists and the thesaurus in `dict/` are made from other projects and
-keep their own licences (SCOWL; the German, Spanish, French and Italian
-hunspell dictionaries under GPL, LGPL or MPL; Open English WordNet under
+keep their own licences (SCOWL; the German, Spanish, French, Italian and
+Czech hunspell dictionaries under GPL, LGPL or MPL; Open English WordNet under
 CC BY 4.0). They are separate data files EdWord reads at run time, listed in
 `LICENSE` and given in full in `dict/COPYING.DIC` and `dict/COPYING.THS`.

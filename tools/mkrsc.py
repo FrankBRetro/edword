@@ -31,7 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mklang
 
 LANGS = mklang.LANGS
-RSCNAME = {'en': 'EDWORD.RSC', 'de': 'EDWORDDE.RSC', 'es': 'EDWORDES.RSC', 'it': 'EDWORDIT.RSC', 'fr': 'EDWORDFR.RSC'}
+RSCNAME = {'en': 'EDWORD.RSC', 'de': 'EDWORDDE.RSC', 'es': 'EDWORDES.RSC', 'it': 'EDWORDIT.RSC', 'fr': 'EDWORDFR.RSC',
+           'cs': 'EDWORDCS.RSC'}
 
 # ---- AES constants -------------------------------------------------------------
 G_BOX, G_TEXT, G_BOXTEXT, G_IMAGE, G_USERDEF, G_IBOX, G_BUTTON, G_BOXCHAR, G_STRING, \
@@ -62,9 +63,13 @@ class Lang:
         self.text, self.lg = text, lg
     def __call__(self, sid):
         t = self.text[sid]
-        return mklang.to_st(t.get(self.lg, t['en']), sid)
+        return mklang.to_st(t.get(self.lg, t['en']), sid, self.lg)
+    def names(self):
+        # the languages by their own names, in this file's character set
+        return [mklang.to_st(n if self.lg == 'cs' or n.isascii() or 'Č' not in n else 'Cestina', 'names', self.lg)
+                for n in LANG_NAMES]
 
-LANG_NAMES = [b'English', b'Deutsch', b'Espa\xa4ol', b'Italiano', b'Fran\x87ais']
+LANG_NAMES = ['English', 'Deutsch', 'Español', 'Italiano', 'Français', 'Čeština']
 PAPER_NAMES = [b'A4', b'Letter', b'A5', b'Legal']
 SIZES = [8, 9, 10, 12, 14, 18, 24, 36]
 ZOOMS = [50, 75, 100, 125, 150, 200]
@@ -111,7 +116,7 @@ def add(parent, o):
     return o
 
 # ---- the dialog builder: the same layout rules as gemdlg.c ------------------------
-T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG = range(8)
+T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG, T_SIDE = range(9)
 
 class Dlg:
     def __init__(self, title):
@@ -120,7 +125,7 @@ class Dlg:
             self.item(T_TITLE, title, name='TITLE')
         self.row = 1
     def item(self, typ, s, wc=None, name=None, **kw):
-        it = dict(type=typ, s=s, wc=len(s) if wc is None else wc, row=self.row, name=name, **kw)
+        it = dict(type=typ, s=s, wc=len(s) if wc is None else wc, row=self.row, lrow=self.row, name=name, **kw)
         self.items.append(it)
         return it
     def nl(self): self.row += 1
@@ -135,6 +140,9 @@ class Dlg:
         self.item(T_EDIT, t, len(t), name, n=n, valid=valid, buf=buf, pre=pre, post=post, post_name=post_name)
     def button(self, s, name, flags=0): self.item(T_BUTTON, s, len(s), name, flags=flags)
     def big(self, s, wc, name, flags=EXIT): self.item(T_BIG, s, wc, name, flags=flags)
+    # a box to the right of this row and the n-1 after it (a picture EdWord
+    # draws in it), wc characters wide
+    def side(self, wc, n, name): self.item(T_SIDE, b'', wc, name, n=n)
 
     def build(self, tname, limit=76, framed=True):
         items = self.items
@@ -148,6 +156,7 @@ class Dlg:
             t = it['type']
             if t == T_BUTTON:
                 nbtn += 1; btnw = max(btnw, it['wc']); continue
+            if t == T_SIDE: continue
             if t == T_TITLE:
                 it['row'], it['col'] = 0, 2
                 maxx = max(maxx, it['wc'] + 2); continue
@@ -164,6 +173,13 @@ class Dlg:
             it['row'], it['col'] = vrow, x + 2
             x += it['wc'] + 2
             maxx = max(maxx, x)
+        for it in items:
+            if it['type'] != T_SIDE: continue
+            span = [o for o in items if o['type'] not in (T_SIDE, T_BUTTON, T_TITLE) and it['lrow'] <= o['lrow'] < it['lrow'] + it['n']]
+            it['row'] = min(o['row'] for o in span)
+            it['col'] = max(o['col'] + o['wc'] for o in span) + 2
+            it['nr'] = max(o['row'] for o in span) - it['row'] + 1
+            maxx = max(maxx, it['col'] + it['wc'])
         btnw = max(btnw + 4, 8)
         nbrow, brw = 0, 0
         if nbtn:
@@ -225,6 +241,9 @@ class Dlg:
                 add(root, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
                               flags=SELECTABLE | it.get('flags', 0), spec=('str', it['s'].ljust(it['wc'])[:it['wc']] if not it['s'].strip() else it['s']),
                               ext=1, name=it['name']))
+            elif t == T_SIDE:
+                add(root, Obj(G_BOX, cp(it['col']), cp(it['row']), cp(it['wc']), cp(it['nr']),
+                              spec=0x00011100, ext=2, name=it['name']))
             elif t == T_BUTTON:
                 add(root, Obj(G_BUTTON, cp(it['col']), cp(nrows - nbrow + it['brow']), cp(it['bw']), cp(1),
                               flags=SELECTABLE | EXIT | it.get('flags', 0), spec=('str', it['s']), ext=3,
@@ -264,19 +283,14 @@ def dlg_print(L):
 def dlg_prefs(L):
     g = Dlg(L('S_PREFS_TITLE'))
     g.label(L('S_LANGUAGE'))
-    for i in range(5): g.radio(1, LANG_NAMES[i], 'LANG%d' % i)
+    for i, n in enumerate(L.names()): g.radio(1, n, 'LANG%d' % i)
     g.nl(); g.label(L('S_DATE_FORMAT'))
-    for i, w in enumerate((10, 10, 10, 18, 28)): g.radio(2, b' ' * w, 'DATE%d' % i)   # today's date, at run time
+    for i, w in enumerate((10, 10, 10, 10, 18, 28)): g.radio(2, b' ' * w, 'DATE%d' % i)   # today's date, at run time
     g.nl(); g.label(L('S_NEW_PAGES'))
     for i in range(4): g.radio(3, PAPER_NAMES[i], 'PAPER%d' % i)
     g.radio(4, L('S_PORTRAIT'), 'PORTRAIT'); g.radio(4, L('S_LANDSCAPE'), 'LAND')
     g.nl(); g.label(L('S_NEW_WINDOWS')); g.check(L('S_SHOW_TOOLBAR'), 'TOOLBAR')
-    g.nl(); g.label(L('S_SPELLING')); g.check(L('S_LIVE_SPELL'), 'LIVE')
-    g.nl(); g.label(L('S_DICTIONARY'))
-    for i in range(5): g.radio(8, LANG_NAMES[i], 'DICT%d' % i)
     g.nl(); g.label(L('S_TEXT_COLOUR')); g.check(L('S_SHOW_COLOURS'), 'COLOURS')
-    g.nl(); g.label(L('S_PDF_PICTURES'))
-    g.radio(5, L('S_SCREEN'), 'PDF1'); g.radio(5, b'2x', 'PDF2'); g.radio(5, b'3x', 'PDF3')
     g.nl(); g.label(L('S_EDITING'))
     for i, s in enumerate(('S_D_NORMAL', 'S_D_DARK', 'S_D_GREEN', 'S_D_AMBER')): g.radio(6, L(s), 'DISP%d' % i)
     g.nl(); g.label(L('S_AUTOSAVE'))
@@ -292,6 +306,12 @@ def dlg_prefs2(L):
     g = Dlg(L('S_PREFS_TITLE'))
     g.label(L('S_KEEP'))
     for i, s in enumerate(('S_KEEP_ANY', 'S_KEEP_WIDOWS', 'S_KEEP_TOGETHER')): g.radio(1, L(s), 'KEEP%d' % i)
+    # spelling and PDF here: the first page has the languages and dates
+    g.nl(); g.label(L('S_SPELLING')); g.check(L('S_LIVE_SPELL'), 'LIVE')
+    g.nl(); g.label(L('S_DICTIONARY'))
+    for i, n in enumerate(L.names()): g.radio(8, n, 'DICT%d' % i)
+    g.nl(); g.label(L('S_PDF_PICTURES'))
+    g.radio(5, L('S_SCREEN'), 'PDF1'); g.radio(5, b'2x', 'PDF2'); g.radio(5, b'3x', 'PDF3')
     g.nl(); g.label(L('S_DOCDIR'))
     g.edit(None, 40, None, anyc(40), b'', 'DOCDIR')
     g.button(L('S_CANCEL'), 'CANCEL')
@@ -374,6 +394,13 @@ def dlg_table(L, insert):
         for i in range(12): g.edit(None, 3, None, digits(3), b'', 'W%d' % i)
         g.nl()
     g.label(b''); g.check(L('S_GRID_LINES'), 'GRID')
+    if not insert:
+        # the table's rows and columns (not in the Insert menu: it would be
+        # too tall for TOS)
+        g.nl(); g.label(b'')
+        for s, n in (('M_ROWINS', 'ROWINS'), ('M_ROWDEL', 'ROWDEL'), ('M_COLINS', 'COLINS'), ('M_COLDEL', 'COLDEL'),
+                     ('M_TBLDEL', 'TBLDEL')):
+            g.big(L(s), len(L(s)) + 2, n)
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_INSERT' if insert else 'S_BTN_OK'), 'OK', DEFAULT)
     return g.build('TBLINS' if insert else 'TBLPROP')
@@ -411,7 +438,7 @@ def dlg_about(L):
     g = Dlg(b'EdWord')
     g.text(blank(40), 'VERSION'); g.nl()
     g.text(L('S_ABOUT_ATARI'), 'LINE1'); g.nl()
-    g.text(L('S_ABOUT_LINE2')); g.nl()
+    g.text(L('S_ABOUT_EWR')); g.nl()
     g.text(L('S_ABOUT_LINE3')); g.nl()
     g.text(L('S_ABOUT_THES'))
     g.button(L('S_BTN_OK'), 'OK', DEFAULT)
@@ -434,7 +461,7 @@ def dlg_textexport(L):
     g.radio(1, b'Atari/DOS CR LF', 'DOS'); g.radio(1, b'Unix LF', 'UNIX')
     g.nl(); g.label(L('S_CHARACTERS'))
     for i, s in enumerate((b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(2, s, 'CS%d' % i)
-    g.nl(); g.text(L('S_EXPORT_HINT'))
+    g.nl(); g.text(L('S_EXPORT_HINT_EWR'))
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_EXPORT'), 'OK', DEFAULT)
     return g.build('TEXTEXP')
@@ -472,6 +499,27 @@ def dlg_template(L):
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_TPL_CREATE'), 'OK', DEFAULT)
     return g.build('TEMPLATE')
+
+
+# ---- colour themes (gemtheme.c): the same names, in the same order -----------
+THEMES = [b'Atari', b'Aubergine', b'Blush', b'Classic', b'Damson', b'Drizzle', b'Dune', b'Harvest', b'Lagoon',
+          b'Lavender', b'Nautical', b'Pine', b'Shale', b'Squash', b'Sycamore', b'Tempest', b'Terracotta']
+
+def dlg_theme(L):
+    g = Dlg(L('S_THEME_TITLE'))
+    g.side(26, 7, 'PREVIEW')
+    g.label(L('S_THEME')); g.big(blank(18), 18, 'PICK')
+    for i, s in enumerate(('S_TH_FACE', 'S_TH_LIGHT', 'S_TH_DARK', 'S_TH_TEXT', 'S_TH_MARGIN', 'S_TH_DESK')):
+        g.nl(); g.label(L(s))
+        for c in b'RGB':
+            g.edit(bytes([c]), 3, None, digits(3), b'', '%s%d' % (chr(c), i))
+    g.nl(); g.label(L('S_APPLY_TO'))
+    g.radio(9, L('S_THEME_THISDOC'), 'THISDOC'); g.radio(9, L('S_THEME_ALLDOCS'), 'ALLDOCS')
+    g.nl(); g.text(L('S_THEME_HINT'))
+    g.button(L('S_APPLY'), 'APPLY')
+    g.button(L('S_CANCEL'), 'CANCEL')
+    g.button(L('S_BTN_OK'), 'OK', DEFAULT)
+    return g.build('THEME')
 
 # ---- the tool windows (gemtwin.c): dialogs without a frame or a title ----------
 def tw_find(L):
@@ -602,13 +650,16 @@ def fontsel(L):
 
 # ---- the toolbar and its icons ---------------------------------------------------
 def read_icons(path):
-    """the 16 x 16 icons from gemicon.c's table: name -> 16 words"""
+    """the 16 x 16 icons from tools/icons.h: name -> 16 words; and the colour
+    layers: [(name, pen, 16 words)]"""
     import re
     src = open(path, encoding='latin-1').read()
-    icons = {}
+    icons, layers = {}, []
     for m in re.finditer(r'/\*\s*(\w+)\s*\*/\s*\{([^}]*)\}', src):
         icons[m.group(1)] = [int(v, 16) for v in re.findall(r'0x([0-9A-Fa-f]{4})', m.group(2))]
-    return icons
+    for m in re.finditer(r'\{ IC_(\w+), (\d+), \{([^}]*)\} \}', src):
+        layers.append((m.group(1), int(m.group(2)), [int(v, 16) for v in re.findall(r'0x([0-9A-Fa-f]{4})', m.group(3))]))
+    return icons, layers
 
 TB = [('UNDO', 'C_UNDO'), ('REDO', 'C_REDO'), None,
       ('BOLD', 'C_BOLD'), ('ITALIC', 'C_ITALIC'), ('UNDER', 'C_UNDER'), None,
@@ -620,12 +671,22 @@ TB = [('UNDO', 'C_UNDO'), ('REDO', 'C_REDO'), None,
 BTNW, POPW = 22, 30
 ARROW = [0xFE00, 0x7C00, 0x3800]                     # the popup mark, 7 x 3
 
+def half(rows):
+    """16 rows to 8: each pair OR-ed together"""
+    return [rows[2 * r] | rows[2 * r + 1] for r in range(8)]
+
 def toolbar(icons, big):
+    """each button: a box holding its icon as images - the whole icon in black
+    (IMG, for fewer than 16 colours), and for 16 colours and more the
+    coloured layers (L0, L1) under the rest of the icon in black (IMGC) -
+    and the popup mark (ARR). EdWord hides the ones the screen doesn't want."""
+    icons, layers = icons
     tbh = 24 if big else 15
     ih = 16 if big else 8
     bh = tbh - 5
     root = Obj(G_BOX, cp(0), cp(0), cp(80), cp(0, tbh), spec=0x00001100, name='ROOT')    # white (the AES's grey with 3D), no frame
     x = 4
+    mono, colour, coloured = [], [], []
     for t in TB:
         if t is None:
             x += 6; continue
@@ -635,16 +696,30 @@ def toolbar(icons, big):
         box = add(root, Obj(G_BOX, cp(x // 8, x % 8), cp(0, 2), cp(w // 8, w % 8), cp(0, bh), flags=TOUCHEXIT,
                             spec=0x00011170, name=icon))
         data = icons[icon]
+        mine = [(p, m) for n, p, m in layers if n == icon]
         if not big:
-            data = [data[2 * r] | data[2 * r + 1] for r in range(8)]
-        add(box, Obj(G_IMAGE, cp(0, 3), cp(0, (bh + 1 - ih) // 2), cp(2), cp(0, ih),
-                     spec=('img', dict(words=data, wb=2, hl=ih, color=1)), name=icon + 'IMG'))
+            data = half(data)
+            mine = [(p, half(m)) for p, m in mine]
+        def img(words, color, name):
+            return add(box, Obj(G_IMAGE, cp(0, 3), cp(0, (bh + 1 - ih) // 2), cp(2), cp(0, ih),
+                                spec=('img', dict(words=words, wb=2, hl=ih, color=color)), name=name))
+        cover = [0] * ih
+        for k, (pen, m) in enumerate(mine):
+            colour.append(img(m, pen, '%sL%d' % (icon, k)))
+            cover = [a | b for a, b in zip(cover, m)]
+        if mine:
+            coloured.append(img([d & ~c & 0xFFFF for d, c in zip(data, cover)], 1, icon + 'IMGC'))
+            mono.append(img(data, 1, icon + 'IMG'))
+        else:
+            img(data, 1, icon + 'IMG')          # the same in every number of colours
         if pop:
             add(box, Obj(G_IMAGE, cp(0, w - 9), cp(0, bh // 2 - 1), cp(1), cp(0, 3),
                          spec=('img', dict(words=ARROW, wb=2, hl=3, color=1)), name=icon + 'ARR'))
         x += w + 2
     add(root, Obj(G_BOX, cp(0), cp(0, tbh - 1), cp(80), cp(0, 1), spec=0x00001171, name='LINE'))
-    return Tree('TOOLBAR' if big else 'TOOLBAR8', root), [t for t in TB if t]
+    t = Tree('TOOLBAR' if big else 'TOOLBAR8', root)
+    t.groups = dict(mono=mono, colour=colour, coloured=coloured)
+    return t, [t for t in TB if t]
 
 # ---- popups ------------------------------------------------------------------------
 def popup(name, texts):
@@ -668,39 +743,55 @@ def menus():
     m_edit = [('M_UNDO', 'Undo', 'C_UNDO'), ('M_REDO', '\x01Undo', 'C_REDO'), SEP,
               ('M_CUT', '^X', 'C_CUT'), ('M_COPY', '^C', 'C_COPY'), ('M_PASTE', '^V', 'C_PASTE'), ('M_SELALL', '^A', 'C_SELALL'), SEP,
               ('M_FIND', '^F', 'C_FIND'), ('M_FINDNEXT', '^G', 'C_FINDNEXT'), SEP,
-              ('M_PREVPAGE', '^\x01', 'C_PREVPAGE'), ('M_NEXTPAGE', '^\x02', 'C_NEXTPAGE'), ('M_GOTOPAGE', '^J', 'C_GOTOPAGE'), SEP,
-              ('M_REPAG', 'F2', 'C_REPAG')]
+              ('M_PREVPAGE', '^\x01', 'C_PREVPAGE'), ('M_NEXTPAGE', '^\x02', 'C_NEXTPAGE'), ('M_GOTOPAGE', '^J', 'C_GOTOPAGE')]
+    # rows, columns and deleting a table are in Table Settings
     m_insert = [('M_DATE', '^D', 'C_INSDATE'), ('M_TIME', None, 'C_INSTIME'), SEP,
                 ('M_PGBRK', '^Ret', 'C_PGBRK'), ('M_COLBRK', '^\x01Ret', 'C_COLBRK'), ('M_PAGENUM', None, 'C_PAGENUM'), SEP,
-                ('M_TBLINS', None, 'C_TBLINS'), ('M_TBLPROP', None, 'C_TBLPROP'), ('M_ROWINS', None, 'C_ROWINS'),
-                ('M_ROWDEL', None, 'C_ROWDEL'), ('M_COLINS', None, 'C_COLINS'), ('M_COLDEL', None, 'C_COLDEL'),
-                ('M_TBLDEL', None, 'C_TBLDEL'), ('M_CHART', None, 'C_CHART'), SEP,
-                ('M_PICTURE', None, 'C_PICTURE'), ('M_DRAWING', None, 'C_DRAWING'), SEP,
-                ('M_TOC', None, 'C_TOC'), SEP, ('M_INSFILE', None, 'C_INSFILE')]
+                ('M_TBLINS', None, 'C_TBLINS'), ('M_TBLPROP', None, 'C_TBLPROP'), SEP,
+                ('M_CHART', None, 'C_CHART'), ('M_PICTURE', None, 'C_PICTURE'), ('M_DRAWING', None, 'C_DRAWING'),
+                ('M_TOC', None, 'C_TOC'), ('M_INSFILE', None, 'C_INSFILE')]
     m_font = [('M_FONTSEL', '^\x01F', 'C_FONTSEL'), ('M_SIZEOTHER', None, 'C_SIZEOTHER'), SEP] + \
              [(('SIZE', i), None, 'C_SIZE0 + %d' % i) for i in range(len(SIZES))] + [SEP] + \
              [('DYN', 'FONT', 24, 24, 'C_FONT0')] + [('M_MOREFONTS', None, 'C_MOREFONTS')]
-    m_style = [('M_PLAIN', None, 'C_PLAIN'), SEP, ('M_BOLD', '^B', 'C_BOLD'), ('M_ITALIC', '^I', 'C_ITALIC'),
-               ('M_UNDER', '^\x01U', 'C_UNDER'), SEP] + [(('COLOUR', i), None, 'C_COLOR0 + %d' % i) for i in range(NCOLORS)]
+    m_style = [('M_PLAIN', None, 'C_PLAIN'), ('M_BOLD', '^B', 'C_BOLD'), ('M_ITALIC', '^I', 'C_ITALIC'),
+               ('M_UNDER', '^\x01U', 'C_UNDER'), SEP,
+               ('M_HEAD1', None, 'C_HEAD1'), ('M_HEAD2', None, 'C_HEAD2'), ('M_HEAD3', None, 'C_HEAD3'), ('M_BODY', None, 'C_BODY'), SEP] + \
+              [(('COLOUR', i), None, 'C_COLOR0 + %d' % i) for i in range(NCOLORS)]
     m_para = [('M_JLEFT', '^L', 'C_JLEFT'), ('M_JCENTRE', '^E', 'C_JCENTRE'), ('M_JRIGHT', '^R', 'C_JRIGHT'),
               ('M_JFULL', '^\x01J', 'C_JFULL'), SEP,
               ('M_SP1', None, 'C_SP1'), ('M_SP15', None, 'C_SP15'), ('M_SP2', None, 'C_SP2'), SEP,
               ('M_INDENTS', None, 'C_INDENTS'), ('M_HANGING', None, 'C_HANGING'), ('M_BULLETS', 'F9', 'C_BULLETS'),
               ('M_NUMBERS', 'F10', 'C_NUMBERS'), SEP,
-              ('M_HEAD1', None, 'C_HEAD1'), ('M_HEAD2', None, 'C_HEAD2'), ('M_HEAD3', None, 'C_HEAD3'), ('M_BODY', None, 'C_BODY'), SEP,
               ('M_WRAPCOL', None, 'C_WRAPCOL')]
     m_tools = [('M_SPELL', '^K', 'C_SPELL'), ('M_LIVESPELL', None, 'C_LIVESPELL'), ('M_THES', '\x01F7', 'C_THES'),
                ('M_SUMMARY', None, 'C_SUMMARY'), SEP, ('M_UDLOAD', None, 'C_UDLOAD'), ('M_UDNEW', None, 'C_UDNEW'), SEP,
                ('DYN', 'UD', 4, 24, 'C_UD0'), SEP, ('M_PREFS', None, 'C_PREFS')]
     m_view = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'), SEP,
               ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'),
-              ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), SEP,
-              ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES')]
+              ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), ('M_ZOOMPAGE', None, 'C_ZOOMPAGE'), SEP,
+              ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES'), SEP,
+              ('M_REPAG', 'F2', 'C_REPAG'), ('M_THEME', None, 'C_THEME')]
     m_window = [('M_TILEV', None, 'C_TILEV'), ('M_TILEH', None, 'C_TILEH'), ('M_CASCADE', None, 'C_CASCADE'), SEP,
                 ('M_ICONIFY', '^Z', 'C_ICONIFY'), ('M_ICONALL', None, 'C_ICONALL'), ('M_BOTTOM', None, 'C_BOTTOM'),
                 ('M_CYCLE', '^W', 'C_CYCLE'), SEP, ('DYN', 'WIN', 24, 24, 'C_WIN0'), ('M_WINMORE', None, 'C_WINMORE')]
     return [('MT_DESK', m_desk), ('MT_FILE', m_file), ('MT_EDIT', m_edit), ('MT_INSERT', m_insert), ('MT_FONT', m_font),
             ('MT_STYLE', m_style), ('MT_PARA', m_para), ('MT_TOOLS', m_tools), ('MT_VIEW', m_view), ('MT_WINDOW', m_window)]
+
+# TOS 1-4 save the screen under a drop-down menu in a buffer a quarter of the
+# screen's size and don't check its size: a bigger menu writes over memory that
+# isn't theirs and can crash the machine (EdWord's own Window menu did, at
+# about 1.25 times the buffer; a 23 x 22 menu of Lattice C's, at 1.07, didn't).
+# Each fixed menu has to stay under MENU_LIMIT of it, in ST high and ST
+# medium resolution alike (the Font and Window menus are cut to fit at run
+# time, see gem.c's menu_rows_fit).
+MENU_LIMIT = 1.05
+def menu_fits(L, tid, wchars, rows):
+    for sw, sh, hc in ((640, 400, 16), (640, 200, 8)):
+        save = ((wchars * 8 + 4 + 15) // 16) * 2 * (rows * hc + 4)
+        r = save / (sw * sh / 8 / 4)
+        if r > MENU_LIMIT:
+            sys.exit('%s menu %s too big for the TOS menu buffer: %d x %d characters, %.2f of it'
+                     % (L.lg, tid, wchars, rows, r))
 
 def menubar(L):
     root = Obj(G_IBOX, cp(0), cp(0), cp(80), cp(25), name='ROOT')
@@ -740,6 +831,8 @@ def menubar(L):
                 l = len(r[0]) + 4 + (len(r[1]) + 2 if r[1] else 0)
             maxl = max(maxl, l)
         maxl = max(12, min(42, maxl))
+        if not any(r is not SEP and r[0] == 'DYN' for r in rows):
+            menu_fits(L, tid, maxl, len(rows))
         dx = 2 + tx[mi]
         if dx + maxl > 78: dx = 78 - maxl
         box = add(screen, Obj(G_BOX, cp(dx), cp(0), cp(maxl), cp(len(rows)), spec=0x00FF1100, name='BOX%d' % mi))
@@ -841,7 +934,7 @@ def main():
     src, outdir = sys.argv[1], sys.argv[2]
     text = load_strings(src)
     here = os.path.dirname(os.path.abspath(__file__))
-    icons = read_icons(os.path.join(here, '..', 'gemicon.c'))
+    icons = read_icons(os.path.join(here, 'icons.h'))
     names = None
     for lg in LANGS:
         L = Lang(text, lg)
@@ -850,13 +943,15 @@ def main():
                  dlg_page(L), dlg_wrap(L), dlg_size(L), dlg_headfoot(L), dlg_indents(L), dlg_table(L, True),
                  dlg_table(L, False), dlg_objprops(L, False), dlg_objprops(L, True), dlg_summary(L), dlg_about(L),
                  dlg_textimport(L), dlg_textexport(L), dlg_goto(L), dlg_pagenum(L), dlg_template(L),
-                 tw_find(L), tw_spell(L), tw_thes(L), tw_import(L), tw_export(L), gauge(L, False), gauge(L, True)]
+                 tw_find(L), tw_spell(L), tw_thes(L), tw_import(L), tw_export(L), gauge(L, False), gauge(L, True),
+                 dlg_theme(L)]
         tb16, tbl = toolbar(icons, True)
         tb8, _ = toolbar(icons, False)
         trees += [tb16, tb8,
                   popup('POPSIZE', [b'%d ' % s + L('S_POINT') for s in SIZES] + [L('M_SIZEOTHER')]),
                   popup('POPCOLOUR', [L(s) for s in COLOURS]),
-                  popup('POPZOOM', [b'%d%%' % z for z in ZOOMS] + [L('M_ZOOMFIT')])]
+                  popup('POPZOOM', [b'%d%%' % z for z in ZOOMS] + [L('M_ZOOMFIT'), L('M_ZOOMPAGE')]),
+                  popup('POPTHEME', THEMES)]
         size = write_rsc(os.path.join(outdir, RSCNAME[lg]), trees)
         # the object numbers: the same in every language
         nm = []
@@ -866,7 +961,7 @@ def main():
         if names is None:
             names = nm
             idx = dict((id(f[0]), i) for i, f in enumerate(menu.flatten()))
-            first_cmds, first_tb = [(idx[id(o)], c) for o, c in cmds], tbl
+            first_cmds, first_tb, first_tb16 = [(idx[id(o)], c) for o, c in cmds], tbl, tb16
         else:
             assert [[n for _, n in objs] for _, objs in nm] == [[n for _, n in objs] for _, objs in names], 'trees differ in ' + lg
             assert [len(t.flatten()) for t in trees] == [len(objs) for _, objs in names]
@@ -882,7 +977,7 @@ def main():
                'PAGE': 'DPG', 'WRAP': 'DWR', 'SIZE': 'DSZ', 'HEADFOOT': 'DHF', 'INDENTS': 'DIN', 'TBLINS': 'DTI',
                'TBLPROP': 'DTP', 'PICPROPS': 'DPP', 'DRAWPROPS': 'DDP', 'SUMMARY': 'DSU', 'ABOUT': 'DAB',
                'TEXTIMP': 'DTXI', 'TEXTEXP': 'DTXE', 'GOTO': 'DGT', 'PAGENUM': 'DPN', 'TEMPLATE': 'DTM',
-               'FIND': 'WFD', 'SPELL': 'WSP', 'THES': 'WTH', 'IMPORT': 'WIX', 'EXPORT': 'WEX', 'GAUGE': 'DGA', 'GAUGEC': 'DGC',
+               'FIND': 'WFD', 'SPELL': 'WSP', 'THES': 'WTH', 'IMPORT': 'WIX', 'EXPORT': 'WEX', 'GAUGE': 'DGA', 'GAUGEC': 'DGC', 'THEME': 'DTH', 'POPTHEME': 'PT',
                'TOOLBAR8': None, 'POPSIZE': 'PS', 'POPCOLOUR': 'PC', 'POPZOOM': 'PZ'}
         for tname, objs in names:
             p = pre[tname]
@@ -895,7 +990,14 @@ def main():
         f.write(', \\\n'.join('    { %d, %s }' % (o, c) for o, c in first_cmds if c) + '\n\n')
         f.write('/* toolbar buttons and their commands (TB_FONT... open popups) */\n#define RSC_TB_CMDS \\\n')
         f.write(', \\\n'.join('    { TBO_%s, %s }' % (ic, c) for ic, c in first_tb) + '\n')
-        f.write('#define RSC_NTB %d\n\n#endif\n' % len(first_tb))
+        f.write('#define RSC_NTB %d\n\n' % len(first_tb))
+        idx = dict((id(fl[0]), i) for i, fl in enumerate(first_tb16.flatten()))
+        for key, what in (('mono', 'the whole icons in black: fewer than 16 colours'),
+                          ('colour', 'the coloured layers: 16 colours and more'),
+                          ('coloured', 'the rest of those icons, in black: 16 colours and more')):
+            f.write('/* toolbar images: %s */\n#define RSC_TB_%s ' % (what, key.upper()))
+            f.write(', '.join(str(idx[id(o)]) for o in first_tb16.groups[key]) + '\n')
+        f.write('\n#endif\n')
 
 if __name__ == '__main__':
     main()

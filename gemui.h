@@ -10,13 +10,13 @@
 #include "lang.h"
 
 #ifndef ED_VERSION
-#define ED_VERSION "3.0.12"   /* one more on every commit */
+#define ED_VERSION "3.0.13"   /* one more on every commit */
 #endif
 #ifndef ED_ABOUT
 #define ED_ABOUT ""
 #endif
 
-#define WKIND  (NAME|CLOSER|FULLER|MOVER|SIZER|INFO|UPARROW|DNARROW|VSLIDE|LFARROW|RTARROW|HSLIDE)
+#define WKIND  (NAME|CLOSER|FULLER|MOVER|SIZER|UPARROW|DNARROW|VSLIDE|LFARROW|RTARROW|HSLIDE)   /* the status line is EdWord's own */
 #define PGAP    12          /* gap around and between pages in the view, pixels */
 #define DIVH    4           /* split view divider height */
 
@@ -42,18 +42,46 @@ enum {
     /* Tools */
     C_SPELL, C_LIVESPELL, C_THES, C_SUMMARY, C_UDLOAD, C_UDNEW, C_PREFS,
     /* Window */
-    C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_ZOOMFIT, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
+    C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_ZOOMFIT, C_ZOOMPAGE, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
     C_CASCADE, C_ICONIFY, C_ICONALL, C_BOTTOM, C_CYCLE, C_WINMORE,
     /* pictures and drawings */
     C_OBJPROP, C_OBJDEL, C_OBJEDIT,
-    C_TEMPLATE,
+    C_TEMPLATE, C_THEME,
     C_LAST,
-    C_FONT0 = 100, C_SIZE0 = 200, C_COLOR0 = 250, C_UD0 = 260, C_WIN0 = 270
+    C_FONT0 = 120, C_SIZE0 = 200, C_COLOR0 = 250, C_UD0 = 260, C_WIN0 = 270   /* C_LAST below C_FONT0 (gem.c checks) */
 };
 #define NCMD (C_WIN0 + MAX_DOCS)
 
 
 extern short vhandle, phys_handle, wchar, hchar, scr_w, scr_h, npens, sys_asc;
+
+/* gemtheme.c: colour themes for the toolbars, the rulers and the desk
+ * around the pages, in pens 250-255 (256 colours or more) */
+enum { TH_FACE, TH_LIGHT, TH_DARK, TH_TEXT, TH_MARGIN, TH_DESK, TH_NROLES };
+#define TH_PEN0 250
+#define NTHEMES 17
+#define THEME_CUSTOM 99
+extern int theme_id;
+extern unsigned char theme_rgb[TH_NROLES][3];
+const char *theme_name(int id);
+int   theme_possible(void);
+int   theme_on(void);
+int   theme_pen(int role);
+void  theme_pick(int id);
+void  theme_apply(void);
+void  theme_init(void);
+void  theme_exit(void);
+void  theme_load(const char *key, const char *val);
+void  theme_save(void *f);          /* a FILE * */
+void  theme_bevel(short x, short y, short w, short h, int pressed);
+void  theme_preview_pens(void);
+int   theme_per_window(void);       /* high and true colour: a theme for each document window */
+void  theme_for(int slot);          /* before drawing in a document's window */
+void  theme_global(void);           /* ... after */
+int   theme_window(int slot, unsigned char rgb[TH_NROLES][3]);
+void  theme_set_window(int slot, int id, unsigned char rgb[TH_NROLES][3]);
+void  theme_userdef(OBJECT *o, USERBLK *ub, long parm);
+int   dlg_theme(void);
 extern GRECT desk;
 extern int   has_gdos, gdos_fsm, colour_on, pdf_scale;
 extern int   native_iconify, native_bottom, quit_now;
@@ -83,6 +111,7 @@ void  rebuild_menu(void);
 void  apply_style(DOC *d, int what, int val);
 void  apply_para(DOC *d, int field, int val);
 int   close_doc(DOC *d);
+void  tools_close_all(void);
 extern int safe_mode, no_arbpt;
 void  save_prefs(void);
 void  cmd_pdf(DOC *d);
@@ -156,8 +185,9 @@ void  rebuild_codes(DOC *d);
 void  set_view(DOC *d, int view);
 void  set_toolbar(DOC *d, int on);
 void  set_zoom(DOC *d, int zoom);
-void  set_fit_width(DOC *d, int on);   /* zoom so the page fills the window's width */
-#define ZOOM_MIN 25
+enum { FIT_WIDTH = 1, FIT_PAGE = 2 };   /* DOC fitw: the zoom follows the window */
+void  set_fit_width(DOC *d, int on);   /* zoom so the page fills the window's width, or the whole page fits */
+#define ZOOM_MIN 10              /* a whole page in a small window */
 #define ZOOM_MAX 400
 int   open_window(DOC *d);
 void  close_window(DOC *d);
@@ -197,17 +227,6 @@ void  autosave_tick(void);
 void  autosave_reset(void);
 void  autosave_force(void);
 
-/* gemicon.c */
-enum { IC_BOLD, IC_ITALIC, IC_UNDER, IC_LEFT, IC_CENTRE, IC_RIGHT, IC_JUSTIFY,
-       IC_FONT, IC_SIZE, IC_COLOUR, IC_SPELL, IC_CODES, IC_BULLETS, IC_NUMBERS,
-       IC_UNDO, IC_REDO, IC_ZOOM, IC_TABLE, IC_RULER, IC_GUIDES, IC_PGBRK, IC_COUNT };
-void  icons_init(void);
-int   icon_h(void);
-int   icons_coloured(void);
-int   icon_nlayers(void);
-const unsigned short *icon_layer(int k, int *ic, int *pen);
-unsigned short *icon_black(int ic);
-void  draw_tbicon(int ic, short x, short y);
 short tb_item_x(DOC *d, int cmd);
 
 /* gemrsc.c: the resource files */
@@ -354,6 +373,12 @@ void  draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den);
 /* demo.c: the screenshot script, only in "make EDDEMO=1" builds */
 #ifdef EDDEMO
 int   demo_start(void);
+#ifdef EDTEST
+void  test_all_menus(const short *skip);
+void  test_note(const char *fmt, ...);
+void  test_cmd_begin(const char *name);
+void  test_cmd_end(const char *name);
+#endif
 int   demo_tick(void);
 int   demo_dialog(OBJECT *tree, short x, short y, short w, short h);
 int   demo_alert(void);

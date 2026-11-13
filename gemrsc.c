@@ -15,7 +15,7 @@
 #include "gemui.h"
 #include "edrsc.h"
 
-static const char *const rsc_file[NLANG] = { "EDWORD.RSC", "EDWORDDE.RSC", "EDWORDES.RSC", "EDWORDIT.RSC", "EDWORDFR.RSC" };
+static const char *const rsc_file[NLANG] = { "EDWORD.RSC", "EDWORDDE.RSC", "EDWORDES.RSC", "EDWORDIT.RSC", "EDWORDFR.RSC", "EDWORDCS.RSC" };
 static int   rsc_lang = -1, rsc_loaded;
 static short title_obj[RT_COUNT];
 
@@ -33,9 +33,7 @@ static void spread(int tree)
         int ext = (o->ob_type >> 8) & 0xff;
         if (i == 0 || ext == X_GROUP) {
             o->ob_y = (short)(o->ob_y / hchar * rh);
-            /* half a row under the buttons, so they and their 3D edges and
-             * the default button's frame stand clear of the bottom */
-            o->ob_height = (short)(o->ob_height / hchar * rh + (ext == X_DIALOG ? rh / 2 : 0));
+            o->ob_height = (short)(o->ob_height / hchar * rh);
         } else if (ext == X_ROW || ext == X_TITLE)
             o->ob_y = (short)(o->ob_y / hchar * rh + (rh - hchar) / 2);
         else if (ext == X_BUTTON)

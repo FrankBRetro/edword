@@ -1,6 +1,8 @@
 # build products (the release binaries themselves are committed)
 *.o
 build/
+DIST/
+EDWORD-*.zip
 hosttest
 mkdic
 MKDIC.TTP
@@ -8,3 +10,4 @@ amiga/build/
 win/build/
 .DS_Store
 tools/__pycache__/
+manual/__pycache__/

@@ -1,5 +1,5 @@
 # The script that takes the manual's screenshots ("make EDDEMO=1").
-# Copy it to DEMO.SCR beside EDWORD.PRG with DEMO.RTF, LIGHT.IMG and
+# Copy it to DEMO.SCR beside EDWORD.PRG with DEMO.RTF, LIGHT.PNG and
 # NOTES.TXT (see manual/build.sh).
 OPEN DEMO.RTF
 WIN 0 19 640 381
@@ -11,13 +11,16 @@ MENU 4 m_font
 MENU 5 m_style
 MENU 6 m_para
 MENU 7 m_tools
-MENU 8 m_window
+MENU 8 m_view
+MENU 9 m_window
 DSHOT about
 CMD ABOUT
 DSHOT zoompop
 CLICK 422 67 1
 ZOOM 150
 SHOT zoom
+CMD ZOOMPAGE
+SHOT fitpage
 ZOOM 100
 CMD SPLIT
 SHOT split
@@ -63,6 +66,8 @@ SHOT lists
 DSHOT summary
 CMD SUMMARY
 DSHOT prefs
+DSHOTAT 2 prefs2
+DEXIT 1
 DEXIT 1
 CMD PREFS
 DSHOT size
@@ -87,7 +92,7 @@ DRAWSEL 1
 SHOT drawedit
 KEY 01 27 0
 FIND Junior
-PICTURE LIGHT.IMG
+PICTURE LIGHT.PNG
 PAGETOP 1 280
 SHOT picture
 MENU 2 m_edit
@@ -133,4 +138,12 @@ CMD TILEV
 SHOT tilev
 CMD TILEH
 SHOT tileh
+# the colour theme (256 colours and more): the dialog, Lagoon picked, then
+# the windows in it
+DSHOTAT 3 theme
+DEXIT 1
+DEXIT 8
+DEXIT 4
+CMD THEME
+SHOT themed
 QUIT

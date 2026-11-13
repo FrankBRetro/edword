@@ -478,6 +478,7 @@ static int pal_nearest(int r, int g, int b)
             long dr = cr - pal_rgb[i][0], dg = cg - pal_rgb[i][1], db = cb - pal_rgb[i][2];
             long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
             if (i == skip) continue;
+            if (pal_n >= 256 && i >= TH_PEN0 && i < TH_PEN0 + TH_NROLES) continue;   /* the colour theme's */
             if (dd < best) { best = dd; bi = i; }
         }
         pal_cube[idx] = (unsigned short)(bi + 1);
@@ -846,6 +847,11 @@ static void bar_tree(GRECT *wa)
         o->ob_state = (short)(((b < NTOOLS && b == dw.tool) ? OS_SELECTED : 0) |
                               ((b >= B_FRONT && b <= B_DELETE && dw.sel < 0) ? OS_DISABLED : 0));
         o->ob_x = dw.bt[b].g_x; o->ob_y = dw.bt[b].g_y; o->ob_width = dw.bt[b].g_w; o->ob_height = dw.bt[b].g_h;
+    }
+    if (theme_on()) {                           /* drawn in the colour theme's colours */
+        static USERBLK ub[NBTN + 1];
+        theme_userdef(&dwt[0], &ub[0], 0);
+        for (b = 0; b < NBTN; b++) theme_userdef(&dwt[b + 1], &ub[b + 1], (long)dwtxt[b]);
     }
 }
 

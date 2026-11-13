@@ -31,12 +31,14 @@
 #define RT_EXPORT 25
 #define RT_GAUGE 26
 #define RT_GAUGEC 27
-#define RT_TOOLBAR 28
-#define RT_TOOLBAR8 29
-#define RT_POPSIZE 30
-#define RT_POPCOLOUR 31
-#define RT_POPZOOM 32
-#define RT_COUNT 33
+#define RT_THEME 28
+#define RT_TOOLBAR 29
+#define RT_TOOLBAR8 30
+#define RT_POPSIZE 31
+#define RT_POPCOLOUR 32
+#define RT_POPZOOM 33
+#define RT_POPTHEME 34
+#define RT_COUNT 35
 
 /* MENU */
 #define MN_ROOT 0
@@ -87,131 +89,128 @@
 #define MN_PREVPAGE 52
 #define MN_NEXTPAGE 53
 #define MN_GOTOPAGE 54
-#define MN_REPAG 56
-#define MN_BOX3 57
-#define MN_DATE 58
-#define MN_TIME 59
-#define MN_PGBRK 61
-#define MN_COLBRK 62
-#define MN_PAGENUM 63
-#define MN_TBLINS 65
-#define MN_TBLPROP 66
-#define MN_ROWINS 67
-#define MN_ROWDEL 68
-#define MN_COLINS 69
-#define MN_COLDEL 70
-#define MN_TBLDEL 71
-#define MN_CHART 72
-#define MN_PICTURE 74
-#define MN_DRAWING 75
-#define MN_TOC 77
-#define MN_INSFILE 79
-#define MN_BOX4 80
-#define MN_FONTSEL 81
-#define MN_SIZEOTHER 82
-#define MN_FONT0 93
-#define MN_FONT1 94
-#define MN_FONT2 95
-#define MN_FONT3 96
-#define MN_FONT4 97
-#define MN_FONT5 98
-#define MN_FONT6 99
-#define MN_FONT7 100
-#define MN_FONT8 101
-#define MN_FONT9 102
-#define MN_FONT10 103
-#define MN_FONT11 104
-#define MN_FONT12 105
-#define MN_FONT13 106
-#define MN_FONT14 107
-#define MN_FONT15 108
-#define MN_FONT16 109
-#define MN_FONT17 110
-#define MN_FONT18 111
-#define MN_FONT19 112
-#define MN_FONT20 113
-#define MN_FONT21 114
-#define MN_FONT22 115
-#define MN_FONT23 116
-#define MN_MOREFONTS 117
-#define MN_BOX5 118
-#define MN_PLAIN 119
-#define MN_BOLD 121
-#define MN_ITALIC 122
-#define MN_UNDER 123
-#define MN_BOX6 133
-#define MN_JLEFT 134
-#define MN_JCENTRE 135
-#define MN_JRIGHT 136
-#define MN_JFULL 137
-#define MN_SP1 139
-#define MN_SP15 140
-#define MN_SP2 141
-#define MN_INDENTS 143
-#define MN_HANGING 144
-#define MN_BULLETS 145
-#define MN_NUMBERS 146
-#define MN_HEAD1 148
-#define MN_HEAD2 149
-#define MN_HEAD3 150
-#define MN_BODY 151
-#define MN_WRAPCOL 153
-#define MN_BOX7 154
-#define MN_SPELL 155
-#define MN_LIVESPELL 156
-#define MN_THES 157
-#define MN_SUMMARY 158
-#define MN_UDLOAD 160
-#define MN_UDNEW 161
-#define MN_UD0 163
-#define MN_UD1 164
-#define MN_UD2 165
-#define MN_UD3 166
-#define MN_PREFS 168
-#define MN_BOX8 169
-#define MN_VDOC 170
-#define MN_SPLIT 171
-#define MN_VCODES 172
-#define MN_ZOOMIN 174
-#define MN_ZOOMOUT 175
-#define MN_ZOOMFIT 176
-#define MN_TOOLBAR 178
-#define MN_RULERS 179
-#define MN_GUIDES 180
-#define MN_BOX9 181
-#define MN_TILEV 182
-#define MN_TILEH 183
-#define MN_CASCADE 184
-#define MN_ICONIFY 186
-#define MN_ICONALL 187
-#define MN_BOTTOM 188
-#define MN_CYCLE 189
-#define MN_WIN0 191
-#define MN_WIN1 192
-#define MN_WIN2 193
-#define MN_WIN3 194
-#define MN_WIN4 195
-#define MN_WIN5 196
-#define MN_WIN6 197
-#define MN_WIN7 198
-#define MN_WIN8 199
-#define MN_WIN9 200
-#define MN_WIN10 201
-#define MN_WIN11 202
-#define MN_WIN12 203
-#define MN_WIN13 204
-#define MN_WIN14 205
-#define MN_WIN15 206
-#define MN_WIN16 207
-#define MN_WIN17 208
-#define MN_WIN18 209
-#define MN_WIN19 210
-#define MN_WIN20 211
-#define MN_WIN21 212
-#define MN_WIN22 213
-#define MN_WIN23 214
-#define MN_WINMORE 215
-#define MN_COUNT 216
+#define MN_BOX3 55
+#define MN_DATE 56
+#define MN_TIME 57
+#define MN_PGBRK 59
+#define MN_COLBRK 60
+#define MN_PAGENUM 61
+#define MN_TBLINS 63
+#define MN_TBLPROP 64
+#define MN_CHART 66
+#define MN_PICTURE 67
+#define MN_DRAWING 68
+#define MN_TOC 69
+#define MN_INSFILE 70
+#define MN_BOX4 71
+#define MN_FONTSEL 72
+#define MN_SIZEOTHER 73
+#define MN_FONT0 84
+#define MN_FONT1 85
+#define MN_FONT2 86
+#define MN_FONT3 87
+#define MN_FONT4 88
+#define MN_FONT5 89
+#define MN_FONT6 90
+#define MN_FONT7 91
+#define MN_FONT8 92
+#define MN_FONT9 93
+#define MN_FONT10 94
+#define MN_FONT11 95
+#define MN_FONT12 96
+#define MN_FONT13 97
+#define MN_FONT14 98
+#define MN_FONT15 99
+#define MN_FONT16 100
+#define MN_FONT17 101
+#define MN_FONT18 102
+#define MN_FONT19 103
+#define MN_FONT20 104
+#define MN_FONT21 105
+#define MN_FONT22 106
+#define MN_FONT23 107
+#define MN_MOREFONTS 108
+#define MN_BOX5 109
+#define MN_PLAIN 110
+#define MN_BOLD 111
+#define MN_ITALIC 112
+#define MN_UNDER 113
+#define MN_HEAD1 115
+#define MN_HEAD2 116
+#define MN_HEAD3 117
+#define MN_BODY 118
+#define MN_BOX6 128
+#define MN_JLEFT 129
+#define MN_JCENTRE 130
+#define MN_JRIGHT 131
+#define MN_JFULL 132
+#define MN_SP1 134
+#define MN_SP15 135
+#define MN_SP2 136
+#define MN_INDENTS 138
+#define MN_HANGING 139
+#define MN_BULLETS 140
+#define MN_NUMBERS 141
+#define MN_WRAPCOL 143
+#define MN_BOX7 144
+#define MN_SPELL 145
+#define MN_LIVESPELL 146
+#define MN_THES 147
+#define MN_SUMMARY 148
+#define MN_UDLOAD 150
+#define MN_UDNEW 151
+#define MN_UD0 153
+#define MN_UD1 154
+#define MN_UD2 155
+#define MN_UD3 156
+#define MN_PREFS 158
+#define MN_BOX8 159
+#define MN_VDOC 160
+#define MN_SPLIT 161
+#define MN_VCODES 162
+#define MN_ZOOMIN 164
+#define MN_ZOOMOUT 165
+#define MN_ZOOMFIT 166
+#define MN_ZOOMPAGE 167
+#define MN_TOOLBAR 169
+#define MN_RULERS 170
+#define MN_GUIDES 171
+#define MN_REPAG 173
+#define MN_THEME 174
+#define MN_BOX9 175
+#define MN_TILEV 176
+#define MN_TILEH 177
+#define MN_CASCADE 178
+#define MN_ICONIFY 180
+#define MN_ICONALL 181
+#define MN_BOTTOM 182
+#define MN_CYCLE 183
+#define MN_WIN0 185
+#define MN_WIN1 186
+#define MN_WIN2 187
+#define MN_WIN3 188
+#define MN_WIN4 189
+#define MN_WIN5 190
+#define MN_WIN6 191
+#define MN_WIN7 192
+#define MN_WIN8 193
+#define MN_WIN9 194
+#define MN_WIN10 195
+#define MN_WIN11 196
+#define MN_WIN12 197
+#define MN_WIN13 198
+#define MN_WIN14 199
+#define MN_WIN15 200
+#define MN_WIN16 201
+#define MN_WIN17 202
+#define MN_WIN18 203
+#define MN_WIN19 204
+#define MN_WIN20 205
+#define MN_WIN21 206
+#define MN_WIN22 207
+#define MN_WIN23 208
+#define MN_WINMORE 209
+#define MN_COUNT 210
 
 /* PRINT */
 #define PR_ROOT 0
@@ -241,48 +240,39 @@
 #define PF_LANG2 4
 #define PF_LANG3 5
 #define PF_LANG4 6
-#define PF_DATE0GRP 7
-#define PF_DATE0 8
-#define PF_DATE1 9
-#define PF_DATE2 10
-#define PF_DATE3 11
-#define PF_DATE4 12
-#define PF_PAPER0GRP 13
-#define PF_PAPER0 14
-#define PF_PAPER1 15
-#define PF_PAPER2 16
-#define PF_PAPER3 17
-#define PF_PORTRAITGRP 18
-#define PF_PORTRAIT 19
-#define PF_LAND 20
-#define PF_DICT0GRP 21
-#define PF_DICT0 22
-#define PF_DICT1 23
-#define PF_DICT2 24
-#define PF_DICT3 25
-#define PF_DICT4 26
-#define PF_PDF1GRP 27
-#define PF_PDF1 28
-#define PF_PDF2 29
-#define PF_PDF3 30
-#define PF_DISP0GRP 31
-#define PF_DISP0 32
-#define PF_DISP1 33
-#define PF_DISP2 34
-#define PF_DISP3 35
-#define PF_ASCOPYGRP 36
-#define PF_ASCOPY 37
-#define PF_ASDOC 38
-#define PF_TITLE 39
-#define PF_TOOLBAR 44
-#define PF_LIVE 46
-#define PF_COLOURS 49
-#define PF_ASON 53
-#define PF_ASMIN 55
-#define PF_MORE 57
-#define PF_CANCEL 58
-#define PF_OK 59
-#define PF_COUNT 60
+#define PF_LANG5 7
+#define PF_DATE0GRP 8
+#define PF_DATE0 9
+#define PF_DATE1 10
+#define PF_DATE2 11
+#define PF_DATE3 12
+#define PF_DATE4 13
+#define PF_DATE5 14
+#define PF_PAPER0GRP 15
+#define PF_PAPER0 16
+#define PF_PAPER1 17
+#define PF_PAPER2 18
+#define PF_PAPER3 19
+#define PF_PORTRAITGRP 20
+#define PF_PORTRAIT 21
+#define PF_LAND 22
+#define PF_DISP0GRP 23
+#define PF_DISP0 24
+#define PF_DISP1 25
+#define PF_DISP2 26
+#define PF_DISP3 27
+#define PF_ASCOPYGRP 28
+#define PF_ASCOPY 29
+#define PF_ASDOC 30
+#define PF_TITLE 31
+#define PF_TOOLBAR 36
+#define PF_COLOURS 38
+#define PF_ASON 41
+#define PF_ASMIN 43
+#define PF_MORE 45
+#define PF_CANCEL 46
+#define PF_OK 47
+#define PF_COUNT 48
 
 /* PREFS2 */
 #define PF2_ROOT 0
@@ -290,11 +280,23 @@
 #define PF2_KEEP0 2
 #define PF2_KEEP1 3
 #define PF2_KEEP2 4
-#define PF2_TITLE 5
-#define PF2_DOCDIR 8
-#define PF2_CANCEL 9
-#define PF2_OK 10
-#define PF2_COUNT 11
+#define PF2_DICT0GRP 5
+#define PF2_DICT0 6
+#define PF2_DICT1 7
+#define PF2_DICT2 8
+#define PF2_DICT3 9
+#define PF2_DICT4 10
+#define PF2_DICT5 11
+#define PF2_PDF1GRP 12
+#define PF2_PDF1 13
+#define PF2_PDF2 14
+#define PF2_PDF3 15
+#define PF2_TITLE 16
+#define PF2_LIVE 19
+#define PF2_DOCDIR 23
+#define PF2_CANCEL 24
+#define PF2_OK 25
+#define PF2_COUNT 26
 
 /* FONTSEL */
 #define FS_ROOT 0
@@ -433,9 +435,14 @@
 #define DTP_W10 18
 #define DTP_W11 19
 #define DTP_GRID 21
-#define DTP_CANCEL 22
-#define DTP_OK 23
-#define DTP_COUNT 24
+#define DTP_ROWINS 23
+#define DTP_ROWDEL 24
+#define DTP_COLINS 25
+#define DTP_COLDEL 26
+#define DTP_TBLDEL 27
+#define DTP_CANCEL 28
+#define DTP_OK 29
+#define DTP_COUNT 30
 
 /* PICPROPS */
 #define DPP_ROOT 0
@@ -700,56 +707,117 @@
 #define DGC_CANCEL 4
 #define DGC_COUNT 5
 
+/* THEME */
+#define DTH_ROOT 0
+#define DTH_THISDOCGRP 1
+#define DTH_THISDOC 2
+#define DTH_ALLDOCS 3
+#define DTH_TITLE 4
+#define DTH_PREVIEW 5
+#define DTH_PICK 7
+#define DTH_R0 10
+#define DTH_G0 12
+#define DTH_B0 14
+#define DTH_R1 17
+#define DTH_G1 19
+#define DTH_B1 21
+#define DTH_R2 24
+#define DTH_G2 26
+#define DTH_B2 28
+#define DTH_R3 31
+#define DTH_G3 33
+#define DTH_B3 35
+#define DTH_R4 38
+#define DTH_G4 40
+#define DTH_B4 42
+#define DTH_R5 45
+#define DTH_G5 47
+#define DTH_B5 49
+#define DTH_APPLY 52
+#define DTH_CANCEL 53
+#define DTH_OK 54
+#define DTH_COUNT 55
+
 /* TOOLBAR */
 #define TBO_ROOT 0
 #define TBO_UNDO 1
-#define TBO_UNDOIMG 2
-#define TBO_REDO 3
-#define TBO_REDOIMG 4
-#define TBO_BOLD 5
-#define TBO_BOLDIMG 6
-#define TBO_ITALIC 7
-#define TBO_ITALICIMG 8
-#define TBO_UNDER 9
-#define TBO_UNDERIMG 10
-#define TBO_LEFT 11
-#define TBO_LEFTIMG 12
-#define TBO_CENTRE 13
-#define TBO_CENTREIMG 14
-#define TBO_RIGHT 15
-#define TBO_RIGHTIMG 16
-#define TBO_JUSTIFY 17
-#define TBO_JUSTIFYIMG 18
-#define TBO_BULLETS 19
-#define TBO_BULLETSIMG 20
-#define TBO_NUMBERS 21
-#define TBO_NUMBERSIMG 22
-#define TBO_TABLE 23
-#define TBO_TABLEIMG 24
-#define TBO_PGBRK 25
-#define TBO_PGBRKIMG 26
-#define TBO_FONT 27
-#define TBO_FONTIMG 28
-#define TBO_FONTARR 29
-#define TBO_SIZE 30
-#define TBO_SIZEIMG 31
-#define TBO_SIZEARR 32
-#define TBO_COLOUR 33
-#define TBO_COLOURIMG 34
-#define TBO_COLOURARR 35
-#define TBO_ZOOM 36
-#define TBO_ZOOMIMG 37
-#define TBO_ZOOMARR 38
-#define TBO_SPELL 39
-#define TBO_SPELLIMG 40
-#define TBO_CODES 41
-#define TBO_CODESIMG 42
-#define TBO_RULER 43
-#define TBO_RULERIMG 44
-#define TBO_GUIDES 45
-#define TBO_GUIDESIMG 46
-#define TBO_LINE 47
-#define TBO_COUNT 48
+#define TBO_UNDOL0 2
+#define TBO_UNDOIMGC 3
+#define TBO_UNDOIMG 4
+#define TBO_REDO 5
+#define TBO_REDOL0 6
+#define TBO_REDOIMGC 7
+#define TBO_REDOIMG 8
+#define TBO_BOLD 9
+#define TBO_BOLDIMG 10
+#define TBO_ITALIC 11
+#define TBO_ITALICIMG 12
+#define TBO_UNDER 13
+#define TBO_UNDERL0 14
+#define TBO_UNDERIMGC 15
+#define TBO_UNDERIMG 16
+#define TBO_LEFT 17
+#define TBO_LEFTIMG 18
+#define TBO_CENTRE 19
+#define TBO_CENTREIMG 20
+#define TBO_RIGHT 21
+#define TBO_RIGHTIMG 22
+#define TBO_JUSTIFY 23
+#define TBO_JUSTIFYIMG 24
+#define TBO_BULLETS 25
+#define TBO_BULLETSL0 26
+#define TBO_BULLETSIMGC 27
+#define TBO_BULLETSIMG 28
+#define TBO_NUMBERS 29
+#define TBO_NUMBERSL0 30
+#define TBO_NUMBERSIMGC 31
+#define TBO_NUMBERSIMG 32
+#define TBO_TABLE 33
+#define TBO_TABLEL0 34
+#define TBO_TABLEIMGC 35
+#define TBO_TABLEIMG 36
+#define TBO_PGBRK 37
+#define TBO_PGBRKL0 38
+#define TBO_PGBRKIMGC 39
+#define TBO_PGBRKIMG 40
+#define TBO_FONT 41
+#define TBO_FONTL0 42
+#define TBO_FONTIMGC 43
+#define TBO_FONTIMG 44
+#define TBO_FONTARR 45
+#define TBO_SIZE 46
+#define TBO_SIZEIMG 47
+#define TBO_SIZEARR 48
+#define TBO_COLOUR 49
+#define TBO_COLOURL0 50
+#define TBO_COLOURIMGC 51
+#define TBO_COLOURIMG 52
+#define TBO_COLOURARR 53
+#define TBO_ZOOM 54
+#define TBO_ZOOML0 55
+#define TBO_ZOOML1 56
+#define TBO_ZOOMIMGC 57
+#define TBO_ZOOMIMG 58
+#define TBO_ZOOMARR 59
+#define TBO_SPELL 60
+#define TBO_SPELLL0 61
+#define TBO_SPELLIMGC 62
+#define TBO_SPELLIMG 63
+#define TBO_CODES 64
+#define TBO_CODESL0 65
+#define TBO_CODESL1 66
+#define TBO_CODESIMGC 67
+#define TBO_CODESIMG 68
+#define TBO_RULER 69
+#define TBO_RULERL0 70
+#define TBO_RULERIMGC 71
+#define TBO_RULERIMG 72
+#define TBO_GUIDES 73
+#define TBO_GUIDESL0 74
+#define TBO_GUIDESIMGC 75
+#define TBO_GUIDESIMG 76
+#define TBO_LINE 77
+#define TBO_COUNT 78
 
 /* POPSIZE */
 #define PS_ROOT 0
@@ -785,7 +853,29 @@
 #define PZ_I4 5
 #define PZ_I5 6
 #define PZ_I6 7
-#define PZ_COUNT 8
+#define PZ_I7 8
+#define PZ_COUNT 9
+
+/* POPTHEME */
+#define PT_ROOT 0
+#define PT_I0 1
+#define PT_I1 2
+#define PT_I2 3
+#define PT_I3 4
+#define PT_I4 5
+#define PT_I5 6
+#define PT_I6 7
+#define PT_I7 8
+#define PT_I8 9
+#define PT_I9 10
+#define PT_I10 11
+#define PT_I11 12
+#define PT_I12 13
+#define PT_I13 14
+#define PT_I14 15
+#define PT_I15 16
+#define PT_I16 17
+#define PT_COUNT 18
 
 /* menu entries and their commands */
 #define RSC_MENU_CMDS \
@@ -814,139 +904,136 @@
     { 52, C_PREVPAGE }, \
     { 53, C_NEXTPAGE }, \
     { 54, C_GOTOPAGE }, \
-    { 56, C_REPAG }, \
-    { 58, C_INSDATE }, \
-    { 59, C_INSTIME }, \
-    { 61, C_PGBRK }, \
-    { 62, C_COLBRK }, \
-    { 63, C_PAGENUM }, \
-    { 65, C_TBLINS }, \
-    { 66, C_TBLPROP }, \
-    { 67, C_ROWINS }, \
-    { 68, C_ROWDEL }, \
-    { 69, C_COLINS }, \
-    { 70, C_COLDEL }, \
-    { 71, C_TBLDEL }, \
-    { 72, C_CHART }, \
-    { 74, C_PICTURE }, \
-    { 75, C_DRAWING }, \
-    { 77, C_TOC }, \
-    { 79, C_INSFILE }, \
-    { 81, C_FONTSEL }, \
-    { 82, C_SIZEOTHER }, \
-    { 84, C_SIZE0 + 0 }, \
-    { 85, C_SIZE0 + 1 }, \
-    { 86, C_SIZE0 + 2 }, \
-    { 87, C_SIZE0 + 3 }, \
-    { 88, C_SIZE0 + 4 }, \
-    { 89, C_SIZE0 + 5 }, \
-    { 90, C_SIZE0 + 6 }, \
-    { 91, C_SIZE0 + 7 }, \
-    { 93, C_FONT0 + 0 }, \
-    { 94, C_FONT0 + 1 }, \
-    { 95, C_FONT0 + 2 }, \
-    { 96, C_FONT0 + 3 }, \
-    { 97, C_FONT0 + 4 }, \
-    { 98, C_FONT0 + 5 }, \
-    { 99, C_FONT0 + 6 }, \
-    { 100, C_FONT0 + 7 }, \
-    { 101, C_FONT0 + 8 }, \
-    { 102, C_FONT0 + 9 }, \
-    { 103, C_FONT0 + 10 }, \
-    { 104, C_FONT0 + 11 }, \
-    { 105, C_FONT0 + 12 }, \
-    { 106, C_FONT0 + 13 }, \
-    { 107, C_FONT0 + 14 }, \
-    { 108, C_FONT0 + 15 }, \
-    { 109, C_FONT0 + 16 }, \
-    { 110, C_FONT0 + 17 }, \
-    { 111, C_FONT0 + 18 }, \
-    { 112, C_FONT0 + 19 }, \
-    { 113, C_FONT0 + 20 }, \
-    { 114, C_FONT0 + 21 }, \
-    { 115, C_FONT0 + 22 }, \
-    { 116, C_FONT0 + 23 }, \
-    { 117, C_MOREFONTS }, \
-    { 119, C_PLAIN }, \
-    { 121, C_BOLD }, \
-    { 122, C_ITALIC }, \
-    { 123, C_UNDER }, \
-    { 125, C_COLOR0 + 0 }, \
-    { 126, C_COLOR0 + 1 }, \
-    { 127, C_COLOR0 + 2 }, \
-    { 128, C_COLOR0 + 3 }, \
-    { 129, C_COLOR0 + 4 }, \
-    { 130, C_COLOR0 + 5 }, \
-    { 131, C_COLOR0 + 6 }, \
-    { 132, C_COLOR0 + 7 }, \
-    { 134, C_JLEFT }, \
-    { 135, C_JCENTRE }, \
-    { 136, C_JRIGHT }, \
-    { 137, C_JFULL }, \
-    { 139, C_SP1 }, \
-    { 140, C_SP15 }, \
-    { 141, C_SP2 }, \
-    { 143, C_INDENTS }, \
-    { 144, C_HANGING }, \
-    { 145, C_BULLETS }, \
-    { 146, C_NUMBERS }, \
-    { 148, C_HEAD1 }, \
-    { 149, C_HEAD2 }, \
-    { 150, C_HEAD3 }, \
-    { 151, C_BODY }, \
-    { 153, C_WRAPCOL }, \
-    { 155, C_SPELL }, \
-    { 156, C_LIVESPELL }, \
-    { 157, C_THES }, \
-    { 158, C_SUMMARY }, \
-    { 160, C_UDLOAD }, \
-    { 161, C_UDNEW }, \
-    { 163, C_UD0 + 0 }, \
-    { 164, C_UD0 + 1 }, \
-    { 165, C_UD0 + 2 }, \
-    { 166, C_UD0 + 3 }, \
-    { 168, C_PREFS }, \
-    { 170, C_VDOC }, \
-    { 171, C_SPLIT }, \
-    { 172, C_VCODES }, \
-    { 174, C_ZOOMIN }, \
-    { 175, C_ZOOMOUT }, \
-    { 176, C_ZOOMFIT }, \
-    { 178, C_TOOLBAR }, \
-    { 179, C_RULERS }, \
-    { 180, C_GUIDES }, \
-    { 182, C_TILEV }, \
-    { 183, C_TILEH }, \
-    { 184, C_CASCADE }, \
-    { 186, C_ICONIFY }, \
-    { 187, C_ICONALL }, \
-    { 188, C_BOTTOM }, \
-    { 189, C_CYCLE }, \
-    { 191, C_WIN0 + 0 }, \
-    { 192, C_WIN0 + 1 }, \
-    { 193, C_WIN0 + 2 }, \
-    { 194, C_WIN0 + 3 }, \
-    { 195, C_WIN0 + 4 }, \
-    { 196, C_WIN0 + 5 }, \
-    { 197, C_WIN0 + 6 }, \
-    { 198, C_WIN0 + 7 }, \
-    { 199, C_WIN0 + 8 }, \
-    { 200, C_WIN0 + 9 }, \
-    { 201, C_WIN0 + 10 }, \
-    { 202, C_WIN0 + 11 }, \
-    { 203, C_WIN0 + 12 }, \
-    { 204, C_WIN0 + 13 }, \
-    { 205, C_WIN0 + 14 }, \
-    { 206, C_WIN0 + 15 }, \
-    { 207, C_WIN0 + 16 }, \
-    { 208, C_WIN0 + 17 }, \
-    { 209, C_WIN0 + 18 }, \
-    { 210, C_WIN0 + 19 }, \
-    { 211, C_WIN0 + 20 }, \
-    { 212, C_WIN0 + 21 }, \
-    { 213, C_WIN0 + 22 }, \
-    { 214, C_WIN0 + 23 }, \
-    { 215, C_WINMORE }
+    { 56, C_INSDATE }, \
+    { 57, C_INSTIME }, \
+    { 59, C_PGBRK }, \
+    { 60, C_COLBRK }, \
+    { 61, C_PAGENUM }, \
+    { 63, C_TBLINS }, \
+    { 64, C_TBLPROP }, \
+    { 66, C_CHART }, \
+    { 67, C_PICTURE }, \
+    { 68, C_DRAWING }, \
+    { 69, C_TOC }, \
+    { 70, C_INSFILE }, \
+    { 72, C_FONTSEL }, \
+    { 73, C_SIZEOTHER }, \
+    { 75, C_SIZE0 + 0 }, \
+    { 76, C_SIZE0 + 1 }, \
+    { 77, C_SIZE0 + 2 }, \
+    { 78, C_SIZE0 + 3 }, \
+    { 79, C_SIZE0 + 4 }, \
+    { 80, C_SIZE0 + 5 }, \
+    { 81, C_SIZE0 + 6 }, \
+    { 82, C_SIZE0 + 7 }, \
+    { 84, C_FONT0 + 0 }, \
+    { 85, C_FONT0 + 1 }, \
+    { 86, C_FONT0 + 2 }, \
+    { 87, C_FONT0 + 3 }, \
+    { 88, C_FONT0 + 4 }, \
+    { 89, C_FONT0 + 5 }, \
+    { 90, C_FONT0 + 6 }, \
+    { 91, C_FONT0 + 7 }, \
+    { 92, C_FONT0 + 8 }, \
+    { 93, C_FONT0 + 9 }, \
+    { 94, C_FONT0 + 10 }, \
+    { 95, C_FONT0 + 11 }, \
+    { 96, C_FONT0 + 12 }, \
+    { 97, C_FONT0 + 13 }, \
+    { 98, C_FONT0 + 14 }, \
+    { 99, C_FONT0 + 15 }, \
+    { 100, C_FONT0 + 16 }, \
+    { 101, C_FONT0 + 17 }, \
+    { 102, C_FONT0 + 18 }, \
+    { 103, C_FONT0 + 19 }, \
+    { 104, C_FONT0 + 20 }, \
+    { 105, C_FONT0 + 21 }, \
+    { 106, C_FONT0 + 22 }, \
+    { 107, C_FONT0 + 23 }, \
+    { 108, C_MOREFONTS }, \
+    { 110, C_PLAIN }, \
+    { 111, C_BOLD }, \
+    { 112, C_ITALIC }, \
+    { 113, C_UNDER }, \
+    { 115, C_HEAD1 }, \
+    { 116, C_HEAD2 }, \
+    { 117, C_HEAD3 }, \
+    { 118, C_BODY }, \
+    { 120, C_COLOR0 + 0 }, \
+    { 121, C_COLOR0 + 1 }, \
+    { 122, C_COLOR0 + 2 }, \
+    { 123, C_COLOR0 + 3 }, \
+    { 124, C_COLOR0 + 4 }, \
+    { 125, C_COLOR0 + 5 }, \
+    { 126, C_COLOR0 + 6 }, \
+    { 127, C_COLOR0 + 7 }, \
+    { 129, C_JLEFT }, \
+    { 130, C_JCENTRE }, \
+    { 131, C_JRIGHT }, \
+    { 132, C_JFULL }, \
+    { 134, C_SP1 }, \
+    { 135, C_SP15 }, \
+    { 136, C_SP2 }, \
+    { 138, C_INDENTS }, \
+    { 139, C_HANGING }, \
+    { 140, C_BULLETS }, \
+    { 141, C_NUMBERS }, \
+    { 143, C_WRAPCOL }, \
+    { 145, C_SPELL }, \
+    { 146, C_LIVESPELL }, \
+    { 147, C_THES }, \
+    { 148, C_SUMMARY }, \
+    { 150, C_UDLOAD }, \
+    { 151, C_UDNEW }, \
+    { 153, C_UD0 + 0 }, \
+    { 154, C_UD0 + 1 }, \
+    { 155, C_UD0 + 2 }, \
+    { 156, C_UD0 + 3 }, \
+    { 158, C_PREFS }, \
+    { 160, C_VDOC }, \
+    { 161, C_SPLIT }, \
+    { 162, C_VCODES }, \
+    { 164, C_ZOOMIN }, \
+    { 165, C_ZOOMOUT }, \
+    { 166, C_ZOOMFIT }, \
+    { 167, C_ZOOMPAGE }, \
+    { 169, C_TOOLBAR }, \
+    { 170, C_RULERS }, \
+    { 171, C_GUIDES }, \
+    { 173, C_REPAG }, \
+    { 174, C_THEME }, \
+    { 176, C_TILEV }, \
+    { 177, C_TILEH }, \
+    { 178, C_CASCADE }, \
+    { 180, C_ICONIFY }, \
+    { 181, C_ICONALL }, \
+    { 182, C_BOTTOM }, \
+    { 183, C_CYCLE }, \
+    { 185, C_WIN0 + 0 }, \
+    { 186, C_WIN0 + 1 }, \
+    { 187, C_WIN0 + 2 }, \
+    { 188, C_WIN0 + 3 }, \
+    { 189, C_WIN0 + 4 }, \
+    { 190, C_WIN0 + 5 }, \
+    { 191, C_WIN0 + 6 }, \
+    { 192, C_WIN0 + 7 }, \
+    { 193, C_WIN0 + 8 }, \
+    { 194, C_WIN0 + 9 }, \
+    { 195, C_WIN0 + 10 }, \
+    { 196, C_WIN0 + 11 }, \
+    { 197, C_WIN0 + 12 }, \
+    { 198, C_WIN0 + 13 }, \
+    { 199, C_WIN0 + 14 }, \
+    { 200, C_WIN0 + 15 }, \
+    { 201, C_WIN0 + 16 }, \
+    { 202, C_WIN0 + 17 }, \
+    { 203, C_WIN0 + 18 }, \
+    { 204, C_WIN0 + 19 }, \
+    { 205, C_WIN0 + 20 }, \
+    { 206, C_WIN0 + 21 }, \
+    { 207, C_WIN0 + 22 }, \
+    { 208, C_WIN0 + 23 }, \
+    { 209, C_WINMORE }
 
 /* toolbar buttons and their commands (TB_FONT... open popups) */
 #define RSC_TB_CMDS \
@@ -972,5 +1059,12 @@
     { TBO_RULER, C_RULERS }, \
     { TBO_GUIDES, C_GUIDES }
 #define RSC_NTB 21
+
+/* toolbar images: the whole icons in black: fewer than 16 colours */
+#define RSC_TB_MONO 4, 8, 16, 28, 32, 36, 40, 44, 52, 58, 63, 68, 72, 76
+/* toolbar images: the coloured layers: 16 colours and more */
+#define RSC_TB_COLOUR 2, 6, 14, 26, 30, 34, 38, 42, 50, 55, 56, 61, 65, 66, 70, 74
+/* toolbar images: the rest of those icons, in black: 16 colours and more */
+#define RSC_TB_COLOURED 3, 7, 15, 27, 31, 35, 39, 43, 51, 57, 62, 67, 71, 75
 
 #endif
