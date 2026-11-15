@@ -97,7 +97,7 @@ int   dlg_template(int *kind);
 extern int   pref_rulers, pref_guides;
 enum { DISP_NORMAL, DISP_DARK, DISP_GREEN, DISP_AMBER };
 #define NSIZES 8
-#define NZOOM  6
+#define NZOOM  9
 extern const short zooms[NZOOM];
 
 /* gem.c */
@@ -188,7 +188,7 @@ void  set_zoom(DOC *d, int zoom);
 enum { FIT_WIDTH = 1, FIT_PAGE = 2 };   /* DOC fitw: the zoom follows the window */
 void  set_fit_width(DOC *d, int on);   /* zoom so the page fills the window's width, or the whole page fits */
 #define ZOOM_MIN 10              /* a whole page in a small window */
-#define ZOOM_MAX 400
+#define ZOOM_MAX 500
 int   open_window(DOC *d);
 void  close_window(DOC *d);
 void  iconify(DOC *d, short *rect);

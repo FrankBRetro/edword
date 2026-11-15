@@ -61,7 +61,8 @@ FPU.
   doesn't check it, and the long Window menu hung or crashed TOS 4 in 256
   colours. On TOS 1-4 the Font and Window menus list as many fonts and
   windows as that buffer allows (More fonts.../More windows... for the rest).
-- **Zoom** 50-200 % in the page view, from the toolbar or F7/F8, and **Fit
+- **Zoom** 50-500 % in the page view (ST, PC GEM and Amiga; 50-200 % on Windows,
+  50-300 % on the Mac), from the toolbar or F7/F8, and **Fit
   Page Width** (View menu, the toolbar's zoom popup, Shift+F8 on the ST):
   the page fills the window's width and follows it when the window changes
   size. On the ST, **Fit Whole Page** (View menu, the zoom popup) shows
@@ -286,7 +287,11 @@ Justify ^J, Underline ^U, Print preview ^P.
 
 **Amiga** (Amiga User Interface Style Guide): the first menu is *Project*
 with Right Amiga N, O, S, A (Save As), P (Print), W (Close), ? (About) and
-Q; Edit has Z, Y, X, C, V, F (Find) and G (Find again). Cursor keys: Shift
+Q, plus *EdWord Help...*; Edit has Z, Y, X, C, V, F (Find) and G (Find again).
+The last menu is the style guide's *Settings*: *Create Icons?*, *Preferences...*
+and *Colour Theme...*. Requesters have the positive choice (OK) at the
+bottom left and Cancel at the bottom right. Two clicks select a word, three
+the line, four put the cursor back; the text cursor flashes. Cursor keys: Shift
 goes to the line's ends or a windowful up/down, Alt by words and by pages,
 Ctrl to the document's ends, and **Shift + Alt extends the selection**
 (it was Shift before).
@@ -338,7 +343,8 @@ as GDOS expects, rather than device 1. EdWord detects SpeedoGDOS/FSMGDOS (`vq_vg
 - reserves the scratch buffer (`vst_scratch`) before loading fonts;
 - reports font errors to EdWord rather than writing them on the screen (`vst_error`);
 - selects the Atari character map (`vst_charmap`), so accented letters print correctly;
-- sizes outline fonts with `vst_arbpt`, so any point size works (Size ▸ Other…);
+- sizes outline fonts with `vst_arbpt`, so any point size works (Size ▸ Other…, 4 to 150 points;
+  the font selector lists sizes up to 150);
 - measures outline fonts with `vqt_advance`, SpeedoGDOS's own width call;
 - makes the `vqt_fontinfo` call itself, with full-size reply buffers. gemlib's binding has room
   for only the standard 2 + 10 words, and SpeedoGDOS returns more, which crashed EdWord 2.2;
@@ -369,33 +375,101 @@ Two programs from the same source, on any 68000 or better:
   pattern such as `#?.(rtf|txt)`). It needs 1 MB of memory or more, plus
   room for a dictionary if spelling is used.
 
-**The screen:** by default EdWord opens its own 16-colour high-resolution
-screen, not interlaced (640 × 256 on PAL, 640 × 200 on NTSC). *Preferences*
-> *Screen* chooses instead: *High res interlaced*; *Like the Workbench* (the
-Workbench's own mode and size); *Other mode...* (the screen mode requester:
-any mode, size and 4, 8 or 16 colours; asl.library 38, Workbench 2.1, so not
-on 1.3); or *Workbench screen*, where the documents open as windows on the
-Workbench. The new screen is used the next time EdWord starts. On the
-Workbench screen EdWord's colours are the nearest the Workbench has (on 3.0
-and newer it asks for its own pens), and closing the last document quits
-EdWord.
+**The screen:** by default EdWord opens its own high-resolution interlaced
+screen (640 × 512 on PAL, 640 × 400 on NTSC; the flicker-fixed DblPAL or
+DblNTSC mode instead on AGA when the Workbench uses it) with 32 colours; its
+dialogs, gadgets and toolbars are laid out for it (square pixels).
+*Preferences* > *Screen* chooses instead: *High res* (not interlaced);
+*Like the Workbench* (the Workbench's own mode, size and colours, a graphics
+card's high or true colour included); *Other mode...* (the screen mode
+requester: any mode and size, 4 to 256 colours, or 15, 16 or 24 bits on a
+graphics card; asl.library 38, Workbench 2.1, so not on 1.3); or *Workbench
+screen*, where the documents open as windows on the Workbench. *Colours*
+sets 16, 32, 64, 128 or 256 colours for EdWord's own screen (256 needs AGA;
+with fewer the chipset can't show, EdWord opens with as many as it can), or,
+with a graphics card, high colour (16 bit) or true colour (24 bit), in a
+mode of the card's at the Workbench's size. A new screen mode takes effect
+at once: EdWord closes its screen and opens the new one, with the documents
+laid out again in their windows. On the Workbench screen
+EdWord's colours are the nearest the Workbench has (on 3.0 and newer it asks
+for its own pens), and closing the last document quits EdWord. The mouse
+pointer is the Workbench's, at its resolution (a high-resolution pointer
+stays one on EdWord's screen); on Workbench 3 and newer the busy pointer is
+the one chosen in the Pointer preferences.
+
+**Graphics cards (RTG):** with Picasso96 (or CyberGraphX), EdWord's screen
+can be any of the card's modes, high and true colour too. EdWord draws with
+the same pens there, and pictures in their own colours (Picasso96API.library,
+or cybergraphics.library).
+
+**Colour themes:** *Settings* > *Colour Theme...* picks one of 17 themes, with a picture of
+the theme in the dialog,
+(Amiga, the usual colours, and the Windows 95 schemes of the Atari version),
+seen at once. On EdWord's own screen of 32 colours or more a theme colours
+the windows, menus, title bars and gadgets as well as EdWord's toolbars,
+rulers and the desk around the pages; on the Workbench screen (32 colours or
+more), only EdWord's own toolbars, rulers and desk. With 256 colours or fewer
+one theme is for all documents; on a graphics card's screen of 16 bits or
+more each document can have its own (*This document* or *All documents*):
+its colours go into the pens while EdWord draws in its window, the active
+document's theme colours the screen's title bar and the active window's
+title bar, and inactive windows' frames keep the theme for all. The codes
+view (Quick Edit and the split view's lower half) is in the theme's colours. The toolbar's icons are in colour on
+screens of 16 colours or more.
+
+**Fonts:** any Amiga font in `FONTS:` (bitmap fonts are scaled to sizes they
+don't have), and the **Speedo outline fonts** in the `Speedo` drawer next to
+EdWord (and in `SPEEDO:` if it is assigned): the eight Bitstream fonts XGDOS
+has come with EdWord (Charter and Courier 10 Pitch, each in four styles), and
+any other `.SPD` font, SpeedoGDOS's too, can be added. EdWord draws them
+itself with XGDOS's Speedo decoder and scan converter (`amiga/spd/`), hinted
+to the pixel grid and at the screen's pixel shape: characters are made and
+kept in fast memory, a run of text is put together there and drawn with one
+blit through a little chip memory. On a graphics card's screen and on
+EdWord's own 256-colour screen the text is smoothed: characters are made at
+four times the size and each pixel's coverage blended with the screen (up
+to 240 pixels high; bigger text is sharp as it is). PDFs and printing use the outlines at the
+printer's or PDF's resolution. Amiga fonts are scaled to at most 180 pixels
+high (120 with 3 to 8 MB free when EdWord starts, 72 with less, as diskfont
+scales a whole font at once); bigger text enlarges those.
+
+**Pictures:** IFF ILBM, PNG and GEM IMG, and on Workbench 3 and newer any
+format a picture datatype is installed for (GIF, JPEG, BMP...). They show in
+colour on screens of 8 colours or more (dithered to the screen's colours;
+EdWord's 256-colour screen keeps a colour cube for them) and in true colour
+on a graphics card, when there are 2 MB or more of memory to spare.
 
 **Icons:** `amiga/EdWord.info` and `amiga/EdWord13.info` are the programs'
-icons; `amiga/EdWordDoc.info` is a document icon that opens with EdWord
-(copy it next to a document as *name*`.info`). They are in the format every
+icons; `amiga/EdWordDoc.info` is a document icon that opens with EdWord.
+With *Settings* > *Create Icons?* (also in *Preferences*, on by default)
+each document saved without an icon gets a copy of it, its default tool
+EdWord's own path (Workbench 2 and newer). They are in the format every
 Workbench reads, from 1.2 on. `make icons` makes them again
 (`tools/mkinfo.py`).
 
-**Installing:** copy `amiga/EdWord` (or `EdWord13`) and its `.info` with
-`dict/EDWORD.DIC` and `dict/EDWORD.THS` into one drawer. Preferences are
-kept in `EdWord.prefs` in the same drawer; add `dict/EDWORD??.DIC` for
-spelling in the other languages. Any Amiga bitmap font in `FONTS:` can be
-used; sizes the font doesn't have are scaled. Pictures are IFF ILBM, PNG and
-GEM IMG.
+**Installing:** copy `amiga/EdWord` (or `EdWord13`) and its `.info`,
+`amiga/EdWordDoc.info`, `amiga/EdWord.guide`, the `amiga/Speedo` drawer, and `dict/EDWORD.DIC` and `dict/EDWORD.THS` into one
+drawer. Preferences are kept in `EdWord.prefs` in the same drawer; add
+`dict/EDWORD??.DIC` for spelling in the other languages.
+
+**Documents** are saved as EdWord documents (`.ewr`, RTF with EdWord's own
+group, as on the Atari); *Export* writes standard RTF for other programs.
 
 **Keys:** the menu shortcuts are Right Amiga + letter (see *Menus and keys*
 above); F3–F10 as on the ST; Ctrl + Return inserts a page break; Esc closes
-a dialog.
+a dialog; Help opens `EdWord.guide` (AmigaGuide) in MultiView, or AmigaGuide
+on 2.x, on EdWord's screen.
+
+**Public screen and ARexx** (Workbench 2 and newer): EdWord's own screen is
+a public screen named `EDWORD.1` (`EDWORD.2` for a second EdWord), so other
+programs can open on it; EdWord asks for their windows to be closed before
+it closes or changes its screen. Its ARexx port has the same name, with the
+style guide's commands (NEW, OPEN, SAVE, SAVEAS, CLOSE, PRINT, QUIT [FORCE],
+CUT, COPY, PASTE, ERASE, UNDO, REDO, SELECTALL, FIND, FINDNEXT, HELP, ABOUT,
+ACTIVATE, DEACTIVATE) and EdWord's own (TEXT, NEWLINE, GOTOPAGE, PREVPAGE,
+NEXTPAGE, PDF, and FILENAME, VERSION and PUBSCREEN, which return results).
+`EdWord.guide` lists them, for example:
+`rx "ADDRESS EDWORD.1; NEW; TEXT 'Hello'; NEWLINE"`.
 
 **Building** (with Bartman's m68k-amiga-elf GCC from the vscode-amiga-debug
 extension, which brings the NDK headers and elf2hunk):
@@ -407,8 +481,11 @@ make icons                   # the .info files
 make EDLOG=1                 # ... writing timings to EdWord.log
 ```
 No C library is needed: `amiga/sys` holds the start-up code and the small
-libc EdWord uses. Large local variables are kept static, as GCC 15 for the
-68000 mis-addresses stack frames over 16 KB.
+libc EdWord uses (with the 64-bit multiply and divide GCC calls). Large local
+variables are kept static, as GCC 15 for the 68000 mis-addresses stack
+frames over 16 KB. The version shown is the one in `gemui.h`. The Speedo
+code in `amiga/spd/` comes from XGDOS and is dual-licensed: GPL version 2
+or, in EdWord, EdWord's MIT licence (see `amiga/spd/README.TXT`).
 
 ## EdWord for Windows (`win/`)
 One 32-bit program, `win/EdWord.exe`, for **Windows 95 to Windows 11**

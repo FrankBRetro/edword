@@ -1,0 +1,277 @@
+@database EdWord.guide
+@author "Francis C Bullen"
+@(c) "2026 Francis C Bullen, MIT licence"
+@$VER: EdWord.guide 3.0 (15.11.2026)
+@wordwrap
+
+@node main "EdWord Help"
+
+  @{b}EdWord@{ub} - a word processor for the Amiga
+
+  @{" Getting started    " link start}  what you need, starting, documents
+  @{" The window         " link window}  toolbar, rulers, views and zoom
+  @{" Files              " link files}  new, open, save, import, export, print
+  @{" Editing            " link editing}  typing, selecting, clipboard, find
+  @{" Text and pages     " link text}  fonts, styles, paragraphs, pages
+  @{" Tables and charts  " link tables}
+  @{" Pictures           " link pictures}  datatypes, drawings
+  @{" Tools              " link tools}  spelling, thesaurus, summary
+  @{" Settings           " link settings}  icons, preferences, colour themes
+  @{" Screens and colours" link screens}  screen modes, graphics cards
+  @{" Fonts              " link fonts}  Amiga fonts and Speedo fonts
+  @{" Keys               " link keys}
+  @{" ARexx              " link arexx}  EdWord's ARexx port and commands
+  @{" About EdWord       " link about}
+
+@endnode
+
+@node start "Getting started"
+@{b}What you need@{ub}
+
+EdWord runs on Workbench 2.04 (V37) or later, on any Amiga. AGA, a graphics card or more memory make it nicer but aren't needed. @{i}EdWord13@{ui} is the version for Workbench 1.2 and 1.3.
+
+@{b}Starting@{ub}
+
+Double-click the EdWord icon, or start it from the Shell with the names of the documents to open:
+
+    EdWord Letter.rtf Notes.txt
+
+You can also double-click a document's icon, or shift-click documents and then EdWord. By default EdWord opens a screen of its own, high resolution and interlaced (flicker fixed where the chipset allows it); @{"Screens and colours" link screens} says how to change that.
+
+@{b}Documents@{ub}
+
+EdWord keeps documents in RTF, so other word processors can read them, and writes its own @{i}.ewr@{ui} documents too. Saved documents get an icon that opens them in EdWord (see @{"Settings" link settings}).
+
+EdWord can have several documents open at once, each in its own window. The @{i}Window@{ui} menu lists them.
+@endnode
+
+@node window "The window"
+@{b}The toolbar@{ub}
+
+Under the title bar is the toolbar: undo and redo, bold, italic and underline, the four alignments, bullets and numbering, tables, page breaks, the font, size and colour (the small arrows open a list), find, spelling, print preview, and the rulers and guides.
+
+@{b}Rulers and guides@{ub}
+
+The rulers show the page's margins, the paragraph's indents and its tab stops; drag the markers to change them. Double-click the horizontal ruler for the indents, or the vertical one for the page layout. The guides are the dotted lines round the text area of each page.
+
+@{b}Three views@{ub}
+
+  F4        the document, as it will print
+  F5        split: the document above, its codes below
+  F6        the codes only
+
+The codes view shows the text with its formatting as codes in brackets, such as [Bold] or [Font Bitstream Charter]. You can type and change the codes there; the document follows them.
+
+@{b}Zoom@{ub}
+
+F7 and F8 zoom out and in, or use the zoom list on the toolbar. Shift+F8 fits the page's width to the window, and @{i}Fit Whole Page@{ui} in the Window menu shows a whole page. With either, the zoom follows the window as you size it.
+
+@{b}Moving around@{ub}
+
+Scroll with the scroll bars and arrows, or the keys (see @{"Keys" link keys}). Edit > Go to Page moves to a page by its number.
+@endnode
+
+@node files "Files"
+@{b}New, open and save@{ub}
+
+  New       Right Amiga N
+  Open...   Right Amiga O
+  Save      Right Amiga S
+  Save As...Right Amiga A
+
+Open reads EdWord documents, RTF, plain text, Markdown, 1st Word Plus and Protext. For plain text it asks how to read the lines.
+
+@{b}Import and export@{ub}
+
+Project > Import reads a file into a new window or into the current document at the cursor. Project > Export writes a copy of the document as RTF, text, Markdown, 1st Word Plus, Protext or PDF; the document itself keeps its name.
+
+@{b}Printing and PDF@{ub}
+
+Project > Print sends the document to the printer set in the Printer preferences (printer.device). Print preview shows the pages as they will print. A PDF can be made from Export, with the fonts and pictures in it.
+
+@{b}Auto-save@{ub}
+
+Preferences can have EdWord save open documents every few minutes.
+
+@{b}Closing@{ub}
+
+Close (Right Amiga W) closes the document's window, asking first if it has changes. Quit (Right Amiga Q) closes them all and ends EdWord.
+@endnode
+
+@node editing "Editing"
+@{b}Typing and selecting@{ub}
+
+Click to put the cursor in the text, or drag to select. Clicks in quick succession on the same place cycle: two select the word, three the line, and four go back to just the cursor. Shift-click extends the selection. With the keyboard, Shift+Alt and a cursor key extends it.
+
+A word underlined in red isn't in the dictionary: hold the mouse button on it for suggestions.
+
+@{b}Undo and redo@{ub}
+
+Right Amiga Z undoes the last change, Right Amiga Y redoes it.
+
+@{b}Cut, copy and paste@{ub}
+
+Cut (Right Amiga X), Copy (Right Amiga C) and Paste (Right Amiga V) use the Amiga clipboard, so text can go to and from other programs. Within EdWord the formatting comes too.
+
+@{b}Find and replace@{ub}
+
+Right Amiga F opens Find and Replace. Right Amiga G or F3 finds the next one.
+@endnode
+
+@node text "Text and pages"
+@{b}Characters@{ub}
+
+The Font menu lists the fonts; Right Amiga T opens the font selector. The Style menu sets bold (Right Amiga B), italic (Right Amiga I), underline (Right Amiga U) and the colour. Plain Text takes the style away.
+
+@{b}Paragraphs@{ub}
+
+The Paragraph menu sets the alignment (Right Amiga L, E, R and J for left, centre, right and full), the line spacing, indents and hanging indents, bulleted (F9) and numbered (F10) lists, the three heading levels and body text. A wrap column limits lines to a number of characters, for plain text.
+
+@{b}Pages@{ub}
+
+Project > Page Layout sets the paper, orientation, margins and columns, for the whole document or from the cursor on. Control+Return starts a new page and Control+Shift+Return a new column. Project > Header and Footer sets the text at the top and foot of each page. Insert > Table of Contents builds one from the headings.
+@endnode
+
+@node tables "Tables and charts"
+Insert > Table puts a table at the cursor; Tab moves to the next cell (and makes a new row at the end), Shift+Tab to the one before. The Insert menu adds and removes rows and columns, and Table Properties sets its look.
+
+A table of numbers can be shown as a chart instead: Insert > Chart. Click a chart to change its kind.
+@endnode
+
+@node pictures "Pictures and drawings"
+Insert > Picture places a picture at the cursor. EdWord reads IFF ILBM (HAM and 24-bit too), PNG and GEM IMG itself, and anything else the Amiga's datatypes can read, such as GIF or JPEG with their datatypes installed (Workbench 3.0 and later).
+
+On a graphics card's screen the picture shows in its own colours, and with fewer colours it is matched to the screen's. It prints and goes into a PDF in full colour.
+
+Insert > Drawing makes a drawing of shapes and freehand lines. Click a picture or drawing to select it.
+@endnode
+
+@node tools "Tools"
+@{b}Spelling@{ub}
+
+Tools > Check Spelling (Right Amiga K) goes through the document word by word. @{i}Spelling as You Type@{ui} underlines words it doesn't know. EdWord can check English, German, Spanish, Italian, French and Czech; Preferences chooses which. User dictionaries keep your own words.
+
+@{b}Thesaurus@{ub}
+
+Shift+F7 or Tools > Thesaurus offers other words for the one at the cursor (English).
+
+@{b}Document summary@{ub}
+
+Tools > Document Summary counts the words, characters, paragraphs and pages.
+@endnode
+
+@node settings "Settings"
+The Settings menu has EdWord's own settings, which it keeps in @{i}EdWord.prefs@{ui} in its drawer.
+
+@{b}Create Icons?@{ub}
+
+When ticked, each document you save gets an icon, if it hasn't one already, that opens it in EdWord.
+
+@{b}Preferences...@{ub}
+
+The language, spelling, date format, paper, auto-save, the screen EdWord opens on and its colours. A new screen mode takes effect at once: EdWord closes its screen and opens it again, with your documents.
+
+@{b}Colour Theme...@{ub}
+
+On a screen with 32 colours or more, the colour theme colours the toolbar, rulers, codes, the desk round the pages and the screen's own colours (window frames, menus). The picture in the dialog shows the theme. On a graphics card with 16-bit colour or more each document can have a theme of its own (@{i}This document@{ui}), or set it for all of them.
+@endnode
+
+@node screens "Screens and colours"
+Preferences > Screen chooses where EdWord opens:
+
+  High res          640 wide, not interlaced
+  High res interlaced  the usual one; flicker fixed on AGA
+                    with a suitable monitor
+  Like Workbench    Workbench's mode and size
+  Other             any mode, from the screen mode requester
+  Workbench         EdWord's windows on the Workbench screen
+
+and how many colours its own screen has, from 16 to 256, or high or true colour on a graphics card (Picasso96 or CyberGraphX). The more colours, the better pictures and smoothed text look.
+
+EdWord's own screen is a public screen named @{i}EDWORD.1@{ui} (EDWORD.2 for a second EdWord), so other programs can open their windows on it: MultiView with this help does. EdWord asks you to close them before it closes its screen.
+
+The interface uses the screen's font, the size of the system font on screens that aren't interlaced, and the mouse pointer's resolution is Workbench's.
+@endnode
+
+@node fonts "Fonts"
+EdWord uses the Amiga's fonts in FONTS:, and Speedo outline fonts (the .SPD fonts of SpeedoGDOS and XGDOS) from the @{i}Speedo@{ui} drawer next to EdWord and from SPEEDO: when that is assigned. Eight Bitstream Speedo fonts come with EdWord.
+
+Speedo fonts are drawn by EdWord itself, at any size, and smoothed on screens with 256 colours or more; they print and go into PDFs at full quality.
+@endnode
+
+@node keys "Keys"
+@{b}Moving@{ub}
+
+  Cursor keys          a character or line
+  Shift+left/right     the line's start or end
+  Shift+up/down        a windowful up or down
+  Alt+left/right       a word
+  Alt+up/down          the page before or after
+  Control+up/down      the document's start or end
+  Shift+Alt+cursor     extends the selection
+
+@{b}Function keys@{ub}
+
+  F2          repaginate
+  F3          find next
+  F4 F5 F6    document, split and codes views
+  F7 F8       zoom out and in
+  Shift+F7    thesaurus
+  Shift+F8    fit the page's width
+  F9 F10      bullets, numbering
+  Help        this help
+
+@{b}Others@{ub}
+
+  Control+Return        page break
+  Control+Shift+Return  column break
+  Control+Tab           the next document window
+  Tab, Shift+Tab        the next or previous table cell
+
+The menus show their Right Amiga shortcuts.
+@endnode
+
+@node arexx "ARexx"
+EdWord has an ARexx port named @{i}EDWORD.1@{ui} (EDWORD.2 for a second EdWord, and so on). From the Shell, for example:
+
+    rx "ADDRESS EDWORD.1; NEW; TEXT 'Hello from ARexx'; NEWLINE"
+
+Commands, as the Amiga style guide lists them:
+
+  NEW                   a new document
+  OPEN [name]           opens a document (the requester without a name)
+  SAVE                  saves the active document
+  SAVEAS [name]         saves it under a new name
+  CLOSE                 closes its window
+  PRINT                 prints it
+  QUIT [FORCE]          quits; FORCE without asking to save
+  CUT, COPY, PASTE      the clipboard
+  ERASE                 deletes the selection
+  UNDO, REDO
+  SELECTALL
+  FIND, FINDNEXT        Find and Replace; the next one
+  HELP, ABOUT
+  ACTIVATE              EdWord's screen and window to the front
+  DEACTIVATE            EdWord's screen to the back
+
+and EdWord's own:
+
+  TEXT text             types the text at the cursor
+  NEWLINE               a new paragraph
+  GOTOPAGE n            moves to page n
+  PREVPAGE, NEXTPAGE
+  PDF                   exports the active document as PDF
+  FILENAME              returns the active document's name
+  VERSION               returns EdWord's version
+  PUBSCREEN             returns the screen's public name
+
+Commands work on the active document. With @{i}OPTIONS RESULTS@{ui} the ones that return something put it in RESULT. A command returns 5 if it can't be done now (no document open, say), 10 if it failed and 20 if EdWord doesn't know it.
+@endnode
+
+@node about "About EdWord"
+EdWord was written by Francis C Bullen, first for the Atari ST, then for the Amiga, the Mac, Windows and PC GEM.
+
+EdWord is free software under the MIT licence. The Speedo font code is from XGDOS, under the GPL version 2 or the MIT licence; the Bitstream fonts are under their own licence (see Speedo/COPYING.TXT).
+
+Project > About EdWord shows the version.
+@endnode

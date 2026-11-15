@@ -7,7 +7,8 @@
  * Fonts come from diskfont.library, which scales the bitmap fonts in
  * FONTS: (and outline fonts, with Workbench 2.04's Intellifont) to any
  * size. Without diskfont.library EdWord loads the bitmap fonts itself
- * and scales them the same way.
+ * and scales them the same way. Speedo outline fonts (amispd.c) are
+ * listed first and drawn by EdWord itself.
  *
  * A point size becomes a font height in pixels through the screen's
  * pixel size, so text is the size it will print at 100%. The document
@@ -34,7 +35,9 @@
 extern struct Library *DiskfontBase;
 extern struct GfxBase *GfxBase;
 
-static char fontfile[MAX_FONTS][32];        /* "times.font" */
+static char fontfile[MAX_FONTS][32];        /* "times.font"; "" a Speedo font */
+static short spdk[MAX_FONTS];               /* a Speedo font's number in amispd.c */
+#define IS_SPD(f) ((f) >= 0 && (f) < nfonts && fonts[f].outline)
 
 /* VDI-like pens for the text colours: black red green blue cyan magenta yellow grey */
 int color_pen(int c)
@@ -261,7 +264,7 @@ static struct TextFont *open_own(const char *file, int ysize)
         tf = OpenFont(&ta);                 /* topaz and other fonts in ROM */
     }
     if (!tf) return NULL;
-    if (ysize < 3 || ysize > 180) return tf;
+    if (ysize < 3 || ysize > font_ycap) return tf;
     if (tf->tf_YSize == ysize && same_shape(tf)) return tf;
     s = scale_font(tf, ysize, sname);
     if (!s) return tf;
@@ -291,7 +294,20 @@ static int add_font(const char *file)
     strcpy(fonts[nfonts].name, nm);
     fonts[nfonts].id = (short)nfonts;
     fonts[nfonts].outline = 0;
+    spdk[nfonts] = -1;
     return nfonts++;
+}
+
+static void add_spd(const char *name, int k)
+{
+    if (nfonts >= MAX_FONTS) return;
+    fontfile[nfonts][0] = 0;
+    strncpy(fonts[nfonts].name, name, 33);
+    fonts[nfonts].name[33] = 0;
+    fonts[nfonts].id = (short)nfonts;
+    fonts[nfonts].outline = 1;
+    spdk[nfonts] = (short)k;
+    nfonts++;
 }
 
 static int cmp_names(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
@@ -357,9 +373,11 @@ void fonts_load(void)
         for (k = 0; names[i][k]; k++) if (names[i][k] >= 'A' && names[i][k] <= 'Z') names[i][k] += 32;
     qsort(names, (size_t)n, sizeof names[0], cmp_names);
 
-    /* the system font first (monospaced), then the usual text font */
+    /* the system font first (monospaced), then the Speedo fonts, then the
+     * usual Amiga text font */
     nfonts = 0;
     add_font("topaz.font");
+    spd_fonts_scan(add_spd);
     for (i = 0; pref[i]; i++)
         for (k = 0; k < n; k++) if (!strcmp(names[k], pref[i])) { add_font(names[k]); i = 99; break; }
     for (k = 0; k < n; k++) add_font(names[k]);
@@ -370,6 +388,17 @@ void fonts_load(void)
 /* ================================================================= */
 
 #define NFCACHE 20
+
+/* The tallest an Amiga font is scaled to (diskfont scales the whole font
+ * at once: about half a megabyte at 180 pixels, and up to NFCACHE are
+ * kept open); bigger text is drawn by enlarging that. Set once, from the
+ * memory free when EdWord starts, so measuring and drawing agree. */
+int font_ycap = 180;
+void font_cap_init(void)
+{
+    ULONG f = AvailMem(MEMF_ANY);
+    font_ycap = f > 8000000UL ? 180 : f > 3000000UL ? 120 : 72;
+}
 static struct { short font, ysize; long stamp; struct TextFont *tf; } fc[NFCACHE];
 static long fstamp;
 
@@ -378,9 +407,9 @@ struct TextFont *font_for(int font, int ysize, int attr)
     int i, slot = 0;
     struct TextFont *tf = NULL;
     (void)attr;
-    if (font < 0 || font >= nfonts) font = 0;
+    if (font < 0 || font >= nfonts || IS_SPD(font)) font = 0;
     if (ysize < 3) ysize = 3;
-    if (ysize > 180) ysize = 180;
+    if (ysize > font_ycap) ysize = font_ycap;
     for (i = 0; i < NFCACHE; i++)
         if (fc[i].tf && fc[i].font == font && fc[i].ysize == ysize) { fc[i].stamp = ++fstamp; return fc[i].tf; }
     for (i = 0; i < NFCACHE; i++) {
@@ -415,11 +444,14 @@ struct TextFont *font_for(int font, int ysize, int attr)
     return tf;
 }
 
+static void metrics_flush(void);
 void fonts_unload(void)
 {
     int i;
     for (i = 0; i < NFCACHE; i++) if (fc[i].tf) { CloseFont(fc[i].tf); fc[i].tf = NULL; }
     own_fonts_free();
+    spdf_free();
+    metrics_flush();                       /* metrics follow the screen's pixels */
 }
 
 /* the height in pixels of a point size */
@@ -458,6 +490,12 @@ const METRICS *get_metrics(int font, int size, int attr)
         if (mc[i].stamp < mc[slot].stamp) slot = i;
     }
     edlog("metrics miss: font %d size %d attr %d", font, size, attr);
+    if (IS_SPD(font)) {
+        spdf_metrics(spdk[font], pt2px_x(size), pt2px_y(size), attr, mc[slot].m.w, &mc[slot].m.asc, &mc[slot].m.desc);
+        mc[slot].font = (short)font; mc[slot].size = (short)size; mc[slot].attr = (short)attr;
+        mc[slot].stamp = ++mstamp;
+        return &mc[slot].m;
+    }
     tf = font_for(font, ypx(size), attr);
     for (i = 0; i < 256; i++)
         mc[slot].m.w[i] = (short)(i < 32 || !tf ? 0 : char_w(tf, lat_ch((unsigned char)i), attr & A_BOLD));
@@ -486,11 +524,41 @@ static void set_text(struct TextFont *tf, int attr, int pen)
 
 static short cw(long v) { return (short)(v < -16000 ? -16000 : v > 16000 ? 16000 : v); }
 
+/* a Speedo font's advances at size_px pixels per em down */
+static struct { short font, attr; long px; short w[256]; } spw[4];
+static const short *spd_widths(int font, long size_px, int attr)
+{
+#define c spw
+    static int next;
+    short a, d;
+    int i;
+    attr &= A_BOLD | A_ITALIC;
+    for (i = 0; i < 4; i++) if (c[i].px == size_px && c[i].font == font && c[i].attr == attr) return c[i].w;
+    i = next++ & 3;
+    spdf_metrics(spdk[font], size_px * dev_pixh / dev_pixw, size_px, attr, c[i].w, &a, &d);
+    c[i].font = (short)font; c[i].attr = (short)attr; c[i].px = size_px;
+    return c[i].w;
+#undef c
+}
+
+static void metrics_flush(void) { memset(mc, 0, sizeof mc); memset(spw, 0, sizeof spw); }
+
 /* text in the ST character set at a pixel height */
 void text_at(long x, long base, const char *st, int n, int font, int size_px, int attr, int pen)
 {
     char buf[200];
-    struct TextFont *tf = font_for(font, size_px, attr);
+    struct TextFont *tf;
+    if (IS_SPD(font)) {
+        static long xs[200];
+        const short *w = spd_widths(font, size_px, attr);
+        long cx = x;
+        int i;
+        if (n > 199) n = 199;
+        for (i = 0; i < n; i++) { xs[i] = cx; cx += w[(unsigned char)st[i]]; }
+        spdf_draw(spdk[font], (long)size_px * dev_pixh / dev_pixw, size_px, attr, (const unsigned char *)st, xs, n, base, pen);
+        return;
+    }
+    tf = font_for(font, size_px, attr);
     if (!tf || !grp || n <= 0) return;
     if (n > 199) n = 199;
     lat_n(buf, st, n);
@@ -555,6 +623,7 @@ static void draw_line_ex(DOC *d, long li, long ox, long base, const SCALE *sc, i
     LWALK w;
     LINE *ln = &d->lines[li];
     char buf[132];
+    unsigned char stb[132];
     long xs[132];
 
     /* list marker */
@@ -595,6 +664,7 @@ static void draw_line_ex(DOC *d, long li, long ox, long base, const SCALE *sc, i
                 c->size != st.size || ((c->attr ^ st.attr) & (A_BOLD | A_ITALIC)) || c->color != st.color)
                 break;
             xs[n] = w.x;
+            stb[n] = c->ch;
             buf[n++] = (char)lat_ch(c->ch);
             lw_step(&w);
         }
@@ -606,6 +676,12 @@ static void draw_line_ex(DOC *d, long li, long ox, long base, const SCALE *sc, i
             if (sz < 4 || py < 4) {
                 long xh = py / 3;
                 greek(x, ox + SP(w.x, sc), base, p, xh < 1 ? 1 : xh);
+            } else if (IS_SPD(st.font)) {
+                /* a Speedo font: each character where the layout puts it */
+                long px = pt2px_x(st.size) * sc->sn / sc->sd;
+                int j;
+                for (j = 0; j < n; j++) xs[j] = ox + SP(xs[j], sc);
+                spdf_draw(spdk[st.font], px, py, st.attr, stb, xs, n, base, p);
             } else {
                 struct TextFont *tf = font_for(st.font, (int)py, st.attr);
                 if (tf) {
@@ -897,8 +973,14 @@ static GLYPH *get_glyph(int font, int size, int attr, int ch, int scale)
     memset(g, 0, sizeof *g);
     g->font = (short)font; g->size = (short)size; g->attr = (short)attr;
     g->scale = (short)scale; g->ch = (short)ch;
+    if (IS_SPD(font)) {               /* drawn from the outline at the size wanted */
+        if (!spdf_bitmap(spdk[font], pt2px_x(size) * scale, pt2px_y(size) * scale, attr, (unsigned char)ch,
+                         &g->w, &g->h, &g->ox, &g->oy, &g->bits)) return NULL;
+        ngc++;
+        return g;
+    }
     want = ypx(size) * scale;
-    tf = font_for(font, want > 180 ? ypx(size) : want, 0);
+    tf = font_for(font, want > font_ycap ? ypx(size) : want, 0);
     if (!tf) return NULL;
     if (tf->tf_YSize * 3 / 2 < want) rep = (want + tf->tf_YSize / 2) / tf->tf_YSize;
     if (rep < 1) rep = 1;
@@ -1038,12 +1120,12 @@ static int prt_render(void *ctx, DOC *d, int page, int color, long y0, long h, l
     return 1;
 }
 
-static int prt_out(void *ctx, long y0, long h, long w, const unsigned char *bits, long rb)
+static int prt_out(void *ctx, int color, long y0, long h, long w, const unsigned char *bits, long rb)
 {
     PCTX *c = (PCTX *)ctx;
     struct BitMap bm;
     struct RastPort rp;
-    (void)y0;
+    (void)y0; (void)color;            /* one pass, all in black (o.colour 0) */
     if (rb * h > c->chipsize) return 0;
     CopyMem((APTR)bits, c->chip, (ULONG)(rb * h));
     InitBitMap(&bm, 1, (WORD)(rb * 8), (WORD)h);

@@ -2771,6 +2771,72 @@ de: (nach Neustart)
 es: (al reiniciar)
 it: (al riavvio)
 fr: (au redémarrage)
+@S_AMI_COLOURS
+en: Colours:
+de: Farben:
+es: Colores:
+it: Colori:
+fr: Couleurs :
+@S_AMI_HICOLOUR
+en: High colour (16 bit)
+de: High Color (16 Bit)
+es: Color de alta densidad (16 bits)
+it: High color (16 bit)
+fr: Milliers de couleurs (16 bits)
+@S_AMI_TRUECOLOUR
+en: True colour (24 bit)
+de: True Color (24 Bit)
+es: Color verdadero (24 bits)
+it: True color (24 bit)
+fr: Millions de couleurs (24 bits)
+@S_AMI_ICONS
+en: Icons:
+de: Piktogramme:
+es: Iconos:
+it: Icone:
+fr: Icônes :
+@S_AMI_ICONS_SAVE
+en: Create icons for saved documents
+de: Piktogramme für gesicherte Dokumente
+es: Crear iconos al guardar documentos
+it: Creare icone per i documenti salvati
+fr: Créer des icônes à l'enregistrement
+@S_AMI_SETTINGS
+en: Settings
+de: Einstellungen
+es: Ajustes
+it: Impostazioni
+fr: Réglages
+@S_AMI_CREATEICONS
+en: Create Icons?
+de: Piktogramme erzeugen?
+es: ¿Crear iconos?
+it: Creare icone?
+fr: Créer des icônes ?
+@S_AMI_HELP
+en: EdWord Help...
+de: EdWord-Hilfe...
+es: Ayuda de EdWord...
+it: Aiuto di EdWord...
+fr: Aide d'EdWord...
+@AL_AMI_NOHELP
+en: The help file EdWord.guide|wasn't found in EdWord's drawer.
+de: Die Hilfedatei EdWord.guide|wurde in EdWords Schublade|nicht gefunden.
+es: No se encontró el archivo|de ayuda EdWord.guide en|el cajón de EdWord.
+it: Il file di aiuto EdWord.guide|non è stato trovato nel|cassetto di EdWord.
+fr: Le fichier d'aide EdWord.guide|est introuvable dans le|tiroir d'EdWord.
+@AL_AMI_VISITORS
+en: Other programs still have|windows open on EdWord's|screen. Please close them,|then choose Retry.
+de: Andere Programme haben noch|Fenster auf EdWords Bildschirm.|Bitte schließen und dann|Nochmal wählen.
+es: Otros programas aún tienen|ventanas en la pantalla de|EdWord. Ciérrelas y elija|Reintentar.
+it: Altri programmi hanno ancora|finestre sullo schermo di|EdWord. Chiudetele, poi|scegliete Riprova.
+fr: D'autres programmes ont des|fenêtres sur l'écran d'EdWord.|Fermez-les, puis choisissez|Réessayer.
+@AB_AMI_RETRY_CANCEL
+en: Retry|Cancel
+de: Nochmal|Abbrechen
+es: Reintentar|Cancelar
+it: Riprova|Annulla
+fr: Réessayer|Annuler
 @S_FR_DRAWER
 en: Drawer
 de: Schublade

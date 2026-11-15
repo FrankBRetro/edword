@@ -47,7 +47,17 @@ static struct Hook esc_hook = { { NULL, NULL }, (ULONG (*)())ami_hookentry, (ULO
 
 #define MARGIN 10
 #define GAP    10
-static short rh(void) { return (short)(hchar + 8); }      /* row height */
+/* Sizes for the screen's pixels: gadgets are the font's height and a
+ * little; rows are further apart where pixels are square (interlaced,
+ * flicker fixed and graphics card screens), as are check boxes, which
+ * stay square on the screen */
+static int  square(void) { return dev_pixh < dev_pixw * 3 / 2; }
+static short gh(void) { return (short)(hchar + 6); }                    /* gadget height */
+static short rh(void) { return (short)(gh() + (square() ? 5 : 2)); }   /* row height */
+static short cb_h(void) { return (short)(square() ? hchar + 4 : 11); }
+static short cb_w(void) { return (short)(square() ? (cb_h() * 118 * dev_pixh / dev_pixw + 50) / 100 : 26); }
+short dlg_cbw(void) { return cb_w(); }
+short dlg_cbh(void) { return cb_h(); }
 
 /* ================================================================= */
 /*  The dialog builder                                                */
@@ -154,7 +164,7 @@ static short item_w(DLG *g, DITEM *it)
     int k;
     switch (it->type) {
     case T_LABEL: case T_TEXT: case T_TITLE: w = sys_width(it->s); break;
-    case T_CHECK: w = 26 + 8 + sys_width(it->s); break;
+    case T_CHECK: w = cb_w() + 8 + sys_width(it->s); break;
     case T_RADIO:
         if (it->lead != (short)(it - g->it)) return 0;
         for (k = (int)(it - g->it); k < g->nit && g->it[k].lead == it->lead; k++)
@@ -175,7 +185,7 @@ static short item_w(DLG *g, DITEM *it)
 /* lay out the items (pixels) */
 void dlg_end(DLG *g)
 {
-    short labw = 0, vrow = 0, lastrow = -1, x = 0, maxx = 0, nbtn = 0, btnw = 0, i, k;
+    short labw = 0, vrow = 0, lastrow = -1, x = 0, maxx = 0, nbtn = 0, btnw = 0, firstw = 0, i, k;
     short nbrow, brw = 0, maxw = (short)(scr_w - 60 > 600 ? 600 : scr_w - 60);
 
     /* radio groups: one cycle gadget each, at the first item */
@@ -198,12 +208,30 @@ void dlg_end(DLG *g)
         if (g->it[i].type == T_LABEL && sys_width(g->it[i].s) + 12 > labw) labw = (short)(sys_width(g->it[i].s) + 12);
     if (labw > maxw / 2) labw = (short)(maxw / 2);
 
+    /* the cycle gadgets that start a row (after its label) are all as wide
+     * as the widest of them, so they line up */
+    {
+        short r = -1;
+        int first = 0;
+        for (i = 0; i < g->nit; i++) {
+            DITEM *it = &g->it[i];
+            if (it->type == T_BUTTON || (it->type == T_RADIO && it->lead != i)) continue;
+            if (it->row != r) { r = it->row; first = 1; }
+            if (it->type == T_LABEL) continue;
+            if (first && it->type == T_RADIO && item_w(g, it) > firstw && labw + item_w(g, it) <= maxw) firstw = item_w(g, it);
+            first = 0;
+        }
+    }
+
     for (i = 0; i < g->nit; i++) {
         DITEM *it = &g->it[i];
         short w;
+        int rowstart;
         if (it->type == T_BUTTON) { nbtn++; if (item_w(g, it) > btnw) btnw = item_w(g, it); continue; }
         if (it->type == T_RADIO && it->lead != i) continue;
         w = item_w(g, it);
+        rowstart = it->row != lastrow || x == labw;
+        if (it->type == T_RADIO && rowstart && w < firstw) w = firstw;
         it->gw = w;
         if (it->row != lastrow) {
             vrow++;
@@ -239,13 +267,30 @@ void dlg_end(DLG *g)
     if (g->title && sys_width(g->title) + 80 > g->w) g->w = (short)(sys_width(g->title) + 80);
     if (g->w < 200) g->w = 200;
     g->nrows = vrow;
-    g->h = (short)(MARGIN + vrow * rh() + (nbtn ? nbrow * rh() + 6 : 0) + MARGIN);
-    /* right-align each row of buttons */
+    /* a picture: under the rows, as wide as the dialog */
+    if (g->pic_h) {
+        if (g->pic_w + 2 * MARGIN > g->w) g->w = (short)(g->pic_w + 2 * MARGIN);
+        g->pic_w = (short)(g->w - 2 * MARGIN);
+        g->pic_x = MARGIN;
+        g->pic_y = (short)(MARGIN + vrow * rh() + 4);
+    }
+    g->h = (short)(MARGIN + vrow * rh() + (g->pic_h ? g->pic_h + 8 : 0) + (nbtn ? nbrow * rh() + 6 : 0) + MARGIN);
+    /* each row of buttons as the Amiga style guide has them: the positive
+     * choice (the default) at the left, Cancel at the right, any others
+     * right-aligned before Cancel */
     for (k = 0; k < nbrow; k++) {
         short bx = (short)(g->w - MARGIN);
+        for (i = g->nit - 1; i >= 0; i--) {                 /* Cancel first, at the right */
+            DITEM *it = &g->it[i];
+            if (it->type != T_BUTTON || it->row != k || it->s != L(S_CANCEL)) continue;
+            bx = (short)(bx - it->gw);
+            it->col = (short)(bx - MARGIN);
+            bx -= GAP;
+        }
         for (i = g->nit - 1; i >= 0; i--) {
             DITEM *it = &g->it[i];
-            if (it->type != T_BUTTON || it->row != k) continue;
+            if (it->type != T_BUTTON || it->row != k || it->s == L(S_CANCEL)) continue;
+            if (it->flags & OF_DEFAULT) { it->col = 0; continue; }
             bx = (short)(bx - it->gw);
             it->col = (short)(bx - MARGIN);
             bx -= GAP;
@@ -255,9 +300,23 @@ void dlg_end(DLG *g)
     for (i = 0; i < g->nit; i++) {
         DITEM *it = &g->it[i];
         it->gx = (short)(MARGIN + it->col);
-        if (it->type == T_BUTTON) it->gy = (short)(MARGIN + g->nrows * rh() + 6 + it->row * rh());
+        if (it->type == T_BUTTON) it->gy = (short)(MARGIN + g->nrows * rh() + (g->pic_h ? g->pic_h + 8 : 0) + 6 + it->row * rh());
         else it->gy = (short)(MARGIN + (it->row - 1) * rh());
     }
+}
+
+/* a picture of w x h pixels (at least) under the rows, drawn by paint
+ * whenever the window needs it; call before dlg_end */
+void dlg_picture(DLG *g, short w, short h, void (*paint)(void *g, struct RastPort *rp, long x, long y, long w, long h))
+{
+    g->pic_w = w; g->pic_h = h; g->paint = paint;
+}
+
+void dlg_repaint(DLG *g)
+{
+    struct Window *w = g->win;
+    if (!w || !g->paint || !g->pic_h) return;
+    g->paint(g, w->RPort, w->BorderLeft + g->pic_x, w->BorderTop + g->pic_y, g->pic_w, g->pic_h);
 }
 
 /* make the gadgets for the window g->win */
@@ -281,7 +340,7 @@ int dlg_gadgets(DLG *g)
         ng.ng_LeftEdge = (WORD)(bl + it->gx);
         ng.ng_TopEdge = (WORD)(bt + it->gy);
         ng.ng_Width = it->gw;
-        ng.ng_Height = (WORD)(hchar + 6);
+        ng.ng_Height = gh();
         ng.ng_GadgetID = (UWORD)(i + 1);
         switch (it->type) {
         case T_LABEL: case T_TEXT:
@@ -289,14 +348,14 @@ int dlg_gadgets(DLG *g)
             gad = CreateGadget(TEXT_KIND, gad, &ng, GTTX_Text, (ULONG)it->s, TAG_END);
             break;
         case T_CHECK:
-            ng.ng_Width = 26; ng.ng_Height = 11;
-            ng.ng_TopEdge += (WORD)((hchar + 6 - 11) / 2);
+            ng.ng_Width = cb_w(); ng.ng_Height = cb_h();
+            ng.ng_TopEdge += (WORD)((gh() - cb_h()) / 2);
             ng.ng_GadgetText = (UBYTE *)it->s;
             ng.ng_Flags = PLACETEXT_RIGHT;
-            gad = CreateGadget(CHECKBOX_KIND, gad, &ng, GTCB_Checked, (ULONG)it->on, GA_Disabled, (ULONG)it->disabled, TAG_END);
+            gad = CreateGadget(CHECKBOX_KIND, gad, &ng, GTCB_Checked, (ULONG)it->on, GA_Disabled, (ULONG)it->disabled,
+                               GTCB_Scaled, TRUE, TAG_END);
             break;
         case T_RADIO:
-            it->gw = item_w(g, it);
             ng.ng_Width = it->gw;
             k = g->ncyc;
             {
@@ -406,6 +465,7 @@ int dlg_event(DLG *g, struct IntuiMessage *m, short *item, int *clicks)
     case IDCMP_REFRESHWINDOW:
         GT_BeginRefresh(m->IDCMPWindow);
         GT_EndRefresh(m->IDCMPWindow, TRUE);
+        if (g->win == m->IDCMPWindow) dlg_repaint(g);
         return 0;
     }
     return 0;
@@ -443,6 +503,7 @@ struct Window *dlg_window(DLG *g, const char *title, long x, long y, struct MsgP
     AddGList(w, g->glist, (UWORD)~0, -1, NULL);
     RefreshGList(g->glist, w, NULL, -1);
     GT_RefreshWindow(w, NULL);
+    dlg_repaint(g);
     return w;
 }
 
@@ -454,7 +515,7 @@ void dlg_rebuild(DLG *g)
     dlg_fetch(g);
     RemoveGList(w, g->glist, -1);
     dlg_free_gadgets(g);
-    SetAPen(w->RPort, PEN(P_GREY));
+    SetAPen(w->RPort, PEN(P_TFACE));
     RectFill(w->RPort, w->BorderLeft, w->BorderTop, w->Width - w->BorderRight - 1, w->Height - w->BorderBottom - 1);
     if (!dlg_gadgets(g)) return;
     AddGList(w, g->glist, (UWORD)~0, -1, NULL);
@@ -463,7 +524,10 @@ void dlg_rebuild(DLG *g)
 }
 
 /* run the dialog; returns the item that ended it, -1 for cancel */
-short dlg_run(DLG *g)
+short dlg_run(DLG *g) { return dlg_run_cb(g, NULL); }
+
+/* ... calling changed() when a cycle gadget (a group of radio buttons) is set */
+short dlg_run_cb(DLG *g, void (*changed)(DLG *g, short item))
 {
     struct Window *w;
     struct IntuiMessage *m;
@@ -480,6 +544,10 @@ short dlg_run(DLG *g)
             struct IntuiMessage cm = *m;
             GT_ReplyIMsg(m);
             done = dlg_event(g, &cm, &item, NULL);
+            if (!done && changed && cm.Class == IDCMP_GADGETUP) {
+                short i = dlg_item_of(g, (struct Gadget *)cm.IAddress);
+                if (i >= 0 && g->it[i].type == T_RADIO) { changed(g, i); dlg_repaint(g); }
+            }
         }
     }
     dlg_fetch(g);
@@ -529,6 +597,21 @@ int alert(int def, int icon, int text, int buttons, ...)
 /*  Popup menu                                                        */
 /* ================================================================= */
 
+/* one item of a popup, highlighted or not, in the colour theme's colours */
+static void popup_row(const char **items, int i, int cur, long ww, long ih, int hl)
+{
+    long ty = 2 + i * ih;
+    int fg = hl ? P_TFTEXT : P_TTEXT;
+    if (items[i][0] == '-' && !items[i][1]) { line(4, ty + ih / 2, ww - 5, ty + ih / 2, P_TDARK); return; }
+    fill_rect(2, ty, ww - 3, ty + ih - 1, hl ? P_TFILL : P_TFACE);
+    if (i == cur) {                               /* a check mark */
+        line(5, ty + ih / 2, 8, ty + ih - 3, fg);
+        line(8, ty + ih - 3, 13, ty + 2, fg);
+        line(6, ty + ih / 2, 9, ty + ih - 3, fg);
+    }
+    sys_text(18, ty + 1, items[i], fg);
+}
+
 int popup(const char **items, int n, int cur, short x, short y)
 {
     struct Window *w;
@@ -550,19 +633,10 @@ int popup(const char **items, int n, int cur, short x, short y)
                        WA_IDCMP, IDCMP_MOUSEMOVE | IDCMP_MOUSEBUTTONS | IDCMP_INACTIVEWINDOW | IDCMP_VANILLAKEY, TAG_END);
     if (!w) return -1;
     gfx_begin(w);
-    fill_rect(0, 0, ww - 1, wh - 1, P_GREY);
-    frame(0, 0, ww - 1, wh - 1, P_BLACK);
-    line(1, 1, ww - 2, 1, P_WHITE);
-    for (i = 0; i < n; i++) {
-        long ty = 2 + i * ih;
-        if (items[i][0] == '-' && !items[i][1]) { line(4, ty + ih / 2, ww - 5, ty + ih / 2, P_BLACK); continue; }
-        if (i == cur) {                               /* a check mark */
-            line(5, ty + ih / 2, 8, ty + ih - 3, P_BLACK);
-            line(8, ty + ih - 3, 13, ty + 2, P_BLACK);
-            line(6, ty + ih / 2, 9, ty + ih - 3, P_BLACK);
-        }
-        sys_text(18, ty + 1, items[i], P_BLACK);
-    }
+    fill_rect(0, 0, ww - 1, wh - 1, P_TFACE);
+    frame(0, 0, ww - 1, wh - 1, P_TDARK);
+    line(1, 1, ww - 2, 1, P_TLIGHT);
+    for (i = 0; i < n; i++) popup_row(items, i, cur, ww, ih, 0);
     gfx_end();
     while (!done) {
         WaitPort(w->UserPort);
@@ -577,8 +651,8 @@ int popup(const char **items, int n, int cur, short x, short y)
                 if (o >= 0 && items[o][0] == '-' && !items[o][1]) o = -1;
                 if (o != hl) {
                     gfx_begin(w);
-                    if (hl >= 0) xor_rect(2, 2 + hl * ih, ww - 3, 1 + (hl + 1) * ih);
-                    if (o >= 0) xor_rect(2, 2 + o * ih, ww - 3, 1 + (o + 1) * ih);
+                    if (hl >= 0) popup_row(items, hl, cur, ww, ih, 0);
+                    if (o >= 0) popup_row(items, o, cur, ww, ih, 1);
                     gfx_end();
                     hl = o;
                 }
@@ -787,13 +861,13 @@ int dlg_size(int *size)
     sprintf(sz, "%d", *size);
     dlg_begin(&g, L(S_SIZE_TITLE));
     dlg_label(&g, L(S_POINT_SIZE));
-    dlg_edit(&g, tmpl(NULL, 3, "(4-120)"), sz, valid_n(3));
+    dlg_edit(&g, tmpl(NULL, 3, "(4-150)"), sz, valid_n(3));
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
     if (dlg_run(&g) != ok) return 0;
     v = atoi(sz);
-    if (v < 4 || v > 120) return 0;
+    if (v < 4 || v > 150) return 0;
     *size = v;
     return 1;
 }
@@ -817,7 +891,7 @@ void gauge_open(const char *title)
     if (!gw) return;
     gbx = gw->BorderLeft + 10; gby = gw->BorderTop + 10; gbw = w - 20; gbh = 14;
     gfx_begin(gw);
-    fill_rect(gw->BorderLeft, gw->BorderTop, gw->Width - gw->BorderRight - 1, gw->Height - gw->BorderBottom - 1, P_GREY);
+    fill_rect(gw->BorderLeft, gw->BorderTop, gw->Width - gw->BorderRight - 1, gw->Height - gw->BorderBottom - 1, P_TFACE);
     {
         GRECT r;
         r.g_x = (short)(gbx - 2); r.g_y = (short)(gby - 2); r.g_w = (short)(gbw + 4); r.g_h = (short)(gbh + 4);
@@ -837,7 +911,7 @@ void gauge_set(long done, long total)
     g_last = pct;
     gfx_begin(gw);
     fill_rect(gbx, gby, gbx + gbw - 1, gby + gbh - 1, P_WHITE);
-    if (pct) fill_rect(gbx, gby, gbx + gbw * pct / 100 - 1, gby + gbh - 1, P_BLUE);
+    if (pct) fill_rect(gbx, gby, gbx + gbw * pct / 100 - 1, gby + gbh - 1, P_TFILL);
     sprintf(s, "%d%%", pct);
     sys_text(gbx + (gbw - sys_width(s)) / 2, gby + (gbh - hchar) / 2, s, P_BLACK);
     gfx_end();
@@ -914,7 +988,7 @@ static int pick_screenmode(void)
              ASLSM_InitialDisplayHeight, (ULONG)(pref_scrh ? pref_scrh : 256),
              ASLSM_InitialDisplayDepth, (ULONG)(pref_scrdepth ? pref_scrdepth : 4),
              ASLSM_DoWidth, TRUE, ASLSM_DoHeight, TRUE, ASLSM_DoDepth, TRUE,
-             ASLSM_MinWidth, 640, ASLSM_MinHeight, 200, ASLSM_MinDepth, 2, ASLSM_MaxDepth, 4, TAG_END);
+             ASLSM_MinWidth, 640, ASLSM_MinHeight, 200, ASLSM_MinDepth, 2, ASLSM_MaxDepth, 24, TAG_END);
     if (!sm) return 0;
     block_input(1);
     if (AslRequest(sm, NULL)) {
@@ -922,6 +996,7 @@ static int pick_screenmode(void)
         pref_scrw = (int)sm->sm_DisplayWidth;
         pref_scrh = (int)sm->sm_DisplayHeight;
         pref_scrdepth = (int)sm->sm_DisplayDepth;
+        pref_colours = pref_scrdepth == 5 ? 0 : pref_scrdepth;   /* the Colours setting shows it */
         ok = 1;
     }
     block_input(0);
@@ -931,24 +1006,28 @@ static int pick_screenmode(void)
 
 int dlg_prefs(void)
 {
-    static const int order[NDATEFMT] = { DT_SHORT, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
-    static char dl[NDATEFMT][40], mins[3];
+#define NDF NDATEFMT_ST
+    static const int order[NDF] = { DT_SHORT, DT_DOTS, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
+    static const char *coln[7] = { "16", "32", "64", "128", "256", NULL, NULL };
+    static const int colv[7] = { 4, 5, 6, 7, 8, 16, 24 };
+    int ncols = rtg_available() ? 7 : 5, cur = pref_colours ? pref_colours : 5;
+    static char dl[NDF][40], mins[3];
     char st[40];
     static DLG g;           /* static: GCC 15 for the 68000 mis-addresses very large stack frames */
     static const int scrname[NSCR] = { S_SCR_HIRES, S_SCR_LACE, S_SCR_LIKEWB, S_SCR_OTHER, S_SCR_WB };
     short scrr[NSCR];
     int nscr;
-    short lang[NLANG], dict[NLANG], dr[NDATEFMT], pp[NPAPER], land, tbar, live, col, ps[3], dm[4], ason, asm1, ok;
+    short lang[NLANG], dict[NLANG], dr[NDF], pp[NPAPER], land, tbar, live, col, ps[3], dm[4], ason, asm1, ok, ncol[7], icons = -1;
     int i, v;
 
-    for (i = 0; i < NDATEFMT; i++) { fmt_now(st, order[i]); strcpy(dl[i], lat(st)); }
+    for (i = 0; i < NDF; i++) { fmt_now(st, order[i]); strcpy(dl[i], lat(st)); }
     sprintf(mins, "%d", pref_asmin);
     dlg_begin(&g, L(S_PREFS_TITLE));
     dlg_label(&g, L(S_LANGUAGE));
     for (i = 0; i < NLANG; i++) lang[i] = dlg_radio(&g, 1, lang_name[i], ui_lang == i);
     dlg_row(&g);
     dlg_label(&g, L(S_DATE_FORMAT));
-    for (i = 0; i < NDATEFMT; i++) dr[i] = dlg_radio(&g, 2, dl[i], pref_date == order[i]);
+    for (i = 0; i < NDF; i++) dr[i] = dlg_radio(&g, 2, dl[i], pref_date == order[i]);
     dlg_row(&g);
     dlg_label(&g, L(S_NEW_PAGES));
     for (i = 0; i < NPAPER; i++) pp[i] = dlg_radio(&g, 3, paper_name[i], pref_paper == i);
@@ -967,7 +1046,13 @@ int dlg_prefs(void)
     dlg_label(&g, L(S_AMI_SCREEN));
     for (i = 0; i < NSCR; i++)
         scrr[i] = i == SCR_OTHER && (!AslBase || AslBase->lib_Version < 38) ? -1 : dlg_radio(&g, 9, L(scrname[i]), pref_screen == i);
-    dlg_text(&g, L(S_AMI_RESTART));
+    dlg_row(&g);
+    dlg_label(&g, L(S_AMI_COLOURS));
+    coln[5] = L(S_AMI_HICOLOUR);
+    coln[6] = L(S_AMI_TRUECOLOUR);
+    if (cur > 8 && cur < 16) cur = 16;
+    if (cur > 16) cur = 24;
+    for (i = 0; i < ncols; i++) ncol[i] = dlg_radio(&g, 10, coln[i], cur == colv[i]);
     dlg_row(&g);
     dlg_label(&g, L(S_TEXT_COLOUR));
     col = dlg_check(&g, L(S_SHOW_COLOURS), colour_on);
@@ -988,20 +1073,30 @@ int dlg_prefs(void)
     dlg_edit(&g, tmpl(L(S_EVERY), 2, L(S_MINUTES)), mins, valid_n(2));
     dlg_radio(&g, 7, L(S_BACKUP_COPY), !pref_asmode);
     asm1 = dlg_radio(&g, 7, L(S_SAVE_DOC), pref_asmode);
+#ifndef AMI13
+    /* the same setting as Settings > Create Icons? */
+    dlg_row(&g);
+    dlg_label(&g, L(S_AMI_ICONS));
+    icons = dlg_check(&g, L(S_AMI_ICONS_SAVE), pref_icons);
+#endif
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
     if (dlg_run(&g) != ok) return 0;
 
     for (i = 0; i < 4; i++) if (dlg_on(&g, dm[i])) pref_display = i;
+    for (i = 0; i < ncols; i++) if (dlg_on(&g, ncol[i])) pref_colours = i == 1 ? 0 : colv[i];
     nscr = pref_screen;
     for (i = 0; i < NSCR; i++) if (dlg_on(&g, scrr[i])) nscr = i;
-    if (nscr != SCR_OTHER || pick_screenmode()) pref_screen = nscr;
+    /* Other mode: the screen mode requester when it is newly chosen (its
+     * colours then set the Colours setting) */
+    if (nscr != SCR_OTHER || pref_screen == SCR_OTHER || pick_screenmode()) pref_screen = nscr;
     pref_autosave = dlg_on(&g, ason);
+    if (icons >= 0) pref_icons = dlg_on(&g, icons);
     v = atoi(mins);
     pref_asmin = v < 1 ? 1 : v > 99 ? 99 : v;
     pref_asmode = dlg_on(&g, asm1);
-    for (i = 0; i < NDATEFMT; i++) if (dlg_on(&g, dr[i])) pref_date = order[i];
+    for (i = 0; i < NDF; i++) if (dlg_on(&g, dr[i])) pref_date = order[i];
     for (i = 0; i < NPAPER; i++) if (dlg_on(&g, pp[i])) pref_paper = i;
     pref_land = dlg_on(&g, land);
     pref_toolbar = dlg_on(&g, tbar);
@@ -1054,7 +1149,7 @@ int dlg_headfoot(DOC *d)
         for (k = 0; k < 3; k++) if (dlg_on(&g, jr[i][k])) HF(d).just[i] = (unsigned char)k;
     }
     v = atoi(sz);
-    HF(d).size = (unsigned char)(v < 4 ? 4 : v > 72 ? 72 : v);
+    HF(d).size = (unsigned char)(v < 4 ? 4 : v > 150 ? 150 : v);
     HF(d).first = (unsigned char)dlg_on(&g, first);
     d->dirty = 1;
     return 1;
@@ -1151,12 +1246,13 @@ int dlg_table(DOC *d, int insert, int *rows, int *cols, short *w, int *border)
 /* returns 0 cancel, 1 OK, 2 delete, 3 edit the drawing */
 int dlg_objprops(DOC *d, OBJ *o)
 {
-    static char xb[5], yb[5], wb[5], hb[5], pb[5];
+    static char xb[5], yb[5], wb[5], hb[5], pb[5], x0[5], y0[5], w0[5], h0[5];
     static DLG g;           /* static: GCC 15 for the 68000 mis-addresses very large stack frames */
     short ok, del, edt = -1, wr[3], frame_, i;
     int v;
-    sprintf(xb, "%d", pt2mm(o->x)); sprintf(yb, "%d", pt2mm(o->y));
-    sprintf(wb, "%d", pt2mm(o->w)); sprintf(hb, "%d", pt2mm(o->h));
+    sprintf(xb, "%d", pt2mm(o->x / TWIPS)); sprintf(yb, "%d", pt2mm(o->y / TWIPS));
+    sprintf(wb, "%d", pt2mm(o->w / TWIPS)); sprintf(hb, "%d", pt2mm(o->h / TWIPS));
+    strcpy(x0, xb); strcpy(y0, yb); strcpy(w0, wb); strcpy(h0, hb);
     sprintf(pb, "%d", o->page + 1);
     dlg_begin(&g, L(o->type == OB_IMG ? S_PIC_TITLE : S_DRAW_TITLE));
     dlg_label(&g, L(S_POSITION_MM));
@@ -1185,9 +1281,11 @@ int dlg_objprops(DOC *d, OBJ *o)
     i = dlg_run(&g);
     if (i == del) return 2;
     if (i != ok && i != edt) return 0;
-    o->x = (short)field_pt(xb, o->x); o->y = (short)field_pt(yb, o->y);
-    v = field_pt(wb, o->w); o->w = (short)(v < 6 ? 6 : v);
-    v = field_pt(hb, o->h); o->h = (short)(v < 6 ? 6 : v);
+    /* a field left as it was keeps the exact (pixel placed) position */
+    if (strcmp(xb, x0)) o->x = field_pt(xb, o->x / TWIPS) * (long)TWIPS;
+    if (strcmp(yb, y0)) o->y = field_pt(yb, o->y / TWIPS) * (long)TWIPS;
+    if (strcmp(wb, w0)) { v = field_pt(wb, o->w / TWIPS); o->w = (v < 6 ? 6 : v) * (long)TWIPS; }
+    if (strcmp(hb, h0)) { v = field_pt(hb, o->h / TWIPS); o->h = (v < 6 ? 6 : v) * (long)TWIPS; }
     v = atoi(pb) - 1;
     o->page = (short)(v < 0 ? 0 : v > doc_npages(d) ? doc_npages(d) : v);
     o->wrap = dlg_on(&g, wr[0]) ? WR_NONE : wr[2] >= 0 && dlg_on(&g, wr[2]) ? WR_SHAPE : WR_BOX;
@@ -1237,7 +1335,7 @@ void dlg_about(void)
     dlg_row(&g);
     dlg_text(&g, ED_ABOUT[0] ? ED_ABOUT : L(S_AMI_ABOUT));
     dlg_row(&g);
-    dlg_text(&g, L(S_ABOUT_LINE2));
+    dlg_text(&g, L(S_ABOUT_EWR));
     dlg_row(&g);
     dlg_text(&g, L(S_ABOUT_LINE3));
     dlg_row(&g);
@@ -1299,7 +1397,7 @@ int dlg_textexport(int *crlf, int *cs)
     r[2] = dlg_radio(&g, 2, "UTF-8", 0);
     r[3] = dlg_radio(&g, 2, "UTF-16", 0);
     dlg_row(&g);
-    dlg_text(&g, L(S_EXPORT_HINT));
+    dlg_text(&g, L(S_EXPORT_HINT_EWR));
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_EXPORT), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);

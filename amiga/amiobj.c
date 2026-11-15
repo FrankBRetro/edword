@@ -8,7 +8,14 @@
  * a drawing to edit its shapes in the drawing window.
  */
 #include <graphics/gfxmacros.h>
+#include <intuition/classes.h>
+#include <intuition/gadgetclass.h>
+#include <datatypes/datatypes.h>
+#include <datatypes/datatypesclass.h>
+#include <datatypes/pictureclass.h>
 #include <proto/exec.h>
+#include <proto/utility.h>
+#include <proto/datatypes.h>
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
@@ -24,10 +31,11 @@ static long sy_of(DOC *d, GRECT *tp, int pg, long py) { return tp->g_y - d->scro
 
 static void obj_scr(DOC *d, GRECT *tp, const OBJ *o, long *x0, long *y0, long *x1, long *y1)
 {
-    *x0 = sx_of(d, tp, pt2px_x(o->x));
-    *y0 = sy_of(d, tp, o->page, pt2px_y(o->y));
-    *x1 = sx_of(d, tp, pt2px_x(o->x + o->w));
-    *y1 = sy_of(d, tp, o->page, pt2px_y(o->y + o->h));
+    long left = sx_of(d, tp, 0), top = sy_of(d, tp, o->page, 0);
+    *x0 = left + tw2px_xs(o->x, d->zoom, 100);
+    *y0 = top + tw2px_ys(o->y, d->zoom, 100);
+    *x1 = left + tw2px_xs(o->x + o->w, d->zoom, 100);
+    *y1 = top + tw2px_ys(o->y + o->h, d->zoom, 100);
 }
 
 int obj_at(DOC *d, int page, long px, long py)
@@ -35,7 +43,7 @@ int obj_at(DOC *d, int page, long px, long py)
     int i;
     for (i = d->a.nobj - 1; i >= 0; i--) {
         OBJ *o = &d->a.objs[i];
-        long x0 = pt2px_x(o->x), y0 = pt2px_y(o->y), x1 = pt2px_x(o->x + o->w), y1 = pt2px_y(o->y + o->h);
+        long x0 = tw2px_x(o->x), y0 = tw2px_y(o->y), x1 = tw2px_x(o->x + o->w), y1 = tw2px_y(o->y + o->h);
         if (o->page == page && px >= x0 && px < x1 && py >= y0 && py < y1) return i;
     }
     return -1;
@@ -120,23 +128,26 @@ static int drag(DOC *d, GRECT *tp, short mx, short my, int corner)
     gfx_end();
     if (!moved) return 0;
     {
-        long top = sy_of(d, tp, o->page, 0), left = sx_of(d, tp, 0);
-        long px0 = (nx0 - left) * 100 / d->zoom, py0 = (ny0 - top) * 100 / d->zoom;
-        long px1 = (nx1 - left) * 100 / d->zoom, py1 = (ny1 - top) * 100 / d->zoom;
+        /* back to page twips, to the pixel at this zoom, kept on the page */
+        long top = sy_of(d, tp, o->page, 0), left = sx_of(d, tp, 0), z = d->zoom;
+        long tx0 = px2tw_xs(nx0 - left, z, 100), ty0 = px2tw_ys(ny0 - top, z, 100);
+        long tx1 = px2tw_xs(nx1 - left, z, 100), ty1 = px2tw_ys(ny1 - top, z, 100);
+        long tpw = (long)PS(d).w * TWIPS, tph = (long)PS(d).h * TWIPS;
         int pg = o->page;
+        (void)pw;
         if (corner < 0) {
-            long step = zx(d, ph) + PGAP;
-            while (py0 > ph + PGAP / 2 && pg < doc_npages(d) - 1) { py0 -= step * 100 / d->zoom; py1 -= step * 100 / d->zoom; pg++; }
-            while (py1 < -PGAP / 2 && pg > 0) { py0 += step * 100 / d->zoom; py1 += step * 100 / d->zoom; pg--; }
+            long step = px2tw_ys(zx(d, ph) + PGAP, z, 100), half = px2tw_ys(PGAP / 2, z, 100);
+            while (ty0 > tph + half && pg < doc_npages(d) - 1) { ty0 -= step; ty1 -= step; pg++; }
+            while (ty1 < -half && pg > 0) { ty0 += step; ty1 += step; pg--; }
         }
-        if (px1 - px0 > pw) px1 = px0 + pw;
-        if (py1 - py0 > ph) py1 = py0 + ph;
-        if (px0 < 0) { px1 -= px0; px0 = 0; }
-        if (py0 < 0) { py1 -= py0; py0 = 0; }
-        if (px1 > pw) { px0 -= px1 - pw; px1 = pw; }
-        if (py1 > ph) { py0 -= py1 - ph; py1 = ph; }
+        if (tx1 - tx0 > tpw) tx1 = tx0 + tpw;
+        if (ty1 - ty0 > tph) ty1 = ty0 + tph;
+        if (tx0 < 0) { tx1 -= tx0; tx0 = 0; }
+        if (ty0 < 0) { ty1 -= ty0; ty0 = 0; }
+        if (tx1 > tpw) { tx0 -= tx1 - tpw; tx1 = tpw; }
+        if (ty1 > tph) { ty0 -= ty1 - tph; ty1 = tph; }
         if (corner >= 0 && o->type == OB_DRAW) {
-            long ow = o->w, oh = o->h, nw = px2pt_x(px1 - px0), nh = px2pt_y(py1 - py0);
+            long ow = o->w, oh = o->h, nw = tx1 - tx0, nh = ty1 - ty0;
             int s;
             for (s = 0; s < o->nsh && ow > 0 && oh > 0; s++) {
                 SHAPE *sh = &o->sh[s];
@@ -145,12 +156,12 @@ static int drag(DOC *d, GRECT *tp, short mx, short my, int corner)
             }
         }
         o->page = (short)pg;
-        o->x = (short)px2pt_x(px0);
-        o->y = (short)px2pt_y(py0);
-        o->w = (short)px2pt_x(px1 - px0);
-        o->h = (short)px2pt_y(py1 - py0);
-        if (o->w < 6) o->w = 6;
-        if (o->h < 6) o->h = 6;
+        o->x = tx0;
+        o->y = ty0;
+        o->w = tx1 - tx0;
+        o->h = ty1 - ty0;
+        if (o->w < 6 * TWIPS) o->w = 6 * TWIPS;
+        if (o->h < 6 * TWIPS) o->h = 6 * TWIPS;
     }
     return 1;
 }
@@ -185,8 +196,11 @@ int obj_click(DOC *d, GRECT *tp, short mx, short my, int qual, int clicks)
 int obj_key(DOC *d, int key, int qual)
 {
     OBJ *o;
-    int step = (qual & KQ_SHIFT) ? 1 : 6;
+    long step, stepy;
     if (d->selobj < 0 || d->selobj >= d->a.nobj) return 0;
+    /* arrows: 6 points; with Shift, one screen pixel */
+    step = (qual & KQ_SHIFT) ? px2tw_xs(1, d->zoom, 100) : 6L * TWIPS;
+    stepy = (qual & KQ_SHIFT) ? px2tw_ys(1, d->zoom, 100) : 6L * TWIPS;
     o = &d->a.objs[d->selobj];
     switch (key) {
     case K_DEL: case K_BS: obj_delete(d); return 1;
@@ -194,10 +208,10 @@ int obj_key(DOC *d, int key, int qual)
     case K_RETURN: case K_ENTER:
         if (o->type == OB_DRAW) draw_edit(d, d->selobj); else obj_props(d);
         return 1;
-    case K_LEFT: o->x = (short)(o->x > step ? o->x - step : 0); break;
-    case K_RIGHT: if (o->x + o->w + step <= PS(d).w) o->x += step; break;
-    case K_UP: o->y = (short)(o->y > step ? o->y - step : 0); break;
-    case K_DOWN: if (o->y + o->h + step <= PS(d).h) o->y += step; break;
+    case K_LEFT: o->x = o->x > step ? o->x - step : 0; break;
+    case K_RIGHT: if (o->x + o->w + step <= (long)PS(d).w * TWIPS) o->x += step; break;
+    case K_UP: o->y = o->y > stepy ? o->y - stepy : 0; break;
+    case K_DOWN: if (o->y + o->h + stepy <= (long)PS(d).h * TWIPS) o->y += stepy; break;
     default:
         obj_select(d, -1);
         return 0;
@@ -243,15 +257,81 @@ static void place_new(DOC *d, OBJ *o, long w, long h)
     if (w < 6) w = 6;
     if (h < 6) h = 6;
     o->page = (short)page;
-    o->w = (short)w;
-    o->h = (short)h;
-    o->x = (short)(f.ml + (tw - w) / 2);
-    o->y = (short)(ln ? px2pt_y(ln->py + ln->lh) : f.mt);
-    if (o->y + h > PS(d).h - f.mb) o->y = (short)(PS(d).h - f.mb - h);
-    if (o->y < f.mt) o->y = f.mt;
+    o->w = w * TWIPS;
+    o->h = h * TWIPS;
+    o->x = (f.ml + (tw - w) / 2) * (long)TWIPS;
+    o->y = (ln ? px2pt_y(ln->py + ln->lh) : f.mt) * (long)TWIPS;
+    if (o->y + o->h > (long)(PS(d).h - f.mb) * TWIPS) o->y = (long)(PS(d).h - f.mb - h) * TWIPS;
+    if (o->y < (long)f.mt * TWIPS) o->y = (long)f.mt * TWIPS;
 }
 
-/* insert an IFF ILBM or GEM IMG picture */
+/* ---- other pictures through datatypes.library (Workbench 3 and newer) ----
+ * Any format a picture datatype is installed for (GIF, JPEG, BMP...):
+ * the picture's colours, read with PDTM_READPIXELARRAY (picture.datatype
+ * 43 and newer), or from its own bitmap and colour table before that. */
+struct Library *DataTypesBase;
+extern struct UtilityBase *UtilityBase;
+
+static ULONG dt_method(Object *o, APTR msg)
+{
+    struct IClass *cl = OCLASS(o);
+    return CallHookPkt(&cl->cl_Dispatcher, o, msg);
+}
+
+static int dt_load(const char *path, IMG *im)
+{
+    Object *o;
+    struct BitMapHeader *bmh = NULL;
+    unsigned char *rgb;
+    long w, h;
+    int ok = 0;
+    if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    if (!DataTypesBase || !UtilityBase) return 0;
+    o = NewDTObject((APTR)path, DTA_GroupID, GID_PICTURE, PDTA_Remap, FALSE, PDTA_DestMode, PMODE_V43, TAG_END);
+    if (!o) return 0;
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_END);
+    w = bmh ? bmh->bmh_Width : 0;
+    h = bmh ? bmh->bmh_Height : 0;
+    rgb = w > 0 && h > 0 && w <= 4000 && h <= 4000 ? (unsigned char *)malloc((size_t)(w * h * 3)) : NULL;
+    if (rgb) {
+        if (DataTypesBase->lib_Version >= 43) {
+            struct pdtBlitPixelArray m;
+            m.MethodID = PDTM_READPIXELARRAY;
+            m.pbpa_PixelData = rgb; m.pbpa_PixelFormat = PBPAFMT_RGB; m.pbpa_PixelArrayMod = (ULONG)(w * 3);
+            m.pbpa_Left = 0; m.pbpa_Top = 0; m.pbpa_Width = (ULONG)w; m.pbpa_Height = (ULONG)h;
+            ok = dt_method(o, &m) != 0;
+        }
+        if (!ok) {
+            /* the picture's own bitmap and colours */
+            struct gpLayout gl;
+            struct BitMap *bm = NULL;
+            struct ColorRegister *cr = NULL;
+            ULONG nc = 0;
+            gl.MethodID = DTM_PROCLAYOUT; gl.gpl_GInfo = NULL; gl.gpl_Initial = TRUE;
+            dt_method(o, &gl);
+            GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, PDTA_ColorRegisters, (ULONG)&cr, PDTA_NumColors, (ULONG)&nc, TAG_END);
+            if (bm && cr && bm->Depth <= 8) {
+                long x, y;
+                int k;
+                for (y = 0; y < h && y < bm->Rows; y++)
+                    for (x = 0; x < w; x++) {
+                        unsigned v = 0;
+                        for (k = 0; k < bm->Depth; k++)
+                            if (bm->Planes[k][y * bm->BytesPerRow + (x >> 3)] & (0x80 >> (x & 7))) v |= 1u << k;
+                        if (v >= nc) v = 0;
+                        rgb[(y * w + x) * 3] = cr[v].red; rgb[(y * w + x) * 3 + 1] = cr[v].green; rgb[(y * w + x) * 3 + 2] = cr[v].blue;
+                    }
+                ok = 1;
+            }
+        }
+        if (ok) ok = img_from_rgb(im, w, h, rgb, w * 3, 3);
+        free(rgb);
+    }
+    DisposeDTObject(o);
+    return ok;
+}
+
+/* insert a picture: IFF ILBM, PNG or GEM IMG, or anything datatypes read */
 int picture_insert(DOC *d, const char *path)
 {
     IMG im;
@@ -260,6 +340,7 @@ int picture_insert(DOC *d, const char *path)
     if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return 0; }
     busy_begin(L(S_LOADING_PIC));
     k = img_load(path, &im);
+    if (!k) k = dt_load(path, &im);
     busy_end();
     if (!k) { alert(1, 3, AL_AMI_CANT_READ_PIC, AB_OK); return 0; }
     k = doc_img_add(d, &im);
@@ -286,7 +367,7 @@ void cmd_picture(DOC *d)
 {
     char path[300];
     if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return; }
-    if (ask_file(L(S_AMI_FS_PICTURE), "#?.(iff|ilbm|lbm|pic|img|png)", "", path, 0)) picture_insert(d, path);
+    if (ask_file(L(S_AMI_FS_PICTURE), "#?", "", path, 0)) picture_insert(d, path);
 }
 
 void cmd_drawing(DOC *d)
@@ -311,44 +392,59 @@ void cmd_drawing(DOC *d)
 /*  Drawing objects                                                   */
 /* ================================================================= */
 
-/* the last few pictures scaled for the screen */
+/* the last few pictures scaled for the screen: in colour (pic_make's,
+ * for pic_put) or black and white */
 #define NCACHE 6
 static struct {
     DOC *d;
     const unsigned char *src;
     long w, h, use;
+    int colour;
     IMG sc;
+    unsigned char *pic;
 } cache[NCACHE];
 static long cache_clock;
+
+static void cache_drop(int i)
+{
+    img_free(&cache[i].sc);
+    free(cache[i].pic);
+    cache[i].pic = NULL;
+    cache[i].d = NULL;
+}
 
 void img_cache_free(DOC *d)
 {
     int i;
     for (i = 0; i < NCACHE; i++)
-        if (cache[i].d && (!d || cache[i].d == d)) {
-            img_free(&cache[i].sc);
-            cache[i].d = NULL;
-        }
+        if (cache[i].d && (!d || cache[i].d == d)) cache_drop(i);
 }
 
-static IMG *scaled(DOC *d, const IMG *im, long w, long h)
+static int scaled(DOC *d, const IMG *im, long w, long h, int colour)
 {
     int i, lru = 0;
     for (i = 0; i < NCACHE; i++)
-        if (cache[i].d == d && cache[i].src == im->bits && cache[i].w == w && cache[i].h == h) {
+        if (cache[i].d == d && cache[i].src == im->bits && cache[i].w == w && cache[i].h == h && cache[i].colour == colour) {
             cache[i].use = ++cache_clock;
-            return &cache[i].sc;
+            return i;
         }
-    if (w < 1 || h < 1 || w > 3000 || h > 3000) return NULL;
+    if (w < 1 || h < 1 || w > 3000 || h > 3000) return -1;
     for (i = 0; i < NCACHE; i++) if (!cache[i].d) { lru = i; break; } else if (cache[i].use < cache[lru].use) lru = i;
-    if (cache[lru].d) { img_free(&cache[lru].sc); cache[lru].d = NULL; }
-    if (!img_scale(im, w, h, &cache[lru].sc)) return NULL;
-    cache[lru].d = d; cache[lru].src = im->bits; cache[lru].w = w; cache[lru].h = h;
+    if (cache[lru].d) cache_drop(lru);
+    memset(&cache[lru].sc, 0, sizeof cache[lru].sc);
+    if (colour) {
+        unsigned char *rgb = img_scale_rgb(im, w, h);
+        if (!rgb) return -1;
+        cache[lru].pic = pic_make(rgb, w, h);
+        free(rgb);
+        if (!cache[lru].pic) return -1;
+    } else if (!img_scale(im, w, h, &cache[lru].sc)) return -1;
+    cache[lru].d = d; cache[lru].src = im->bits; cache[lru].w = w; cache[lru].h = h; cache[lru].colour = colour;
     cache[lru].use = ++cache_clock;
-    return &cache[lru].sc;
+    return lru;
 }
 
-static void draw_shape(const SHAPE *s, long ox, long oy, long n, long den)
+static void draw_shape(const DOC *d, const SHAPE *s, long ox, long oy, long n, long den)
 {
     long xy[2 * 57];
     long x0 = ox + pt2px_x(s->x1) * n / den, y0 = oy + pt2px_y(s->y1) * n / den;
@@ -356,6 +452,18 @@ static void draw_shape(const SHAPE *s, long ox, long oy, long n, long den)
     int k, np, pen = color_pen(s->color);
     int lw = (int)(s->lw * n / den);
     if (lw < 1 && s->lw) lw = 1;
+    if (s->type == SH_FREE) {                   /* a polyline through its points */
+        const short *fp = free_pts(d, s);
+        int i;
+        long px = 0, py = 0;
+        if (!fp || !s->lw) return;
+        for (i = 0; i < s->np; i++) {
+            long qx = x0 + (x1 - x0) * fp[2 * i] / FREE_ONE, qy = y0 + (y1 - y0) * fp[2 * i + 1] / FREE_ONE;
+            if (i) thick_line(px, py, qx, qy, pen, lw);
+            px = qx; py = qy;
+        }
+        return;
+    }
     if (s->type == SH_LINE) {
         if (s->lw) thick_line(x0, y0, x1, y1, pen, lw);
         return;
@@ -373,19 +481,32 @@ static void draw_shape(const SHAPE *s, long ox, long oy, long n, long den)
 /* a picture or drawing on a page whose top left corner is at (ox, oy) */
 void draw_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
 {
-    long x = ox + pt2px_x(o->x) * n / den, y = oy + pt2px_y(o->y) * n / den;
-    long w = pt2px_x(o->w) * n / den, h = pt2px_y(o->h) * n / den;
+    long x = ox + tw2px_xs(o->x, n, den), y = oy + tw2px_ys(o->y, n, den);
+    long w = ox + tw2px_xs(o->x + o->w, n, den) - x, h = oy + tw2px_ys(o->y + o->h, n, den) - y;
     int k;
     if (o->type == OB_IMG && o->img >= 0 && o->img < d->nimg) {
-        IMG *m = scaled(d, &d->imgs[o->img], w, h);
-        if (m) blit_bits(m->bits, m->rb, m->w, m->h, x, y, P_BLACK);
+        /* in colour where the screen can, unless that has failed for want
+         * of memory at this size (trying at every redraw would crawl) */
+        static struct { const unsigned char *src; long w, h; } nocol[8];
+        static int nnc;
+        int colour = pic_colour() && d->imgs[o->img].rgb != NULL, f, k2;
+        for (f = 0; f < 8 && colour; f++)
+            if (nocol[f].src == d->imgs[o->img].bits && nocol[f].w == w && nocol[f].h == h) colour = 0;
+        k2 = scaled(d, &d->imgs[o->img], w, h, colour);
+        if (k2 < 0 && colour) {
+            nocol[nnc].src = d->imgs[o->img].bits; nocol[nnc].w = w; nocol[nnc].h = h;
+            nnc = (nnc + 1) & 7;
+            k2 = scaled(d, &d->imgs[o->img], w, h, colour = 0);
+        }
+        if (k2 >= 0 && colour) pic_put(cache[k2].pic, w, h, x, y);
+        else if (k2 >= 0) blit_bits(cache[k2].sc.bits, cache[k2].sc.rb, cache[k2].sc.w, cache[k2].sc.h, x, y, P_BLACK);
         else {
             frame(x, y, x + w - 1, y + h - 1, P_BLACK);
             line(x, y, x + w - 1, y + h - 1, P_BLACK);
         }
     }
     if (o->type == OB_DRAW) {
-        for (k = 0; k < o->nsh; k++) draw_shape(&o->sh[k], x, y, n, den);
+        for (k = 0; k < o->nsh; k++) draw_shape(d, &o->sh[k], x, y, n, den);
         if (o->nsh == 0) {
             SetDrPt(grp, 0xAAAA);
             frame(x, y, x + w - 1, y + h - 1, P_BLACK);
@@ -402,8 +523,8 @@ void draw_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
 /*  The drawing window                                                 */
 /* ================================================================= */
 
-enum { T_SELECT, T_RECT, T_RRECT, T_ELLIPSE, T_LINE, T_TRI };
-enum { B_TOOL0, B_FILL = 6, B_WIDTH, B_COLOUR, B_FRONT, B_DELETE, B_DONE, NBTN };
+enum { T_SELECT, T_RECT, T_RRECT, T_ELLIPSE, T_LINE, T_TRI, T_FREE, NTOOLS };
+enum { B_TOOL0, B_FILL = NTOOLS, B_WIDTH, B_COLOUR, B_FRONT, B_DELETE, B_DONE, NBTN };
 
 static struct {
     int    open;
@@ -426,11 +547,11 @@ static void work(GRECT *wa)
 
 static const char *btn_text(int b, char *buf)
 {
-    static const int tools[6] = { S_DT_SELECT, S_DT_RECT, S_DT_RRECT, S_DT_ELLIPSE, S_DT_LINE, S_DT_TRI };
+    static const int tools[NTOOLS] = { S_DT_SELECT, S_DT_RECT, S_DT_RRECT, S_DT_ELLIPSE, S_DT_LINE, S_DT_TRI, S_DT_FREE };
     static const int fills[NFILLS] = { S_FILL_NONE, S_FILL_WHITE, S_FILL_GREY, S_FILL_SOLID };
     const SHAPE *s = NULL;
     if (dw.d && dw.sel >= 0 && dw.oi < dw.d->a.nobj && dw.sel < dw.d->a.objs[dw.oi].nsh) s = &dw.d->a.objs[dw.oi].sh[dw.sel];
-    if (b < 6) return L(tools[b]);
+    if (b < NTOOLS) return L(tools[b]);
     switch (b) {
     case B_FILL: sprintf(buf, "%s: %s", L(S_DT_FILL), L(fills[s ? s->fill : dw.fill])); return buf;
     case B_WIDTH: sprintf(buf, "%s: %d", L(S_DT_WIDTH), s ? s->lw : dw.lw); return buf;
@@ -451,7 +572,7 @@ static short lay_buttons(short w)
         if (b == B_FILL || b == B_WIDTH) bw = (short)(bw + 3 * wchar);
         if (x + bw > w - 4 && x > 4) { x = 4; y = (short)(y + bh + 3); }
         dw.bt[b].g_x = x; dw.bt[b].g_y = y; dw.bt[b].g_w = bw; dw.bt[b].g_h = bh;
-        x = (short)(x + bw + (b == T_TRI || b == B_COLOUR ? wchar : 3));
+        x = (short)(x + bw + (b == T_FREE || b == B_COLOUR ? wchar : 3));
     }
     return (short)(y + bh + 4);
 }
@@ -469,7 +590,7 @@ static void canvas_geom(GRECT *wa, GRECT *cv)
     cv->g_x = wa->g_x; cv->g_y = (short)(wa->g_y + dw.barh);
     cv->g_w = wa->g_w; cv->g_h = (short)(wa->g_h - dw.barh);
     if (!o) return;
-    bw = pt2px_x(o->w); bh = pt2px_y(o->h);
+    bw = tw2px_x(o->w); bh = tw2px_y(o->h);
     if (bw < 1) bw = 1;
     if (bh < 1) bh = 1;
     dw.num = cv->g_w - 16; dw.den = bw;
@@ -501,22 +622,22 @@ static void dw_redraw(void)
     canvas_geom(&wa, &cv);
     gfx_begin(dw.w);
     clip_set(&wa);
-    fill_rect(wa.g_x, wa.g_y, wa.g_x + wa.g_w - 1, cv.g_y - 1, P_GREY);
+    fill_rect(wa.g_x, wa.g_y, wa.g_x + wa.g_w - 1, cv.g_y - 1, P_TFACE);
     fill_g(&cv, P_DESK);
     for (b = 0; b < NBTN; b++) {
         GRECT r = dw.bt[b];
         r.g_x += wa.g_x; r.g_y += wa.g_y;
-        button_box(&r, btn_text(b, buf), b < 6 && b == dw.tool, b >= B_FRONT && b <= B_DELETE && dw.sel < 0);
+        button_box(&r, btn_text(b, buf), b < NTOOLS && b == dw.tool, b >= B_FRONT && b <= B_DELETE && dw.sel < 0);
     }
     if (o) {
-        long bw = pt2px_x(o->w) * dw.num / dw.den, bh = pt2px_y(o->h) * dw.num / dw.den;
+        long bw = tw2px_x(o->w) * dw.num / dw.den, bh = tw2px_y(o->h) * dw.num / dw.den;
         GRECT c;
         fill_rect(dw.cx, dw.cy, dw.cx + bw - 1, dw.cy + bh - 1, P_WHITE);
         frame(dw.cx - 1, dw.cy - 1, dw.cx + bw, dw.cy + bh, P_BLACK);
         c.g_x = (short)dw.cx; c.g_y = (short)dw.cy; c.g_w = (short)bw; c.g_h = (short)bh;
         if (rc_inter(&wa, &c)) {
             clip_set(&c);
-            for (k = 0; k < o->nsh; k++) draw_shape(&o->sh[k], dw.cx, dw.cy, dw.num, dw.den);
+            for (k = 0; k < o->nsh; k++) draw_shape(dw.d, &o->sh[k], dw.cx, dw.cy, dw.num, dw.den);
             clip_set(&wa);
         }
         if (dw.sel >= 0 && dw.sel < o->nsh) sel_frame(&o->sh[dw.sel]);
@@ -585,8 +706,8 @@ static void to_pt(short mx, short my, short *px, short *py)
     long x = px2pt_x((mx - dw.cx) * dw.den / dw.num), y = px2pt_y((my - dw.cy) * dw.den / dw.num);
     if (x < 0) x = 0;
     if (y < 0) y = 0;
-    if (o && x > o->w) x = o->w;
-    if (o && y > o->h) y = o->h;
+    if (o && x > o->w / TWIPS) x = o->w / TWIPS;
+    if (o && y > o->h / TWIPS) y = o->h / TWIPS;
     *px = (short)x; *py = (short)y;
 }
 
@@ -628,6 +749,72 @@ static int rubber(int type, short mx, short my, short *ex, short *ey)
     return lx != mx || ly != my;
 }
 
+/* a freehand stroke from (mx, my) while the button is held, drawn as it
+ * goes inside the canvas; returns the number of screen points in xy */
+#define FH_MAX 2000
+static int freehand(short mx, short my, const GRECT *cv, short *xy)
+{
+    short x, y, lx = mx, ly = my;
+    int n = 0, q;
+    gfx_begin(dw.w);
+    clip_set(cv);
+    xy[n++] = mx; xy[n++] = my;
+    while (track_next(&x, &y, &q)) {
+        if ((x == lx && y == ly) || n >= 2 * FH_MAX) continue;
+        line(lx, ly, x, y, color_pen(dw.color));
+        lx = x; ly = y;
+        xy[n++] = x; xy[n++] = y;
+    }
+    clip_off();
+    gfx_end();
+    return n / 2;
+}
+
+/* the stroke as a shape: its points in drawing points, thinned to at most
+ * MAX_FREEPTS, into the document's pool; 0 if it can't be */
+static int freehand_shape(OBJ *o, const short *sxy, int n)
+{
+    static short pt[2 * FH_MAX], nrm[2 * MAX_FREEPTS];
+    short minx = 32767, miny = 32767, maxx = -32767, maxy = -32767;
+    int i, m = 0, step, at;
+    SHAPE *s;
+    for (i = 0; i < n; i++) {
+        short px, py;
+        to_pt(sxy[2 * i], sxy[2 * i + 1], &px, &py);
+        if (m && i < n - 1 && px == pt[2 * m - 2] && py == pt[2 * m - 1]) continue;
+        pt[2 * m] = px; pt[2 * m + 1] = py; m++;
+    }
+    if (m < 2) return 0;
+    step = (m + MAX_FREEPTS - 2) / (MAX_FREEPTS - 1);   /* at most MAX_FREEPTS, the last kept */
+    if (step < 1) step = 1;
+    for (i = 0, n = 0; i < m; i += step) { pt[2 * n] = pt[2 * i]; pt[2 * n + 1] = pt[2 * i + 1]; n++; }
+    if (pt[2 * n - 2] != pt[2 * m - 2] || pt[2 * n - 1] != pt[2 * m - 1]) { pt[2 * n] = pt[2 * m - 2]; pt[2 * n + 1] = pt[2 * m - 1]; n++; }
+    for (i = 0; i < n; i++) {
+        if (pt[2 * i] < minx) minx = pt[2 * i];
+        if (pt[2 * i] > maxx) maxx = pt[2 * i];
+        if (pt[2 * i + 1] < miny) miny = pt[2 * i + 1];
+        if (pt[2 * i + 1] > maxy) maxy = pt[2 * i + 1];
+    }
+    if (maxx <= minx) maxx = (short)(minx + 1);
+    if (maxy <= miny) maxy = (short)(miny + 1);
+    for (i = 0; i < n; i++) {
+        nrm[2 * i] = (short)((long)(pt[2 * i] - minx) * FREE_ONE / (maxx - minx));
+        nrm[2 * i + 1] = (short)((long)(pt[2 * i + 1] - miny) * FREE_ONE / (maxy - miny));
+    }
+    at = free_add(dw.d, nrm, n);
+    if (at < 0) return 0;
+    s = &o->sh[o->nsh];
+    memset(s, 0, sizeof *s);
+    s->type = SH_FREE;
+    s->fill = FL_NONE;
+    s->lw = (unsigned char)(dw.lw ? dw.lw : 1);
+    s->color = (unsigned char)dw.color;
+    s->x1 = minx; s->y1 = miny; s->x2 = maxx; s->y2 = maxy;
+    s->p0 = at; s->np = (short)n;
+    dw.sel = o->nsh++;
+    return 1;
+}
+
 static SHAPE *cur_shape(void)
 {
     OBJ *o = dobj();
@@ -644,7 +831,7 @@ static void button(int b, GRECT *wa)
     short px = (short)(dw.w->LeftEdge + wa->g_x + dw.bt[b].g_x), py = (short)(dw.w->TopEdge + wa->g_y + dw.bt[b].g_y + dw.bt[b].g_h);
     int k, v;
     if (!o) return;
-    if (b < 6) { dw.tool = b; if (b != T_SELECT) dw.sel = -1; dw_redraw(); return; }
+    if (b < NTOOLS) { dw.tool = b; if (b != T_SELECT) dw.sel = -1; dw_redraw(); return; }
     switch (b) {
     case B_FILL:
         for (k = 0; k < NFILLS; k++) items[k] = L(fills[k]);
@@ -743,9 +930,9 @@ static void dw_click(short mx, short my)
                 short ax = t->x1 < t->x2 ? t->x1 : t->x2, bx = t->x1 < t->x2 ? t->x2 : t->x1;
                 short ay = t->y1 < t->y2 ? t->y1 : t->y2, by = t->y1 < t->y2 ? t->y2 : t->y1;
                 if (ax + dx < 0) dx = (short)-ax;
-                if (bx + dx > o->w) dx = (short)(o->w - bx);
+                if (bx + dx > o->w / TWIPS) dx = (short)(o->w / TWIPS - bx);
                 if (ay + dy < 0) dy = (short)-ay;
-                if (by + dy > o->h) dy = (short)(o->h - by);
+                if (by + dy > o->h / TWIPS) dy = (short)(o->h / TWIPS - by);
             }
             t->x1 += dx; t->x2 += dx; t->y1 += dy; t->y2 += dy;
             dw_changed();
@@ -753,12 +940,19 @@ static void dw_click(short mx, short my)
         return;
     }
     if (o->nsh >= MAX_SHAPES) { track_end(); alert(1, 3, AL_TOO_MANY_SHAPES, AB_OK); return; }
+    if (dw.tool == T_FREE) {
+        static short sxy[2 * FH_MAX];
+        int n = freehand(mx, my, &cv, sxy);
+        if (n >= 2 && freehand_shape(o, sxy, n)) dw_changed();
+        else dw_redraw();
+        return;
+    }
     if (!rubber(dw.tool, mx, my, &x2, &y2)) return;
     to_pt(x2, y2, &qx, &qy);
     if (qx == px && qy == py) return;
     {
         SHAPE *s = &o->sh[o->nsh];
-        static const unsigned char types[6] = { 0, SH_RECT, SH_RRECT, SH_ELLIPSE, SH_LINE, SH_TRI };
+        static const unsigned char types[NTOOLS] = { 0, SH_RECT, SH_RRECT, SH_ELLIPSE, SH_LINE, SH_TRI, SH_FREE };
         memset(s, 0, sizeof *s);
         s->type = types[dw.tool];
         s->fill = (unsigned char)(s->type == SH_LINE ? FL_NONE : dw.fill);

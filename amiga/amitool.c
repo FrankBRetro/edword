@@ -18,7 +18,7 @@
 /*  Font selector                                                     */
 /* ================================================================= */
 
-static const short fsz[] = { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72 };
+static const short fsz[] = { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72, 96, 120, 150 };
 #define NFSZ ((int)(sizeof fsz / sizeof fsz[0]))
 enum { FG_FONTS = 1, FG_SIZES, FG_BOLD, FG_ITALIC, FG_UNDER, FG_APPLY, FG_CLOSE };
 
@@ -138,8 +138,17 @@ void fontsel_open(void)
 {
     struct NewGadget ng;
     struct Gadget *gad;
-    long lh = 9 * (hchar + 1) + 4, top = hchar + 8, W = 420, H, x, bt, bl;
+    long lh = 9 * (hchar + 1) + 4, top = hchar + 8, W, H, x, bt, bl, lw = 200, sw = 0;
     int i;
+    /* the font list as wide as the longest name (Speedo names are long) */
+    for (i = 0; i < nfonts; i++) if (sys_width(fonts[i].name) + 30 > lw) lw = sys_width(fonts[i].name) + 30;
+    for (i = 0; i < 3; i++) {
+        static const int sty[3] = { S_BOLD, S_ITALIC, S_UNDERLINE };
+        if (sys_width(L(sty[i])) > sw) sw = sys_width(L(sty[i]));
+    }
+    if (lw > scr_w - 64 - 3 * wchar - 70 - sw) lw = scr_w - 64 - 3 * wchar - 70 - sw;
+    W = 10 + lw + 10 + 64 + 16 + dlg_cbw() + 8 + sw + 10;
+    if (W < 420) W = 420;
     if (fs.open) { WindowToFront(fs.w); ActivateWindow(fs.w); fs.font = -1; fontsel_sync(); return; }
     H = top + lh + 10 + (small_icons ? 36 : 56) + 10 + hchar + 6 + 10;
     sprintf(fs.title, "%s", L(S_FONT));
@@ -156,17 +165,18 @@ void fontsel_open(void)
     memset(&ng, 0, sizeof ng);
     ng.ng_TextAttr = &sysattr;
     ng.ng_VisualInfo = vi;
-    ng.ng_LeftEdge = (WORD)(bl + 10); ng.ng_TopEdge = (WORD)(bt + top); ng.ng_Width = 200; ng.ng_Height = (WORD)lh;
+    ng.ng_LeftEdge = (WORD)(bl + 10); ng.ng_TopEdge = (WORD)(bt + top); ng.ng_Width = (WORD)lw; ng.ng_Height = (WORD)lh;
     ng.ng_GadgetText = (UBYTE *)L(S_FONT); ng.ng_Flags = PLACETEXT_ABOVE | NG_HIGHLABEL; ng.ng_GadgetID = FG_FONTS;
     gad = fs.g[FG_FONTS] = CreateGadget(LISTVIEW_KIND, gad, &ng, GTLV_Labels, (ULONG)&fs.flist, GTLV_ShowSelected, 0, TAG_END);
-    ng.ng_LeftEdge = (WORD)(bl + 220); ng.ng_Width = 64;
+    ng.ng_LeftEdge = (WORD)(bl + 20 + lw); ng.ng_Width = 64;
     ng.ng_GadgetText = (UBYTE *)L(S_SIZE); ng.ng_GadgetID = FG_SIZES;
     gad = fs.g[FG_SIZES] = CreateGadget(LISTVIEW_KIND, gad, &ng, GTLV_Labels, (ULONG)&fs.slist, GTLV_ShowSelected, 0, TAG_END);
     for (i = 0; i < 3; i++) {
         static const int sty[3] = { S_BOLD, S_ITALIC, S_UNDERLINE };
-        ng.ng_LeftEdge = (WORD)(bl + 300); ng.ng_TopEdge = (WORD)(bt + top + i * (hchar + 10)); ng.ng_Width = 26; ng.ng_Height = 11;
+        ng.ng_LeftEdge = (WORD)(bl + 20 + lw + 64 + 16); ng.ng_TopEdge = (WORD)(bt + top + i * (hchar + 10));
+        ng.ng_Width = dlg_cbw(); ng.ng_Height = dlg_cbh();
         ng.ng_GadgetText = (UBYTE *)L(sty[i]); ng.ng_Flags = PLACETEXT_RIGHT; ng.ng_GadgetID = (UWORD)(FG_BOLD + i);
-        gad = fs.g[FG_BOLD + i] = CreateGadget(CHECKBOX_KIND, gad, &ng, TAG_END);
+        gad = fs.g[FG_BOLD + i] = CreateGadget(CHECKBOX_KIND, gad, &ng, GTCB_Scaled, TRUE, TAG_END);
     }
     fs.pv.g_x = (short)(bl + 10); fs.pv.g_y = (short)(bt + top + lh + 10);
     fs.pv.g_w = (short)(W - 20); fs.pv.g_h = (short)(small_icons ? 36 : 56);
@@ -314,7 +324,7 @@ static void pv_draw(void)
     gfx_begin(pv.w);
     /* the page count beside the buttons */
     sprintf(pv.label, L(S_PAGE_N_OF), pv.page + 1, doc_npages(pv.d));
-    fill_rect(pv.lx, pv.w->BorderTop + 2, pv.lx + sys_width(pv.label) + 40, pv.w->BorderTop + pv.barh - 3, P_GREY);
+    fill_rect(pv.lx, pv.w->BorderTop + 2, pv.lx + sys_width(pv.label) + 40, pv.w->BorderTop + pv.barh - 3, P_TFACE);
     sys_text(pv.lx, pv.w->BorderTop + (pv.barh - hchar) / 2, pv.label, P_BLACK);
     pv_area(&a);
     if (a.g_w > 0 && a.g_h > 0) {

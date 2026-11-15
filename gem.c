@@ -23,7 +23,7 @@ int   safe_mode, no_arbpt;
 DOC  *docs[MAX_DOCS];               /* made when first needed, then kept */
 char  progdir[256];
 const short sizes[NSIZES] = { 8, 9, 10, 12, 14, 18, 24, 36 };
-const short zooms[NZOOM] = { 50, 75, 100, 125, 150, 200 };
+const short zooms[NZOOM] = { 50, 75, 100, 125, 150, 200, 300, 400, 500 };
 short ap_id;
 static int   untitled_no;
 

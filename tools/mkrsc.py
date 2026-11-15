@@ -353,7 +353,7 @@ def dlg_wrap(L):
 
 def dlg_size(L):
     g = Dlg(L('S_SIZE_TITLE'))
-    g.label(L('S_POINT_SIZE')); g.edit(None, 3, b'(4-120)', digits(3), b'', 'SIZE')
+    g.label(L('S_POINT_SIZE')); g.edit(None, 3, b'(4-150)', digits(3), b'', 'SIZE')
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_BTN_OK'), 'OK', DEFAULT)
     return g.build('SIZE')

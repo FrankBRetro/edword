@@ -922,7 +922,7 @@ int dlg_size(int *size)
     dlg_tree_end(&g);
     if (dlg_run(&g) != DSZ_OK) return 0;
     v = atoi(sz);
-    if (v < 4 || v > 120) return 0;
+    if (v < 4 || v > 150) return 0;
     *size = v;
     return 1;
 }
@@ -1322,7 +1322,7 @@ int dlg_headfoot(DOC *d)
         for (k = 0; k < 3; k++) if (dlg_on(&g, (short)((i ? DHF_J10 : DHF_J00) + k))) HF(d).just[i] = (unsigned char)k;
     }
     v = atoi(sz);
-    HF(d).size = (unsigned char)(v < 4 ? 4 : v > 72 ? 72 : v);
+    HF(d).size = (unsigned char)(v < 4 ? 4 : v > 150 ? 150 : v);
     HF(d).first = (unsigned char)dlg_on(&g, DHF_FIRST);
     d->dirty = 1;
     return 1;

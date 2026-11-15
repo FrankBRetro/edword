@@ -9,10 +9,12 @@
 #   make                         EdWord (the program, Workbench 2.04 and newer)
 #   make AMI13=1                 EdWord13, for Workbench 1.2 and 1.3
 #   make icons                   EdWord.info, EdWord13.info, EdWordDoc.info
-#   make ED_VERSION=3.1          set the version shown in the About box
+#   make ED_VERSION=3.1          set the version shown in the About box (else gemui.h's)
 #
-# PATH must hold m68k-amiga-elf-gcc and elf2hunk, e.g.
-#   export PATH=$HOME/.vscode/extensions/bartmanabyss.amiga-debug-*/bin/linux/opt/bin:$HOME/.vscode/extensions/bartmanabyss.amiga-debug-*/bin/linux:$PATH
+# PATH must hold m68k-amiga-elf-gcc and elf2hunk (bin/darwin on a Mac,
+# bin/linux on Linux, bin/win32 on Windows), e.g.
+#   T=$(ls -d $HOME/.vscode/extensions/bartmanabyss.amiga-debug-* | tail -1)/bin/darwin
+#   export PATH=$T/opt/bin:$T:$PATH
 
 CC      = m68k-amiga-elf-gcc
 AS      = m68k-amiga-elf-as
@@ -25,7 +27,9 @@ ASFLAGS = -mcpu=68000 --register-prefix-optional
 ifdef EDLOG
 CFLAGS += -DEDLOG
 endif
-ifdef ED_VERSION
+# the version is the Atari version's (gemui.h) unless given
+ED_VERSION ?= $(shell sed -n 's/.*define ED_VERSION "\([^"]*\)".*/\1/p' ../gemui.h)
+ifneq ($(ED_VERSION),)
 CFLAGS += -DED_VERSION='"$(ED_VERSION)"'
 endif
 ifdef ED_ABOUT
@@ -44,8 +48,9 @@ EXTRA   =
 endif
 
 CORE    = doc layout edit undo docops rtf pdf pagedraw raster img thes charset text codes spell md fwp protext chart prt
-UI      = ami amiwin amigfx amirend amidlg amitwin amitool amiobj amiclip $(EXTRA)
-OBJS    = $(B)/start.o $(addprefix $(B)/,$(addsuffix .o,$(UI) $(CORE))) $(B)/lang.o $(B)/libc.o $(B)/arith.o
+UI      = ami amiwin amigfx amirend amidlg amitwin amitool amiobj amiclip amitheme amispd $(EXTRA)
+SPD     = spd raster charmap xfix sintab
+OBJS    = $(B)/start.o $(addprefix $(B)/,$(addsuffix .o,$(UI) $(CORE))) $(addprefix $(B)/spd_,$(addsuffix .o,$(SPD))) $(B)/lang.o $(B)/libc.o $(B)/arith.o
 
 all: $(PROG)
 
@@ -75,6 +80,9 @@ $(B)/lang.o: $(B)/lang.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 $(B)/%.o: %.c amiui.h ami13.h ../wp.h $(B)/lang.h $(B)/cflags
 	$(CC) $(CFLAGS) -c -o $@ $<
+$(B)/spd_%.o: spd/%.c $(B)/cflags
+	@mkdir -p $(B)
+	$(CC) $(CFLAGS) -Wno-misleading-indentation -c -o $@ $<
 $(B)/%.o: ../%.c ../wp.h $(B)/cflags
 	@mkdir -p $(B)
 	$(CC) $(CFLAGS) -c -o $@ $<

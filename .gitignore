@@ -7,6 +7,7 @@ hosttest
 mkdic
 MKDIC.TTP
 amiga/build/
+amiga/build13/
 win/build/
 .DS_Store
 tools/__pycache__/

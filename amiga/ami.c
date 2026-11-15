@@ -7,6 +7,7 @@
 #include <devices/timer.h>
 #include <graphics/gfxbase.h>
 #include <graphics/displayinfo.h>
+#include <graphics/videocontrol.h>
 #include <intuition/intuitionbase.h>
 #include <intuition/gadgetclass.h>
 #include <libraries/locale.h>
@@ -14,7 +15,18 @@
 #include <workbench/startup.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <dos/dostags.h>
+#ifndef AMI13
+#include <rexx/storage.h>
+#include <rexx/errors.h>
+#include <proto/rexxsyslib.h>
+#endif
 #include <proto/graphics.h>
+#include <proto/diskfont.h>
+#ifndef AMI13
+#include <proto/icon.h>
+#include <workbench/workbench.h>
+#endif
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
 #include <proto/utility.h>
@@ -47,9 +59,11 @@ int   colour_on = 1, pdf_scale = 1, quit_now;
 DOC  *docs[MAX_DOCS];               /* made when first needed, then kept */
 char  progdir[256] = "PROGDIR:";
 const short sizes[NSIZES] = { 8, 9, 10, 12, 14, 18, 24, 36 };
-const short zooms[NZOOM] = { 50, 75, 100, 125, 150, 200 };
+const short zooms[NZOOM] = { 50, 75, 100, 125, 150, 200, 300, 400, 500 };
 static int  untitled_no;
 static char sysname[40];
+char app_name[16] = "EDWORD.1";          /* the public screen's and the ARexx port's name */
+static int pub_up;                       /* our screen is public */
 
 /* ================================================================= */
 /*  Preferences, kept in EdWord.prefs next to the program              */
@@ -58,13 +72,14 @@ static char sysname[40];
 int pref_date = DT_SHORT, pref_toolbar = 1, pref_paper = P_A4, pref_land;
 int pref_autosave, pref_asmin = 5, pref_asmode, pref_display, pref_live;
 int pref_rulers, pref_guides = 1;
+int pref_icons = 1;                         /* Settings > Create Icons? */
+struct Library *IconBase;
 static int pref_lang = -1, pref_spell = -1;
-int pref_screen = SCR_HIRES;                /* the screen EdWord opens on */
+int pref_screen = SCR_LACE;                 /* the screen EdWord opens on */
 unsigned long pref_modeid;                  /* SCR_OTHER: its display mode... */
 int pref_scrw, pref_scrh, pref_scrdepth;    /* ...size and depth */
 int on_wb;                                  /* running on the Workbench screen */
-UBYTE penmap[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-static int pens_obtained;
+int pref_colours;                           /* own screen: 4 16 colours... 8 256; 0 32 */
 
 static void prefs_path(char *p) { sprintf(p, "%sEdWord.prefs", progdir); }
 
@@ -81,7 +96,7 @@ static void load_prefs(void)
         if (!eq) continue;
         *eq = 0;
         v = atoi(eq + 1);
-        if (!strcmp(line, "date") && v >= 0 && v < NDATEFMT) pref_date = v;
+        if (!strcmp(line, "date") && v >= 0 && v <= DT_DOTS && v != DT_TIME) pref_date = v;
         else if (!strcmp(line, "toolbar")) pref_toolbar = v != 0;
         else if (!strcmp(line, "colour")) colour_on = v != 0;
         else if (!strcmp(line, "pdfscale") && v >= 1 && v <= 3) pdf_scale = v;
@@ -100,7 +115,10 @@ static void load_prefs(void)
         else if (!strcmp(line, "screenmode")) pref_modeid = strtoul(eq + 1, NULL, 16);
         else if (!strcmp(line, "screenw") && v >= 0 && v <= 4096) pref_scrw = v;
         else if (!strcmp(line, "screenh") && v >= 0 && v <= 4096) pref_scrh = v;
-        else if (!strcmp(line, "screendepth") && v >= 0 && v <= 8) pref_scrdepth = v;
+        else if (!strcmp(line, "screendepth") && v >= 0 && v <= 32) pref_scrdepth = v;
+        else if (!strcmp(line, "colours") && v >= 0 && v <= 32) pref_colours = v;
+        else if (!strcmp(line, "theme") && v >= 0 && v < NTHEMES) theme_id = v;
+        else if (!strcmp(line, "icons")) pref_icons = v != 0;
     }
     fclose(f);
 }
@@ -114,10 +132,11 @@ void save_prefs(void)
     if (!f) { alert(1, 3, AL_NO_INF, AB_OK); return; }
     fprintf(f, "date=%d\ntoolbar=%d\ncolour=%d\npdfscale=%d\npaper=%d\nlandscape=%d\n"
                "autosave=%d\nautosavemin=%d\nautosavemode=%d\ndisplay=%d\nlanguage=%d\nlivespell=%d\n"
-               "rulers=%d\nguides=%d\nspelllang=%d\nscreen=%d\nscreenmode=%lx\nscreenw=%d\nscreenh=%d\nscreendepth=%d\n",
+               "rulers=%d\nguides=%d\nspelllang=%d\nscreen=%d\nscreenmode=%lx\nscreenw=%d\nscreenh=%d\nscreendepth=%d\n"
+               "colours=%d\ntheme=%d\nicons=%d\n",
             pref_date, pref_toolbar, colour_on, pdf_scale, pref_paper, pref_land,
             pref_autosave, pref_asmin, pref_asmode, pref_display, ui_lang, pref_live, pref_rulers, pref_guides, spell_lang,
-            pref_screen, pref_modeid, pref_scrw, pref_scrh, pref_scrdepth);
+            pref_screen, pref_modeid, pref_scrw, pref_scrh, pref_scrdepth, pref_colours, theme_id, pref_icons);
     fclose(f);
 }
 
@@ -318,7 +337,7 @@ static void build_menu(void)
     ITEM(M_PAGE, NULL, C_PAGE); ITEM(M_HEADFOOT, NULL, C_HEADFOOT); ITEM(M_PREVIEW, NULL, C_PREVIEW);
     ITEM(M_PRINT, "P", C_PRINT); BAR();
     ITEM(M_CLOSE, "W", C_CLOSE); BAR();
-    ITEM(M_ABOUT, "?", C_ABOUT); BAR();
+    ITEM(S_AMI_HELP, NULL, C_HELP); ITEM(M_ABOUT, "?", C_ABOUT); BAR();
     ITEM(M_QUIT, "Q", C_QUIT);
 
     indent = 0;
@@ -382,24 +401,33 @@ static void build_menu(void)
     ITEM(M_SUMMARY, NULL, C_SUMMARY); BAR();
     ITEM(M_UDLOAD, NULL, C_UDLOAD); ITEM(M_UDNEW, NULL, C_UDNEW); BAR();
     for (i = 0; i < MAX_UDICT; i++) DITEM_(pad(60 + i, L(S_NO_UDICT), 26), C_UD0 + i);
-    BAR(); ITEM(M_PREFS, NULL, C_PREFS);
+
 
     indent = 1;
     TITLE(MT_WINDOW);
     CITEM(M_VDOC, NULL, C_VDOC); CITEM(M_SPLIT, NULL, C_SPLIT); CITEM(M_VCODES, NULL, C_VCODES); BAR();
-    ITEM(M_ZOOMIN, NULL, C_ZOOMIN); ITEM(M_ZOOMOUT, NULL, C_ZOOMOUT); BAR();
+    ITEM(M_ZOOMIN, NULL, C_ZOOMIN); ITEM(M_ZOOMOUT, NULL, C_ZOOMOUT);
+    CITEM(M_ZOOMFIT, NULL, C_ZOOMFIT); CITEM(M_ZOOMPAGE, NULL, C_ZOOMPAGE); BAR();
     CITEM(M_TOOLBAR, NULL, C_TOOLBAR); CITEM(M_RULERS, NULL, C_RULERS); CITEM(M_GUIDES, NULL, C_GUIDES); BAR();
     ITEM(M_TILEV, NULL, C_TILEV); ITEM(M_TILEH, NULL, C_TILEH); ITEM(M_CASCADE, NULL, C_CASCADE); BAR();
     CITEM(M_ICONIFY, "M", C_ICONIFY); ITEM(M_ICONALL, NULL, C_ICONALL); ITEM(M_BOTTOM, NULL, C_BOTTOM);
     ITEM(M_CYCLE, NULL, C_CYCLE); BAR();
     /* as many documents as fit, then "More windows..." */
     rows = (scr_h - desk.g_y) / (hchar + 1) - 1;
-    win_items = rows - 21;
+    win_items = rows - 24;
     if (win_items > MAX_DOCS) win_items = MAX_DOCS;
     if (win_items > 9) win_items = 9;
     if (win_items < 1) win_items = 1;
     for (i = 0; i < win_items; i++) DITEM_(pad(70 + i, "-", 24), C_WIN0 + i);
     if (win_items < MAX_DOCS) ITEM(M_WINMORE, NULL, C_WINMORE);
+
+    /* the style guide's Settings menu, last */
+    indent = 1;
+    TITLE(S_AMI_SETTINGS);
+#ifndef AMI13
+    CITEM(S_AMI_CREATEICONS, NULL, C_ICONS); BAR();
+#endif
+    ITEM(M_PREFS, NULL, C_PREFS); ITEM(M_THEME, NULL, C_THEME);
     nm_add(NM_END, NULL, NULL, 0, 0);
     (void)titlebuf;
 }
@@ -416,6 +444,29 @@ static void map_items(void)
         }
 }
 
+/* In menus with check marks, items without one start with two spaces;
+ * they are moved so their text lines up exactly with the checked ones'
+ * (the check mark's width depends on the screen) */
+static void align_items(void)
+{
+    struct Menu *m;
+    struct MenuItem *it;
+    long sp = sys_width("  ");
+    for (m = strip; m; m = m->NextMenu) {
+        long cl = -1;
+        for (it = m->FirstItem; it; it = it->NextItem)
+            if ((it->Flags & CHECKIT) && (it->Flags & ITEMTEXT)) { cl = ((struct IntuiText *)it->ItemFill)->LeftEdge; break; }
+        if (cl < 0) continue;
+        for (it = m->FirstItem; it; it = it->NextItem) {
+            struct IntuiText *t = (struct IntuiText *)it->ItemFill;
+            if ((it->Flags & CHECKIT) || !(it->Flags & ITEMTEXT) || !t || !t->IText) continue;
+            if (t->IText[0] != ' ' || t->IText[1] != ' ') continue;
+            if (cl >= sp) t->LeftEdge = (WORD)(cl - sp);
+            else { t->IText += 2; t->LeftEdge = (WORD)cl; }     /* a narrower check mark */
+        }
+    }
+}
+
 static int make_strip(void)
 {
     build_menu();
@@ -426,6 +477,7 @@ static int make_strip(void)
         strip = NULL;
         return 0;
     }
+    align_items();
     map_items();
     return 1;
 }
@@ -496,6 +548,7 @@ void update_menu(DOC *d)
     if (!strip) return;
     for (i = 0; i < NCOLORS; i++) enable(C_COLOR0 + i, colour_on);
     check(C_LIVESPELL, pref_live);
+    check(C_ICONS, pref_icons);
     for (i = 0; i < MAX_UDICT; i++) {
         if (i < spell_nuser) {
             const char *s = strrchr(spell_upath[i], '/');
@@ -525,7 +578,12 @@ void update_menu(DOC *d)
         enable(C_TBLINS, !intbl);
         enable(C_ZOOMIN, d->view != VIEW_CODES && d->zoom < zooms[NZOOM - 1]);
         enable(C_ZOOMOUT, d->view != VIEW_CODES && d->zoom > zooms[0]);
+        enable(C_ZOOMFIT, d->view != VIEW_CODES);
+        enable(C_ZOOMPAGE, d->view != VIEW_CODES);
     }
+    enable(C_THEME, theme_possible());
+    check(C_ZOOMFIT, d && d->fitw == FIT_WIDTH);
+    check(C_ZOOMPAGE, d && d->fitw == FIT_PAGE);
     for (i = 0; i < font_items; i++) check(C_FONT0 + i, d && i == d->ins.font);
     for (i = 0; i < NSIZES; i++) check(C_SIZE0 + i, d && sizes[i] == d->ins.size);
     for (i = 0; i < NCOLORS; i++) check(C_COLOR0 + i, d && i == d->ins.color);
@@ -630,6 +688,9 @@ DOC *doc_of_win(struct Window *w)
 }
 
 static DOC *last_doc;
+static void screen_restart(void);
+static int screen_release(void);
+static void screen_public(void);
 
 /* the active window, if it is one of ours */
 static struct Window *active_win(void)
@@ -698,6 +759,7 @@ static DOC *new_doc(void)
             docs[i]->used = 1;
             docs[i]->wh = -1;
             docs[i]->slot = i;
+            theme_set_doc(i, -1);
             return docs[i];
         }
     alert(1, 1, AL_FOUR_DOCS, AB_OK, MAX_DOCS);
@@ -756,6 +818,8 @@ static int text_name(const char *s)
 /* Read a file as type (FT_AUTO: what it turns out to be, plain text if
  * nothing else) into a new window, or into 'into' at its cursor. Plain
  * text uses cs and join, or with ask asks how to read it. */
+static int is_ewr(const char *path);
+
 int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
 {
     static DOC tmp;
@@ -800,7 +864,9 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
         return ok;
     }
     base_name(d, path);
-    if (type == FT_RTF) strncpy(d->path, path, sizeof d->path - 1);
+    /* EdWord's own file is saved where it was; anything else (an RTF
+     * too) is saved as one, under a new name */
+    if (type == FT_RTF && is_ewr(path)) strncpy(d->path, path, sizeof d->path - 1);
     prog_part(650, 1000);
     doc_loaded(d);
     busy_end();
@@ -808,6 +874,10 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
     open_window(d);
     return 1;
 }
+
+/* EdWord's own document (.ewr): RTF with EdWord's own group, which other
+ * readers skip. An .rtf is read the same way, but saved as an .ewr. */
+static int is_ewr(const char *path) { return ends_with(path, ".EWR"); }
 
 /* text: 0 open (RTF, or what the file turns out to be), 1 import (plain
  * text asks how to read it) */
@@ -829,11 +899,88 @@ static void default_name(DOC *d, const char *ext, char *def)
 static int save_as(DOC *d)
 {
     char path[256], def[60];
-    default_name(d, ".rtf", def);
-    if (!ask_file(L(S_FS_SAVE), "#?.rtf", def, path, 1)) return 0;
+    default_name(d, ".ewr", def);
+    if (!ask_file(L(S_FS_SAVE), "#?.ewr", def, path, 1)) return 0;
     strcpy(d->path, path);
     base_name(d, path);
     return 1;
+}
+
+/* The program's full path, for a document icon's default tool: its
+ * drawer and the name it was started as (from the Shell or Workbench) */
+static int prog_path(char *out, long n)
+{
+#ifdef AMI13
+    (void)out; (void)n;
+    return 0;
+#else
+    char name[108];
+    BPTR dir = GetProgramDir();
+    name[0] = 0;
+    if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 0 && _WBenchMsg->sm_ArgList[0].wa_Name)
+        strncpy(name, (const char *)_WBenchMsg->sm_ArgList[0].wa_Name, sizeof name - 1);
+    else if (!GetProgramName((STRPTR)name, sizeof name)) return 0;
+    name[sizeof name - 1] = 0;
+    if (!dir || !NameFromLock(dir, (STRPTR)out, n)) return 0;
+    return AddPart((STRPTR)out, FilePart((STRPTR)name), n) != 0;
+#endif
+}
+
+/* Settings > Create Icons?: a saved document gets a project icon (where
+ * it has none) that opens it in EdWord, as the style guide has it */
+static void write_icon(const char *path)
+{
+#ifndef AMI13
+    struct DiskObject *o;
+    char tool[256];
+    if (!pref_icons || !IconBase) return;
+    o = GetDiskObject((STRPTR)path);
+    if (o) { FreeDiskObject(o); return; }           /* keep the one it has */
+    /* EdWord's own document icon from its drawer, else the system's */
+    if (NameFromLock(GetProgramDir(), (STRPTR)tool, sizeof tool - 12) && AddPart((STRPTR)tool, (STRPTR)"EdWordDoc", sizeof tool))
+        o = GetDiskObject((STRPTR)tool);
+    if (!o) o = GetDefDiskObject(WBPROJECT);
+    if (!o) return;
+    if (prog_path(tool, sizeof tool)) o->do_DefaultTool = (STRPTR)tool;
+    o->do_CurrentX = o->do_CurrentY = NO_ICON_POSITION;
+    PutDiskObject((STRPTR)path, o);
+    FreeDiskObject(o);
+#else
+    (void)path;
+#endif
+}
+
+/* Help (the Help key, Project > EdWord Help...): EdWord.guide from
+ * EdWord's drawer, in MultiView (AmigaGuide on 2.x) on EdWord's own
+ * screen, running beside EdWord */
+static void show_help(void)
+{
+#ifdef AMI13
+    do_cmd(C_ABOUT);
+#else
+    static const char *viewers[] = { "SYS:Utilities/MultiView", "SYS:Utilities/AmigaGuide", "SYS:Tools/AmigaGuide", NULL };
+    char guide[300], cmd[500];
+    BPTR l, in, out;
+    int i;
+    if (!NameFromLock(GetProgramDir(), (STRPTR)guide, sizeof guide - 20)) strcpy(guide, "PROGDIR:");
+    AddPart((STRPTR)guide, (STRPTR)"EdWord.guide", sizeof guide);
+    l = Lock((STRPTR)guide, ACCESS_READ);
+    if (!l) { alert(1, 3, AL_AMI_NOHELP, AB_OK); return; }
+    UnLock(l);
+    for (i = 0; viewers[i]; i++) {
+        l = Lock((STRPTR)viewers[i], ACCESS_READ);
+        if (l) { UnLock(l); break; }
+    }
+    if (!viewers[i]) { alert(1, 3, AL_AMI_NOHELP, AB_OK); return; }
+    if (on_wb) sprintf(cmd, "%s \"%s\"", viewers[i], guide);
+    else sprintf(cmd, "%s \"%s\" PUBSCREEN %s", viewers[i], guide, app_name);
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    if (SystemTags((STRPTR)cmd, SYS_Input, (ULONG)in, SYS_Output, (ULONG)out, SYS_Asynch, TRUE, TAG_END) == -1) {
+        if (in) Close(in);
+        if (out) Close(out);
+    }
+#endif
 }
 
 static int cmd_save(DOC *d, int ask)
@@ -844,6 +991,7 @@ static int cmd_save(DOC *d, int ask)
     ok = rtf_export(d, d->path);
     busy_end();
     if (!ok) { alert(1, 3, AL_CANT_SAVE, AB_OK); return 0; }
+    write_icon(d->path);
     set_name(d);
     update_winmenu();
     return 1;
@@ -888,7 +1036,7 @@ int export_doc(DOC *d, int fmt, int crlf, int cs, char *written)
         return ok;
     }
     busy_begin(L(S_EXPORTING));
-    ok = doc_write(d, path, fmt, crlf, cs);
+    ok = fmt == FT_RTF ? rtf_export_std(d, path) : doc_write(d, path, fmt, crlf, cs);
     busy_end();
     return ok;
 }
@@ -942,6 +1090,7 @@ static void cmd_exptxt(DOC *d)
 int close_doc(DOC *d)
 {
     int i;
+    caret_unblink();
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
     if (d->dirty) {
         int r = alert(1, 2, AL_SAVE_CHANGES, AB_SAVE_DISCARD, lat(d->base));
@@ -967,8 +1116,9 @@ int close_doc(DOC *d)
 static void cmd_quit(void)
 {
     int i;
+    if (!screen_release()) return;
     for (i = 0; i < MAX_DOCS; i++)
-        if (DOC_USED(i) && !close_doc(docs[i])) return;
+        if (DOC_USED(i) && !close_doc(docs[i])) { screen_public(); return; }
     quit_now = 1;
 }
 
@@ -1229,6 +1379,13 @@ void do_cmd(int cmd)
     case C_TILEV:  tile_windows(0); return;
     case C_TILEH:  tile_windows(1); return;
     case C_CASCADE: tile_windows(2); return;
+    case C_ICONS:
+        pref_icons = !pref_icons;
+        save_prefs();
+        return;
+    case C_HELP:
+        show_help();
+        return;
     case C_LIVESPELL:
         pref_live = !pref_live;
         if (pref_live) spell_ensure(0);
@@ -1236,9 +1393,19 @@ void do_cmd(int cmd)
         update_menu(d);
         all_windows_refresh();
         return;
+    case C_THEME:
+        if (dlg_theme()) save_prefs();
+        return;
     case C_PREFS: {
-        int lang = ui_lang;
+        int lang = ui_lang, os = pref_screen, oc = pref_colours, ow = pref_scrw, oh = pref_scrh, od = pref_scrdepth;
+        unsigned long om = pref_modeid;
         if (dlg_prefs()) {
+            if (os != pref_screen || oc != pref_colours || ow != pref_scrw || oh != pref_scrh || od != pref_scrdepth ||
+                om != pref_modeid) {
+                save_prefs();
+                screen_restart();
+                return;
+            }
             if (pref_live) spell_ensure(0);
             save_prefs();
             autosave_reset();
@@ -1386,14 +1553,15 @@ void do_cmd(int cmd)
     case C_VCODES:  set_view(d, d->view == VIEW_CODES ? VIEW_DOC : VIEW_CODES); break;
     case C_ZOOMIN:
     case C_ZOOMOUT: {
+        /* the next size in the list, up or down (from a fit, the nearest) */
         int i, z = d->zoom;
-        for (i = 0; i < NZOOM; i++) if (zooms[i] == d->zoom) break;
-        if (i == NZOOM) i = 2;
-        i += cmd == C_ZOOMIN ? 1 : -1;
-        if (i >= 0 && i < NZOOM) z = zooms[i];
+        if (cmd == C_ZOOMIN) { for (i = 0; i < NZOOM && zooms[i] <= d->zoom; i++) ; if (i < NZOOM) z = zooms[i]; }
+        else { for (i = NZOOM - 1; i >= 0 && zooms[i] >= d->zoom; i--) ; if (i >= 0) z = zooms[i]; }
         set_zoom(d, z);
         break;
     }
+    case C_ZOOMFIT:  set_fit_width(d, d->fitw == FIT_WIDTH ? 0 : FIT_WIDTH); break;
+    case C_ZOOMPAGE: set_fit_width(d, d->fitw == FIT_PAGE ? 0 : FIT_PAGE); break;
     case C_TOOLBAR: set_toolbar(d, !d->toolbar); break;
     case C_SPELL:   spell_run(d); break;
     case C_THES:    thes_run(d); break;
@@ -1416,10 +1584,10 @@ static int special_key(int key, int qual)
     case K_F5:  do_cmd(C_SPLIT); return 1;
     case K_F6:  do_cmd(C_VCODES); return 1;
     case K_F7:  do_cmd(shift ? C_THES : C_ZOOMOUT); return 1;
-    case K_F8:  do_cmd(C_ZOOMIN); return 1;
+    case K_F8:  do_cmd(shift ? C_ZOOMFIT : C_ZOOMIN); return 1;
     case K_F9:  do_cmd(C_BULLETS); return 1;
     case K_F10: do_cmd(C_NUMBERS); return 1;
-    case K_HELP: do_cmd(C_ABOUT); return 1;
+    case K_HELP: do_cmd(C_HELP); return 1;
     }
     return 0;
 }
@@ -1617,6 +1785,7 @@ static void dispatch(struct IntuiMessage *m)
         upd_top = (LONG)GetTagData(PGA_Top, (ULONG)-1L, (struct TagItem *)m->IAddress);
     }
     GT_ReplyIMsg(m);
+    if (cm.Class != IDCMP_INTUITICKS) caret_unblink();   /* the caret back before anything else */
     switch (cm.Class) {
     case IDCMP_MENUPICK:
         menu_pick(cm.Code);
@@ -1669,69 +1838,64 @@ void pump_messages(void)
 /*  The screen                                                        */
 /* ================================================================= */
 
-static const UWORD palette[16] = {
-    0xAAA, 0x000, 0xFFF, 0x68B,  0xC00, 0x080, 0x00C, 0x088,
-    0xA0A, 0xB80, 0x888, 0xFA0,  0x4F4, 0x222, 0xEEE, 0xDDD
-};
+static struct TextFont *ui_hold;        /* the interface's disk font, kept loaded */
 
-/* the nearest of the screen's colours to a 12-bit one (no ObtainBestPen
- * before Workbench 3.0) */
-static int nearest_pen(struct ColorMap *cm, int n, UWORD rgb)
+/* a mode whose pixels are about twice as tall as wide (not interlaced) */
+static int tall_pixels(ULONG mode)
 {
-    int i, best = 0;
-    long bd = 0x7fffffffL;
-    for (i = 0; i < n; i++) {
-        UWORD c = (UWORD)GetRGB4(cm, i);
-        long dr = ((c >> 8) & 15) - ((rgb >> 8) & 15), dg = ((c >> 4) & 15) - ((rgb >> 4) & 15), db = (c & 15) - (rgb & 15);
-        long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
-        if (dd < bd) { bd = dd; best = i; }
-    }
-    return best;
+    DisplayInfoHandle dh = FindDisplayInfo(mode);
+    struct DisplayInfo di;
+    if (dh && GetDisplayInfoData(dh, (UBYTE *)&di, sizeof di, DTAG_DISP, INVALID_ID) && di.Resolution.x > 0)
+        return di.Resolution.y * 2 >= di.Resolution.x * 3;
+    return mode == HIRES_KEY;
 }
 
-/* EdWord's 16 colours as pens of a screen that isn't ours */
-static void map_pens(void)
+/* the deepest a display mode goes (0: not known) */
+static int mode_depth(ULONG mode)
 {
-    struct ColorMap *cm = scr->ViewPort.ColorMap;
-    int i, n = 1 << depth;
-    if (n > 256) n = 256;
-    npens = (short)(n > 16 ? 16 : n);
-    if (GfxBase->LibNode.lib_Version >= 39 && n >= 8) {
-        for (i = 0; i < 16; i++) {
-            ULONG r = (palette[i] >> 8) & 15, g = (palette[i] >> 4) & 15, b = palette[i] & 15;
-            LONG p = ObtainBestPen(cm, r * 0x11111111UL, g * 0x11111111UL, b * 0x11111111UL,
-                                   OBP_Precision, PRECISION_IMAGE, TAG_END);
-            penmap[i] = (UBYTE)(p >= 0 ? p : nearest_pen(cm, n, palette[i]));
-        }
-        pens_obtained = 1;
-        npens = 16;
-    } else
-        for (i = 0; i < 16; i++) penmap[i] = (UBYTE)(i < n && i < 4 ? i : nearest_pen(cm, n, palette[i]));
+    DisplayInfoHandle dh = FindDisplayInfo(mode);
+    struct DimensionInfo dm;
+    if (dh && GetDisplayInfoData(dh, (UBYTE *)&dm, sizeof dm, DTAG_DIMS, INVALID_ID)) return dm.MaxDepth;
+    return 0;
 }
 
-static void free_pens(void)
+/* the screen's colours: the preference (16 to 256), 32 when not set, as
+ * many as the mode has (an older chipset's screen opens with fewer when
+ * the mode can't have them) */
+static int want_depth(ULONG mode)
 {
-    int i;
-    if (!pens_obtained) return;
-    for (i = 0; i < 16; i++) ReleasePen(scr->ViewPort.ColorMap, penmap[i]);
-    pens_obtained = 0;
+    int md = mode_depth(mode), d = pref_colours && pref_colours <= 8 ? pref_colours : 5;
+    if (md && d > md) d = md;
+    if (d > 8) d = 8;
+    if (d > 4 && GfxBase->LibNode.lib_Version < 36) d = 4;    /* 1.3 can't tell what the chipset has */
+    return d < 2 ? 2 : d;
 }
 
 static int open_screen(void)
 {
     struct Screen *wb;
-    ULONG mode = HIRES_KEY;
-    UWORD pens[] = { (UWORD)~0 };
+    ULONG mode = HIRESLACE_KEY, wbmode = INVALID_ID;
+    UWORD pens[NUMDRIPENS + 1];
     long w = STDSCREENWIDTH, h = STDSCREENHEIGHT;
     struct TextAttr *wf;
     static char fname[40];
-    int dpt, maxd = 4;
+    int dpt, maxd = 4, wbdepth = 4;
+    long wb_w = 0, wb_h = 0;
+    long spres = -1;                            /* the Workbench's pointer resolution */
     DisplayInfoHandle dh;
     struct DisplayInfo di;
 
     wb = LockPubScreen((CONST_STRPTR)"Workbench");
     if (wb) {
-        ULONG m = GetVPModeID(&wb->ViewPort);
+        wbmode = GetVPModeID(&wb->ViewPort);
+        wb_w = wb->Width; wb_h = wb->Height;
+        wbdepth = wb->RastPort.BitMap->Depth;
+        if (GfxBase->LibNode.lib_Version >= 39) wbdepth = (int)GetBitMapAttr(wb->RastPort.BitMap, BMA_DEPTH);
+        if (GfxBase->LibNode.lib_Version >= 39) {
+            ULONG vt[3];
+            vt[0] = VTAG_SPRITERESN_GET; vt[1] = (ULONG)SPRITERESN_DEFAULT; vt[2] = TAG_END;
+            if (!VideoControl(wb->ViewPort.ColorMap, (struct TagItem *)vt)) spres = (long)vt[1];
+        }
         wf = wb->Font;
         if (wf && wf->ta_Name) {
             strncpy(fname, (const char *)wf->ta_Name, sizeof fname - 1);
@@ -1743,42 +1907,108 @@ static int open_screen(void)
             scr = wb;
             on_wb = 1;
         } else {
-            if (pref_screen == SCR_LIKEWB && m != INVALID_ID) { mode = m; w = wb->Width; h = wb->Height; }
+            if (pref_screen == SCR_LIKEWB && wbmode != INVALID_ID) { mode = wbmode; w = wb->Width; h = wb->Height; }
             UnlockPubScreen(NULL, wb);
         }
     }
     if (!sysattr.ta_Name) { sysattr.ta_Name = (STRPTR)"topaz.font"; sysattr.ta_YSize = 8; }
     if (on_wb) {
         depth = scr->RastPort.BitMap->Depth;
-        map_pens();
     } else {
-        if (pref_screen == SCR_LACE) mode = HIRESLACE_KEY;
-        else if (pref_screen == SCR_OTHER && pref_modeid && pref_modeid != INVALID_ID && !ModeNotAvailable(pref_modeid)) {
+        if (pref_screen == SCR_HIRES) mode = HIRES_KEY;
+        else if (pref_screen == SCR_LACE) {
+            /* high res interlaced: the flicker fixed (doubled) mode of the
+             * Workbench's PAL or NTSC where the chipset and monitors have it */
+            ULONG ff = (GfxBase->DisplayFlags & PAL) ? DBLPALHIRESFF_KEY : DBLNTSCHIRESFF_KEY;
+            mode = HIRESLACE_KEY;
+            if (GfxBase->LibNode.lib_Version >= 39 && (GfxBase->ChipRevBits0 & (1 << GFXB_AA_ALICE)) && !ModeNotAvailable(ff) &&
+                wbmode != INVALID_ID && (wbmode & MONITOR_ID_MASK) == (ff & MONITOR_ID_MASK))
+                mode = ff;
+        } else if (pref_screen == SCR_OTHER && pref_modeid && pref_modeid != INVALID_ID && !ModeNotAvailable(pref_modeid)) {
             mode = pref_modeid;
             if (pref_scrw >= 640) w = pref_scrw;
             if (pref_scrh >= 200) h = pref_scrh;
-            if (pref_scrdepth >= 2 && pref_scrdepth < 4) maxd = pref_scrdepth;
         }
-        /* a non-interlaced screen keeps to a font that fits its lines */
-        if (pref_screen != SCR_LACE && pref_screen != SCR_OTHER && mode == HIRES_KEY && sysattr.ta_YSize > 11) {
-            sysattr.ta_Name = (STRPTR)"topaz.font";
-            sysattr.ta_YSize = 8;
+        if (pref_screen == SCR_OTHER) {
+            /* the mode's own colours: a graphics card's mode has 8, 15, 16,
+             * 24 or 32 bits a pixel, whatever Colours says below that */
+            int md = mode_depth(mode);
+            maxd = pref_colours ? pref_colours : pref_scrdepth >= 2 ? pref_scrdepth : 5;
+            if (md > 8) {
+                if (maxd < 8) maxd = pref_scrdepth >= 8 ? pref_scrdepth : 8;
+                if (maxd > 8 && maxd < 15) maxd = 8;
+                if (maxd > md) maxd = md;
+            } else if (md && maxd > md) maxd = md;
+        }
+        else if (pref_screen == SCR_LIKEWB) maxd = !pref_colours ? wbdepth : pref_colours > 8 ? pref_colours : want_depth(mode);
+        else maxd = want_depth(mode);
+        /* high or true colour: a graphics card's mode of that depth, the
+         * Workbench's size (or 800 x 600) unless one was chosen */
+        if (maxd > 8 && GfxBase->LibNode.lib_Version >= 39 && (pref_screen != SCR_OTHER || mode_depth(mode) <= 8)) {
+            ULONG m;
+            long bw = wb_w >= 640 ? wb_w : 800, bh = wb_h >= 480 ? wb_h : 600;
+            if (pref_screen == SCR_OTHER && pref_scrw >= 640) { bw = pref_scrw; bh = pref_scrh; }
+            m = BestModeID(BIDTAG_Depth, (ULONG)maxd, BIDTAG_NominalWidth, (ULONG)bw, BIDTAG_NominalHeight, (ULONG)bh,
+                           BIDTAG_DesiredWidth, (ULONG)bw, BIDTAG_DesiredHeight, (ULONG)bh, TAG_END);
+            if (m != INVALID_ID && mode_depth(m) > 8) { mode = m; w = bw; h = bh; }
+            else maxd = want_depth(mode);
+        }
+        /* A non-interlaced screen (pixels twice as tall as wide) has the
+         * interface in a font of the system font's size, the one made for
+         * high res (topaz 8 as a rule): the Workbench's face at that size
+         * where it has one, else the system font itself. */
+        if (tall_pixels(mode)) {
+            struct TextFont *df = GfxBase->DefaultFont;
+            UWORD want = df ? df->tf_YSize : 8;
+            if (sysattr.ta_YSize > want) {
+                struct TextFont *tf = NULL;
+                sysattr.ta_YSize = want;
+                if (DiskfontBase) tf = OpenDiskFont(&sysattr);
+                if (!tf || tf->tf_YSize != want) {
+                    if (tf) CloseFont(tf);
+                    tf = NULL;
+                    sysattr.ta_Name = df ? (STRPTR)df->tf_Message.mn_Node.ln_Name : (STRPTR)"topaz.font";
+                    sysattr.ta_Style = 0; sysattr.ta_Flags = 0;
+                }
+                ui_hold = tf;               /* kept open: OpenFont finds it */
+            }
         }
         if (w != STDSCREENWIDTH && w < 640) w = 640;
         if (h != STDSCREENHEIGHT && h < 200) h = 200;
-        for (dpt = maxd; dpt >= 2 && !scr; dpt--)
+        for (dpt = maxd; dpt >= 2 && !scr; dpt = dpt > 8 ? 8 : dpt - 1) {
+            theme_screen_pens(pens, dpt);
             scr = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, w, SA_Height, h, SA_Depth, dpt,
                                  SA_Title, (ULONG)sysname, SA_Pens, (ULONG)pens, SA_Font, (ULONG)&sysattr,
-                                 SA_Type, CUSTOMSCREEN, SA_AutoScroll, TRUE, SA_FullPalette, TRUE, TAG_END);
-        if (!scr)
+#ifndef AMI13
+                                 SA_PubName, (ULONG)app_name,
+#endif
+                                 SA_Type, CUSTOMSCREEN, SA_AutoScroll, TRUE, SA_FullPalette, TRUE,
+                                 SA_Interleaved, TRUE, TAG_END);
+        }
+#ifndef AMI13
+        /* a public screen, as the style guide asks: other programs (a
+         * text editor from ARexx, MultiView with the help) can open on it */
+        if (scr) { PubScreenStatus(scr, 0); pub_up = 1; }
+#endif
+        if (!scr) {
+            pens[0] = (UWORD)~0;
             scr = OpenScreenTags(NULL, SA_DisplayID, HIRES_KEY, SA_Width, 640, SA_Height, STDSCREENHEIGHT, SA_Depth, 2,
                                  SA_Title, (ULONG)sysname, SA_Pens, (ULONG)pens, SA_Type, CUSTOMSCREEN, TAG_END);
+        }
         if (!scr) return 0;
+        /* the mouse pointer as the Workbench shows it (a high resolution
+         * pointer stays one, not a low resolution one twice the size) */
+        if (spres >= 0 && GfxBase->LibNode.lib_Version >= 39) {
+            ULONG vt[3];
+            vt[0] = VTAG_SPRITERESN_SET; vt[1] = (ULONG)spres; vt[2] = TAG_END;
+            VideoControl(scr->ViewPort.ColorMap, (struct TagItem *)vt);
+            MakeScreen(scr);
+            RethinkDisplay();
+        }
+        edlog("screen: mode %lx (wb %lx), wanted depth %d, mode depth %d", mode, wbmode, maxd, mode_depth(mode));
         depth = scr->RastPort.BitMap->Depth;
-        npens = (short)(1 << depth);
-        if (npens > 16) npens = 16;
-        LoadRGB4(&scr->ViewPort, (UWORD *)palette, npens);
     }
+    pens_setup();
     scr_w = scr->Width;
     scr_h = scr->Height;
 
@@ -1812,6 +2042,7 @@ static int open_libs(void)
         { (struct Library **)&UtilityBase, "utility.library", 37, 1 },
         { &DiskfontBase, "diskfont.library", 36, 0 },
         { &AslBase, "asl.library", 37, 0 },
+        { &IconBase, "icon.library", 36, 0 },
 #endif
         { (struct Library **)&LocaleBase, "locale.library", 38, 0 },
         { NULL, NULL, 0, 0 } };
@@ -1862,39 +2093,11 @@ static void open_wbarg(struct WBArg *a)
     open_path(path, text_name(path));
 }
 
-int main(int argc, char *argv[])
+/* EdWord's screen and everything that goes with it: its pens, fonts,
+ * menus and the backdrop window; 0 if it can't be */
+static int screen_up(void)
 {
-    struct IntuiMessage *m;
-    int rc = 20;
-
-    sprintf(sysname, "EdWord %s", ED_VERSION);
-    if (!open_libs()) { close_libs(); return 20; }
-#ifdef AMI13
-    c13_init();
-    AslBase = &c13_asl;
-    c13_progdir(progdir, sizeof progdir, argc == 0 ? _WBenchMsg : NULL);
-#endif
-    load_prefs();
-    set_language(pref_lang >= 0 ? pref_lang : system_language());
-    spell_lang = pref_spell >= 0 ? pref_spell : ui_lang;
-    /* the screen has few colours: pictures keep theirs (for PDFs) only with
-     * plenty of memory to spare */
-    {
-        long fr = (long)AvailMem(MEMF_ANY | MEMF_LARGEST);
-        img_rgb_max = fr > 8000000L ? 4000000L : fr > 3000000L ? fr / 8 : 0;
-    }
-    idcmp_port = CreateMsgPort();
-    if (!idcmp_port || !timer_init()) goto out;
-    if (!open_screen()) {
-        struct EasyStruct es;
-        char t[160], *p;
-        strcpy(t, L(AL_AMI_NO_SCREEN));
-        for (p = t; *p; p++) if (*p == '|') *p = '\n';
-        es.es_StructSize = sizeof es; es.es_Flags = 0; es.es_Title = (UBYTE *)"EdWord";
-        es.es_TextFormat = (UBYTE *)t; es.es_GadgetFormat = (UBYTE *)L(AB_OK);
-        EasyRequestArgs(NULL, &es, NULL, NULL);
-        goto out;
-    }
+    if (!open_screen()) return 0;
     dri = GetScreenDrawInfo(scr);
     vi = GetVisualInfo(scr, TAG_END);
     sysfont = OpenFont(&sysattr);
@@ -1906,7 +2109,7 @@ int main(int argc, char *argv[])
         fa.ta_Style = 0; fa.ta_Flags = 0;
         fixfont = OpenFont(&fa);
     }
-    if (!vi || !sysfont || !fixfont) goto out;
+    if (!vi || !sysfont || !fixfont) return 0;
     hchar = sysfont->tf_YSize;
     sys_asc = sysfont->tf_Baseline;
     desk.g_x = 0;
@@ -1919,13 +2122,322 @@ int main(int argc, char *argv[])
 
     busy(1);
     fonts_load();
-    if (!make_strip()) goto out;
+    if (!make_strip()) { busy(0); return 0; }
     if (!on_wb) backdrop = open_ewin((struct TagItem *)(ULONG[]){ WA_Left, 0, WA_Top, (ULONG)desk.g_y, WA_Width, (ULONG)scr_w,
                          WA_Height, (ULONG)desk.g_h, WA_Backdrop, TRUE, WA_Borderless, TRUE,
                          WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE, WA_Activate, TRUE, TAG_END },
                          IDCMP_MENUPICK | IDCMP_VANILLAKEY | IDCMP_RAWKEY);
     busy(0);
-    if (!backdrop && !on_wb) goto out;
+    if (!backdrop && !on_wb) return 0;
+    return 1;
+}
+
+/* Our screen private again, so it can close: while other programs have
+ * windows on it, ask for them to be closed. 0: the user gave up */
+static int screen_release(void)
+{
+#ifndef AMI13
+    if (!pub_up || on_wb || !scr) return 1;
+    while (!(PubScreenStatus(scr, PSNF_PRIVATE) & 1))
+        if (alert(1, 2, AL_AMI_VISITORS, AB_AMI_RETRY_CANCEL) != 1) return 0;
+    pub_up = 0;
+#endif
+    return 1;
+}
+
+/* public again (a quit or new screen that didn't happen after all) */
+static void screen_public(void)
+{
+#ifndef AMI13
+    if (!pub_up && !on_wb && scr) { PubScreenStatus(scr, 0); pub_up = 1; }
+#endif
+}
+
+/* ... and all of it closed again (the documents stay; their windows go) */
+static void screen_down(void)
+{
+    int i;
+    edlog("down: %s", "tools_close_all();");
+    tools_close_all();
+    for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i)) close_window(docs[i]);
+    edlog("down: %s", "if (backdrop) close_ewin(backdrop);");
+    if (backdrop) close_ewin(backdrop);
+    backdrop = NULL;
+    if (strip) FreeMenus(strip);
+    strip = NULL;
+    edlog("down: %s", "img_cache_free(NULL);");
+    img_cache_free(NULL);
+    edlog("down: %s", "fonts_unload();");
+    fonts_unload();
+    edlog("down: %s", "gfx_free();");
+    gfx_free();
+    if (fixfont) CloseFont(fixfont);
+    if (sysfont) CloseFont(sysfont);
+    if (ui_hold) { CloseFont(ui_hold); ui_hold = NULL; }
+    fixfont = sysfont = NULL;
+    if (vi) FreeVisualInfo(vi);
+    vi = NULL;
+    if (dri) FreeScreenDrawInfo(scr, dri);
+    dri = NULL;
+    edlog("down: %s", "pens_free();");
+    pens_free();
+    if (scr && on_wb) UnlockPubScreen(NULL, scr);
+    else if (scr) {
+        screen_release();
+        CloseScreen(scr);
+    }
+    pub_up = 0;
+    edlog("down: %s", "scr = NULL;");
+    scr = NULL;
+    on_wb = 0;
+    memset(&sysattr, 0, sizeof sysattr);
+}
+
+/* a new screen mode: EdWord's screen closed and opened again in it, the
+ * documents laid out for it and their windows opened again */
+static void screen_restart(void)
+{
+    int i;
+    if (!screen_release()) return;
+    screen_down();
+    if (!screen_up()) {
+        screen_down();
+        pref_screen = SCR_LACE; pref_colours = 0;          /* the usual screen, then */
+        if (!screen_up()) { quit_now = 1; return; }
+    }
+    for (i = 0; i < MAX_DOCS; i++)
+        if (DOC_USED(i)) {
+            DOC *d = docs[i];
+            d->iconified = 0;
+            d->scroll_x = d->scroll_y = 0;
+            doc_layout(d);
+            open_window(d);
+        }
+    if (!top_doc() && !on_wb) cmd_new();
+    update_menu(top_doc());
+}
+
+/* ================================================================= */
+/*  ARexx                                                             */
+/* ================================================================= */
+
+/* The ARexx port, EDWORD.1 (the public screen's name), with the commands
+ * the style guide lists for every program and a few of EdWord's own.
+ * Each goes the way the menu or the keyboard would, so undo, layout and
+ * redrawing all happen as usual. */
+#ifndef AMI13
+struct RxsLib *RexxSysBase;
+static struct MsgPort *rx_port;
+
+static void rexx_init(void)
+{
+    RexxSysBase = (struct RxsLib *)OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36);
+    if (!RexxSysBase) return;
+    rx_port = CreateMsgPort();
+    if (!rx_port) return;
+    rx_port->mp_Node.ln_Name = (char *)app_name;
+    rx_port->mp_Node.ln_Pri = 0;
+    AddPort(rx_port);
+}
+
+static void rexx_free(void)
+{
+    if (rx_port) {
+        struct Message *m;
+        RemPort(rx_port);
+        while ((m = GetMsg(rx_port)) != NULL) {         /* anything left: refused */
+            ((struct RexxMsg *)m)->rm_Result1 = RC_FATAL;
+            ((struct RexxMsg *)m)->rm_Result2 = 0;
+            ReplyMsg(m);
+        }
+        DeleteMsgPort(rx_port);
+        rx_port = NULL;
+    }
+    if (RexxSysBase) CloseLibrary((struct Library *)RexxSysBase);
+    RexxSysBase = NULL;
+}
+
+static ULONG rexx_sig(void) { return rx_port ? 1UL << rx_port->mp_SigBit : 0; }
+
+/* the next word (or "quoted words") of *p, NUL ended in place */
+static char *rx_word(char **p)
+{
+    char *s = *p, *w;
+    while (*s == ' ' || *s == '\t') s++;
+    if (!*s) { *p = s; return NULL; }
+    if (*s == '"' || *s == '\'') {
+        char q = *s++;
+        w = s;
+        while (*s && *s != q) s++;
+    } else {
+        w = s;
+        while (*s && *s != ' ' && *s != '\t') s++;
+    }
+    if (*s) *s++ = 0;
+    *p = s;
+    return w;
+}
+
+/* one command; *res gets a result string, if any. Returns an ARexx
+ * return code: 0 done, 5 not possible now, 10 failed, 20 unknown */
+static long rexx_command(char *line, char *res)
+{
+    static const struct { const char *name; int cmd; int needdoc; } simple[] = {
+        { "NEW", C_NEW, 0 }, { "SAVE", C_SAVE, 1 }, { "CLOSE", C_CLOSE, 1 }, { "PRINT", C_PRINT, 1 },
+        { "CUT", C_CUT, 1 }, { "COPY", C_COPY, 1 }, { "PASTE", C_PASTE, 1 }, { "UNDO", C_UNDO, 1 },
+        { "REDO", C_REDO, 1 }, { "SELECTALL", C_SELALL, 1 }, { "FIND", C_FIND, 1 },
+        { "FINDNEXT", C_FINDNEXT, 1 }, { "HELP", C_HELP, 0 }, { "ABOUT", C_ABOUT, 0 },
+        { "PREVPAGE", C_PREVPAGE, 1 }, { "NEXTPAGE", C_NEXTPAGE, 1 }, { "PDF", C_PDF, 1 },
+        { NULL, 0, 0 } };
+    char *p = line, *cmd = rx_word(&p), *arg;
+    DOC *d = top_doc();
+    int i;
+    res[0] = 0;
+    if (!cmd) return RC_WARN;
+    for (i = 0; cmd[i]; i++) if (cmd[i] >= 'a' && cmd[i] <= 'z') cmd[i] -= 32;
+    for (i = 0; simple[i].name; i++)
+        if (!strcmp(cmd, simple[i].name)) {
+            if (simple[i].needdoc && !d) return RC_WARN;
+            do_cmd(simple[i].cmd);
+            return 0;
+        }
+    if (!strcmp(cmd, "OPEN")) {
+        arg = rx_word(&p);
+        if (!arg) { do_cmd(C_OPEN); return 0; }
+        {
+            BPTR l = Lock((STRPTR)arg, ACCESS_READ);
+            if (!l) return RC_ERROR;
+            UnLock(l);
+        }
+        open_path(arg, text_name(arg));
+        return 0;
+    }
+    if (!strcmp(cmd, "SAVEAS")) {
+        if (!d) return RC_WARN;
+        arg = rx_word(&p);
+        if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
+        if (!arg) return cmd_save(d, 1) ? 0 : RC_WARN;
+        strncpy(d->path, arg, sizeof d->path - 1);
+        d->path[sizeof d->path - 1] = 0;
+        base_name(d, d->path);
+        return cmd_save(d, 0) ? 0 : RC_ERROR;
+    }
+    if (!strcmp(cmd, "QUIT")) {
+        arg = rx_word(&p);
+        if (arg && !Stricmp((STRPTR)arg, (STRPTR)"FORCE"))
+            for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i)) { docs[i]->dirty = 0; docs[i]->cv.dirty = 0; }
+        cmd_quit();
+        return quit_now ? 0 : RC_WARN;
+    }
+    if (!strcmp(cmd, "TEXT") || !strcmp(cmd, "NEWLINE") || !strcmp(cmd, "ERASE")) {
+        struct Window *w;
+        if (!d || !(w = doc_win(d))) return RC_WARN;
+        if (cmd[0] == 'N') handle_key(w, K_RETURN, 0);
+        else if (cmd[0] == 'E') { long a, b; if (doc_sel(d, &a, &b)) handle_key(w, K_DEL, 0); }
+        else {
+            while (*p == ' ') p++;
+            if (*p == '"' || *p == '\'') arg = rx_word(&p); else arg = p;
+            for (; *arg; arg++) if ((unsigned char)*arg >= 32) handle_key(w, (unsigned char)*arg, 0);
+        }
+        return 0;
+    }
+    if (!strcmp(cmd, "GOTOPAGE")) {
+        arg = rx_word(&p);
+        if (!d || !arg || atoi(arg) < 1) return RC_ERROR;
+        goto_page(d, atoi(arg) - 1);
+        return 0;
+    }
+    if (!strcmp(cmd, "ACTIVATE")) {
+        ScreenToFront(scr);
+        if (d && doc_win(d)) { WindowToFront(doc_win(d)); ActivateWindow(doc_win(d)); }
+        return 0;
+    }
+    if (!strcmp(cmd, "DEACTIVATE")) { if (!on_wb) ScreenToBack(scr); return 0; }
+    if (!strcmp(cmd, "FILENAME")) { if (!d) return RC_WARN; strcpy(res, d->path); return 0; }
+    if (!strcmp(cmd, "VERSION")) { sprintf(res, "EdWord %s", ED_VERSION); return 0; }
+    if (!strcmp(cmd, "PUBSCREEN")) { strcpy(res, on_wb ? "Workbench" : app_name); return 0; }
+    return RC_FATAL;
+}
+
+static void rexx_handle(void)
+{
+    struct RexxMsg *m;
+    if (!rx_port) return;
+    while ((m = (struct RexxMsg *)GetMsg(rx_port)) != NULL) {
+        char line[512], res[300];
+        long rc = RC_FATAL;
+        m->rm_Result2 = 0;
+        if (IsRexxMsg(m) && (m->rm_Action & RXCODEMASK) == RXCOMM && ARG0(m)) {
+            strncpy(line, (const char *)ARG0(m), sizeof line - 1);
+            line[sizeof line - 1] = 0;
+            caret_unblink();
+            rc = rexx_command(line, res);
+            if (rc == 0 && res[0] && (m->rm_Action & RXFF_RESULT))
+                m->rm_Result2 = (LONG)CreateArgstring((STRPTR)res, (ULONG)strlen(res));
+        }
+        m->rm_Result1 = rc;
+        ReplyMsg((struct Message *)m);
+    }
+}
+#else
+static void rexx_init(void) {}
+static void rexx_free(void) {}
+static ULONG rexx_sig(void) { return 0; }
+static void rexx_handle(void) {}
+#endif
+
+/* EDWORD.1, or .2... when another EdWord has that: the name of the
+ * public screen and the ARexx port, the same for both as the style
+ * guide has it */
+static void pick_app_name(void)
+{
+    int n;
+    for (n = 1; n < 100; n++) {
+        struct MsgPort *p;
+        sprintf(app_name, "EDWORD.%d", n);
+        Forbid();
+        p = FindPort((CONST_STRPTR)app_name);
+        Permit();
+        if (!p) return;
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    struct IntuiMessage *m;
+    int rc = 20;
+
+    sprintf(sysname, "EdWord %s", ED_VERSION);
+    if (!open_libs()) { close_libs(); return 20; }
+    pick_app_name();
+    rexx_init();
+    font_cap_init();
+#ifdef AMI13
+    c13_init();
+    AslBase = &c13_asl;
+    c13_progdir(progdir, sizeof progdir, argc == 0 ? _WBenchMsg : NULL);
+#endif
+    load_prefs();
+    set_language(pref_lang >= 0 ? pref_lang : system_language());
+    spell_lang = pref_spell >= 0 ? pref_spell : ui_lang;
+    /* pictures keep their colours (for the screen and PDFs) with 2 MB or
+     * more to spare */
+    {
+        long fr = (long)AvailMem(MEMF_ANY | MEMF_LARGEST);
+        img_rgb_max = fr > 8000000L ? 4000000L : fr > 2000000L ? fr / 4 : 0;
+    }
+    idcmp_port = CreateMsgPort();
+    if (!idcmp_port || !timer_init()) goto out;
+    if (!screen_up()) {
+        struct EasyStruct es;
+        char t[160], *p;
+        strcpy(t, L(AL_AMI_NO_SCREEN));
+        for (p = t; *p; p++) if (*p == '|') *p = '\n';
+        es.es_StructSize = sizeof es; es.es_Flags = 0; es.es_Title = (UBYTE *)"EdWord";
+        es.es_TextFormat = (UBYTE *)t; es.es_GadgetFormat = (UBYTE *)L(AB_OK);
+        if (!scr) EasyRequestArgs(NULL, &es, NULL, NULL);
+        goto out;
+    }
     update_menu(NULL);
 
     if (argc == 0 && _WBenchMsg) {
@@ -1942,11 +2454,19 @@ int main(int argc, char *argv[])
     while (!quit_now) {
         ULONG sig;
         int input = 0;
-        sig = Wait((1UL << idcmp_port->mp_SigBit) | timer_sig | SIGBREAKF_CTRL_C);
+        sig = Wait((1UL << idcmp_port->mp_SigBit) | timer_sig | rexx_sig() | SIGBREAKF_CTRL_C);
         if (sig & SIGBREAKF_CTRL_C) cmd_quit();
+        if (sig & rexx_sig()) { rexx_handle(); input = 1; }
         while (!quit_now && (m = GT_GetIMsg(idcmp_port)) != NULL) {
             if (m->Class != IDCMP_INTUITICKS) input = 1;
             dispatch(m);
+#ifdef EDLOG
+            {
+                extern int ami_heap_check(const char *);
+                static int bad;
+                if (!bad && !ami_heap_check("after a message")) bad = 1;
+            }
+#endif
         }
         if (quit_now) break;
         if (timer_due()) idle_work(1);
@@ -1965,21 +2485,23 @@ out:
         for (i = 0; i < MAX_DOCS; i++)
             if (DOC_USED(i)) { close_window(docs[i]); doc_free(docs[i]); docs[i]->used = 0; }
     }
-    if (backdrop) close_ewin(backdrop);
-    if (strip) FreeMenus(strip);
+    edlog("exit: docs closed");
     spell_free_all();
     thes_close();
     doc_clip_free();
-    img_cache_free(NULL);
-    fonts_unload();
-    gfx_free();
-    if (fixfont) CloseFont(fixfont);
-    if (sysfont) CloseFont(sysfont);
-    if (vi) FreeVisualInfo(vi);
-    if (dri) FreeScreenDrawInfo(scr, dri);
-    if (scr && on_wb) { free_pens(); UnlockPubScreen(NULL, scr); }
-    else if (scr) CloseScreen(scr);
+    edlog("exit: screen");
+    screen_down();
+    edlog("exit: screen down");
+#ifdef EDLOG
+    { extern int ami_heap_check(const char *); ami_heap_check("at exit"); }
+#endif
+    {
+        extern struct Library *DataTypesBase;
+        if (DataTypesBase) CloseLibrary(DataTypesBase);
+        DataTypesBase = NULL;
+    }
     timer_free();
+    rexx_free();
     if (idcmp_port) DeleteMsgPort(idcmp_port);
     close_libs();
     return rc;

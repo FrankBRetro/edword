@@ -5,7 +5,9 @@
  * The front end follows the GEM one (gem*.c) closely: the same commands,
  * dialogs, tool windows and drawing, done with Intuition, GadTools and
  * graphics.library. EdWord opens a screen of its own, cloned from the
- * Workbench's display mode, with 16 colours for the text colours.
+ * Workbench's display mode (high res interlaced by default, flicker
+ * fixed where the chipset can), with 16 to 256 colours, or a graphics
+ * card's high or true colour mode (RTG).
  *
  * Character sets: everything in a DOC (text, names) is in the Atari ST
  * character set, as on the ST; the user interface strings are ISO-8859-1.
@@ -52,10 +54,12 @@ enum {
     C_SPELL, C_LIVESPELL, C_THES, C_SUMMARY, C_UDLOAD, C_UDNEW, C_PREFS,
     C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
     C_CASCADE, C_ICONIFY, C_ICONALL, C_BOTTOM, C_CYCLE, C_WINMORE,
-    C_OBJPROP, C_OBJDEL, C_OBJEDIT,
+    C_OBJPROP, C_OBJDEL, C_OBJEDIT, C_ZOOMFIT, C_ZOOMPAGE, C_THEME, C_ICONS, C_HELP,
     C_LAST,
-    C_FONT0 = 100, C_SIZE0 = 200, C_COLOR0 = 250, C_UD0 = 260, C_WIN0 = 270
+    C_FONT0 = 120, C_SIZE0 = 220, C_COLOR0 = 270, C_UD0 = 280, C_WIN0 = 290
 };
+/* the commands above must stay below the font items' numbers */
+typedef char c_last_check[C_LAST <= C_FONT0 ? 1 : -1];
 #define NCMD (C_WIN0 + MAX_DOCS)
 
 /* the screen and its pens */
@@ -78,24 +82,30 @@ extern int   pref_date, pref_toolbar, pref_paper, pref_land;
 extern int   pref_autosave, pref_asmin, pref_asmode, pref_display, pref_live, pref_rulers, pref_guides;
 enum { DISP_NORMAL, DISP_DARK, DISP_GREEN, DISP_AMBER };
 #define NSIZES 8
-#define NZOOM  6
+#define NZOOM  9
 extern const short zooms[NZOOM];
 
 /* pens of EdWord's screen */
 /* Pens i and 15 - i are each other's complement: selections are drawn
  * by complementing the two lowest planes (black and white swap), and
- * where only full complement works, white becomes 13 and black 14. */
+ * where only full complement works, white becomes 13 and black 14.
+ * P_T*: the colour theme's, for EdWord's own furniture (toolbars,
+ * rulers, the desk around the pages) and, on EdWord's own screen of 32
+ * colours or more, the screen's own pens (windows, menus, gadgets). */
 enum { P_GREY, P_BLACK, P_WHITE, P_BLUE, P_RED, P_GREEN, P_DBLUE, P_CYAN, P_MAGENTA, P_YELLOW,
-       P_TGREY, P_AMBER, P_PHOSPHOR, P_SHADOW, P_WHITE2, P_LIGHT };
-#define P_DESK (npens >= 16 ? P_TGREY : P_GREY)
+       P_TGREY, P_AMBER, P_PHOSPHOR, P_SHADOW, P_WHITE2, P_LIGHT,
+       P_TFACE, P_TLIGHT, P_TDARK, P_TTEXT, P_TMARGIN, P_TDESK, P_TFILL, P_TFTEXT, NLPENS };
+#define P_DESK P_TDESK
 
 /* The screen: our own (high res by default, or another mode) or the
  * Workbench's, where EdWord's colours are the nearest pens it has */
 enum { SCR_HIRES, SCR_LACE, SCR_LIKEWB, SCR_OTHER, SCR_WB, NSCR };
-extern int pref_screen, pref_scrw, pref_scrh, pref_scrdepth, on_wb;
+extern int pref_screen, pref_scrw, pref_scrh, pref_scrdepth, pref_colours, on_wb;
 extern unsigned long pref_modeid;
-extern UBYTE penmap[16];
-#define PEN(p) ((ULONG)penmap[(p) & 15])
+extern UBYTE penmap[NLPENS];
+#define PEN(p) ((ULONG)penmap[(unsigned)(p) < NLPENS ? (p) : 0])
+extern int rtg;                           /* a graphics card's screen of 15-24 bits */
+extern int scr_colours;                   /* the screen's pens: 4 to 256           */
 #define SCR_TAG (on_wb ? WA_PubScreen : WA_CustomScreen)
 
 /* dialog item flags, as in GEM */
@@ -160,6 +170,30 @@ int   tool_route(struct IntuiMessage *m);
 int   tool_route_key(struct Window *w, int key, int qual);
 int   tool_owns(struct Window *w);
 
+/* amitheme.c: the screen's colours, colour themes, colour pictures */
+#define TH_NROLES 6                       /* face, light, dark, text, margins, desk */
+#define NTHEMES   17
+extern int theme_id;                      /* 0: Amiga (the usual colours) */
+const char *theme_name(int id);
+int   theme_possible(void);               /* 32 colours or more, or a graphics card */
+void  theme_screen_pens(UWORD *pens, int depth);   /* SA_Pens for EdWord's own screen */
+void  pens_setup(void);                   /* the screen is open: its colours, the pens */
+void  pens_free(void);
+void  theme_set(int id);                  /* use theme id now (and redraw) */
+int   dlg_theme(void);
+int   pic_colour(void);                   /* pictures can be shown in colour */
+unsigned char *pic_make(const unsigned char *rgb, long w, long h);   /* for pic_put; free() it */
+void  pic_put(const unsigned char *pic, long w, long h, long x, long y);
+void  pic_flush(void);                    /* forget cached pen look-ups */
+int   rtg_available(void);                /* Picasso96 or CyberGraphX is there */
+int   aa_text(void);                      /* text can be smoothed (graphics card, 256 colours) */
+void  aa_put(const unsigned char *cov, long w, long h, long x, long y, int pen);
+int   theme_per_window(void);             /* a theme for each document (15 bits or more) */
+void  theme_for(int slot);                /* drawing in document slot's window...         */
+void  theme_global(void);                 /* ...and done                                  */
+void  theme_set_doc(int slot, int id);    /* -1: the global theme                         */
+void  theme_activate(int slot);           /* a document window became the active one      */
+
 /* amiwin.c */
 #define TBH (small_icons ? 15 : 24)
 void  work_area(DOC *d, GRECT *g);
@@ -182,6 +216,10 @@ void  rebuild_codes(DOC *d);
 void  set_view(DOC *d, int view);
 void  set_toolbar(DOC *d, int on);
 void  set_zoom(DOC *d, int zoom);
+void  set_fit_width(DOC *d, int on);     /* FIT_WIDTH, FIT_PAGE or 0 */
+enum { FIT_WIDTH = 1, FIT_PAGE = 2 };   /* DOC fitw: the zoom follows the window */
+#define ZOOM_MIN 10
+#define ZOOM_MAX 500
 int   open_window(DOC *d);
 void  close_window(DOC *d);
 void  iconify(DOC *d);
@@ -196,6 +234,10 @@ void  codes_clip(DOC *d, int cmd);
 int   codes_focus(DOC *d);
 int   codes_insert_code(DOC *d, const char *code);
 int   ed_bg(void);
+int   theme_dark(void);
+extern int pref_icons;                  /* Settings > Create Icons? */
+extern int font_ycap;                   /* the tallest an Amiga font is scaled to */
+void  font_cap_init(void);
 int   ed_fg(void);
 long  view_page_top(DOC *d, int page);
 long  view_page_left(DOC *d, GRECT *tp);
@@ -247,6 +289,9 @@ int   track_next(short *mx, short *my, int *qual);   /* 0 when the button is rel
 void  track_end(void);
 int   long_press(struct Window *w, short mx, short my);
 int   double_click(ULONG secs, ULONG micros);
+int   click_count(ULONG secs, ULONG micros, short x, short y);
+void  caret_unblink(void);
+void  caret_forget(DOC *d);
 void  gfx_init(void);
 void  gfx_free(void);
 enum { IC_BOLD, IC_ITALIC, IC_UNDER, IC_LEFT, IC_CENTRE, IC_RIGHT, IC_JUSTIFY,
@@ -259,6 +304,13 @@ void  lat_n(char *out, const char *st, long n);
 void  stc(char *out, const char *latin, int max);    /* Latin-1 -> ST */
 unsigned char lat_ch(unsigned char st);
 unsigned char st_ch(unsigned char latin);
+
+/* amispd.c: Speedo outline fonts */
+void  spd_fonts_scan(void (*add)(const char *name, int k));
+void  spdf_metrics(int k, long ppx, long ppy, int attr, short *w, short *asc, short *desc);
+void  spdf_draw(int k, long ppx, long ppy, int attr, const unsigned char *st, const long *xs, int n, long base, int pen);
+int   spdf_bitmap(int k, long ppx, long ppy, int attr, unsigned char c, short *w, short *h, short *ox, short *oy, unsigned char **bits);
+void  spdf_free(void);
 
 /* amirend.c */
 void  fonts_load(void);
@@ -299,7 +351,11 @@ typedef struct {
     const char *cyc[MAXDITEM + 24];  /* cycle gadget labels, NULL after each group */
     short ncyc, lastitem;
     ULONG lsecs, lmics;
+    short pic_w, pic_h, pic_x, pic_y;   /* a picture under the rows (dlg_picture) */
+    void (*paint)(void *g, struct RastPort *rp, long x, long y, long w, long h);
 } DLG;
+short dlg_cbw(void);                    /* a check box's size on this screen */
+short dlg_cbh(void);
 void  dlg_begin(DLG *g, const char *title);
 void  dlg_row(DLG *g);
 void  dlg_label(DLG *g, const char *s);
@@ -310,7 +366,10 @@ short dlg_edit(DLG *g, const char *tmpl, char *buf, const char *valid);
 short dlg_button(DLG *g, const char *s, int flags);
 short dlg_bigbutton(DLG *g, const char *s, int wc, int flags);
 void  dlg_end(DLG *g);
+void  dlg_picture(DLG *g, short w, short h, void (*paint)(void *g, struct RastPort *rp, long x, long y, long w, long h));
+void  dlg_repaint(DLG *g);
 short dlg_run(DLG *g);
+short dlg_run_cb(DLG *g, void (*changed)(DLG *g, short item));  /* changed: a cycle gadget was set */
 int   dlg_on(DLG *g, short item);
 void  dlg_show(DLG *g, short item, int show);
 void  dlg_disable(DLG *g, short item, int dis);

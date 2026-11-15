@@ -116,7 +116,7 @@ static void wait_release(void)
 
 #define FSKIND (NAME | CLOSER | MOVER)
 #define FROWS  9
-static const short fsz[] = { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72 };
+static const short fsz[] = { 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72, 96, 120, 150 };
 #define NFSZ ((int)(sizeof fsz / sizeof fsz[0]))
 
 static struct { int open; short wh; int font, size, attr, ftop, stop; char name[40]; } fs = { 0, -1, 0, 0, 0, 0, 0, "" };

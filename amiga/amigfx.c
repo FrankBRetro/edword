@@ -13,10 +13,12 @@
 #include <proto/layers.h>
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
+#include <intuition/intuitionbase.h>
 #include <stdio.h>
 #include <string.h>
 #include "amiui.h"
 
+extern struct IntuitionBase *IntuitionBase;
 struct RastPort *grp;
 struct Window   *gwin;
 
@@ -39,6 +41,8 @@ struct RastPort *rp_of(struct Window *w) { return w->RPort; }
 
 void gfx_begin(struct Window *w)
 {
+    DOC *d = doc_of_win(w);
+    if (d) theme_for(d->slot);               /* its own colour theme (15 bits or more) */
     gwin = w;
     grp = w->RPort;
     SetDrMd(grp, JAM1);
@@ -49,6 +53,7 @@ void gfx_begin(struct Window *w)
 void gfx_end(void)
 {
     clip_off();
+    theme_global();
     if (grp) { SetDrMd(grp, JAM1); SetWrMsk(grp, 0xFF); SetDrPt(grp, 0xFFFF); SetAfPt(grp, NULL, 0); }
     grp = NULL;
     gwin = NULL;
@@ -292,7 +297,7 @@ long sys_width(const char *s)
 void bevel(const GRECT *r, int recessed)
 {
     long x1 = r->g_x, y1 = r->g_y, x2 = r->g_x + r->g_w - 1, y2 = r->g_y + r->g_h - 1;
-    int hi = recessed ? P_BLACK : P_WHITE, lo = recessed ? P_WHITE : P_BLACK;
+    int hi = recessed ? P_TDARK : P_TLIGHT, lo = recessed ? P_TLIGHT : P_TDARK;
     line(x1, y2, x1, y1, hi);
     line(x1, y1, x2 - 1, y1, hi);
     line(x1 + 1, y2, x2, y2, lo);
@@ -302,10 +307,10 @@ void bevel(const GRECT *r, int recessed)
 void button_box(const GRECT *r, const char *label, int sel, int disabled)
 {
     long tw = sys_width(label);
-    fill_rect(r->g_x + 1, r->g_y + 1, r->g_x + r->g_w - 2, r->g_y + r->g_h - 2, sel ? P_BLUE : P_GREY);
+    fill_rect(r->g_x + 1, r->g_y + 1, r->g_x + r->g_w - 2, r->g_y + r->g_h - 2, sel ? P_TFILL : P_TFACE);
     bevel(r, sel);
-    sys_text(r->g_x + (r->g_w - tw) / 2, r->g_y + (r->g_h - hchar) / 2, label, sel ? P_WHITE : P_BLACK);
-    if (disabled) fill_pat(r->g_x + 2, r->g_y + 1, r->g_x + r->g_w - 3, r->g_y + r->g_h - 2, P_GREY, 1);
+    sys_text(r->g_x + (r->g_w - tw) / 2, r->g_y + (r->g_h - hchar) / 2, label, sel ? P_TFTEXT : P_TTEXT);
+    if (disabled) fill_pat(r->g_x + 2, r->g_y + 1, r->g_x + r->g_w - 3, r->g_y + r->g_h - 2, P_TFACE, 1);
 }
 
 /* ---- the busy pointer --------------------------------------------------- */
@@ -320,17 +325,23 @@ static const UWORD busy_data[2 + 16 * 2 + 2] = {
 };
 static int busy_n;
 
+/* Workbench 3 and newer: the busy pointer chosen in the Pointer
+ * preferences, at the size and resolution set there (a high resolution
+ * pointer stays one on EdWord's screen); before that, EdWord's own */
 static void pointer_all(int on)
 {
-    int i;
     struct Window *w;
+    int v39 = IntuitionBase->LibNode.lib_Version >= 39;
     if (!scr) return;
     for (w = scr->FirstWindow; w; w = w->NextWindow) {
-        (void)i;
         if (w->UserPort != idcmp_port) continue;
+#ifndef AMI13
+        if (v39) { SetWindowPointer(w, WA_BusyPointer, (ULONG)on, WA_PointerDelay, (ULONG)on, TAG_END); continue; }
+#endif
         if (on && busyptr) SetPointer(w, busyptr, 16, 16, -7, -7);
         else ClearPointer(w);
     }
+    (void)v39;
 }
 
 void busy(int on)
@@ -341,57 +352,79 @@ void busy(int on)
 
 /* ---- the toolbar icons (16x16; 16x8 on screens with tall pixels) ------- */
 
-static const UWORD icon16_src[IC_COUNT][16] = {
-    /* BOLD    */ { 0x0000, 0x0000, 0x3FF0, 0x3878, 0x3838, 0x3838, 0x3878, 0x3FF0, 0x387C, 0x383C, 0x383C, 0x383C, 0x3878, 0x3FF8, 0x0000, 0x0000 },
-    /* ITALIC  */ { 0x0000, 0x0000, 0x01FC, 0x0070, 0x0060, 0x00E0, 0x00C0, 0x01C0, 0x0180, 0x0380, 0x0300, 0x0700, 0x0600, 0x1FC0, 0x0000, 0x0000 },
-    /* UNDER   */ { 0x0000, 0x3C3C, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x1818, 0x0C30, 0x07E0, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000 },
-    /* LEFT    */ { 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x7FC0, 0x7FC0, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x7FC0, 0x7FC0 },
-    /* CENTRE  */ { 0x0000, 0x0000, 0x3FFC, 0x3FFC, 0x0000, 0x0000, 0x0FF0, 0x0FF0, 0x0000, 0x0000, 0x3FFC, 0x3FFC, 0x0000, 0x0000, 0x0FF0, 0x0FF0 },
-    /* RIGHT   */ { 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x03FE, 0x03FE, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x03FE, 0x03FE },
-    /* JUSTIFY */ { 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x7FFE, 0x7FFE, 0x0000, 0x0000, 0x7FFE, 0x7FFE },
-    /* FONT    */ { 0x0000, 0x0180, 0x03C0, 0x03C0, 0x0660, 0x0660, 0x0C30, 0x0C30, 0x1FF8, 0x1FF8, 0x300C, 0x300C, 0x700E, 0x700E, 0x0000, 0x0000 },
-    /* SIZE    */ { 0x0000, 0xFFC0, 0xFFC0, 0x0C00, 0x0C00, 0x0C00, 0x0C7E, 0x0C7E, 0x0C18, 0x0C18, 0x0C18, 0x0C18, 0x0C18, 0x0C18, 0x0000, 0x0000 },
-    /* COLOUR  */ { 0x0000, 0x0100, 0x0380, 0x0380, 0x07C0, 0x07C0, 0x0FE0, 0x0FE0, 0x1FF0, 0x1FB0, 0x1F70, 0x1EF0, 0x0FE0, 0x07C0, 0x0000, 0x0000 },
-    /* SPELL   */ { 0x0000, 0x3000, 0x4800, 0x8400, 0xFC00, 0x840C, 0x8418, 0x0030, 0x3060, 0x18C0, 0x0D80, 0x0700, 0x0200, 0x0000, 0x0000, 0x0000 },
-    /* CODES   */ { 0xFFFF, 0x8001, 0xB3E1, 0x8001, 0xBFB9, 0x8001, 0xFFFF, 0xFFFF, 0x8001, 0xB00D, 0xA005, 0xA005, 0xB00D, 0x8001, 0xFFFF, 0x0000 },
-    /* BULLETS */ { 0x0000, 0x0000, 0x67FE, 0x6000, 0x0000, 0x0000, 0x67FE, 0x6000, 0x0000, 0x0000, 0x67FE, 0x6000, 0x0000, 0x0000, 0x0000, 0x0000 },
-    /* NUMBERS */ { 0x4000, 0xC000, 0x43FE, 0x4000, 0xE000, 0xE000, 0x2000, 0xE3FE, 0x8000, 0xE000, 0xE000, 0x2000, 0xE3FE, 0x2000, 0xE000, 0x0000 },
-    /* UNDO    */ { 0x0000, 0x0000, 0x1000, 0x3000, 0x7FC0, 0xFFE0, 0x7FF0, 0x3038, 0x1018, 0x0018, 0x0018, 0x0030, 0x0060, 0x0000, 0x0000, 0x0000 },
-    /* REDO    */ { 0x0000, 0x0000, 0x0008, 0x000C, 0x03FE, 0x07FF, 0x0FFE, 0x1C0C, 0x1808, 0x1800, 0x1800, 0x0C00, 0x0600, 0x0000, 0x0000, 0x0000 },
-    /* ZOOM    */ { 0x0000, 0x0F00, 0x30C0, 0x4020, 0x4020, 0x8010, 0x8010, 0x8010, 0x4020, 0x4020, 0x30E0, 0x0F70, 0x0038, 0x001C, 0x000E, 0x0004 },
-    /* TABLE   */ { 0x0000, 0xFFFF, 0x8421, 0x8421, 0x8421, 0xFFFF, 0x8421, 0x8421, 0x8421, 0xFFFF, 0x8421, 0x8421, 0x8421, 0xFFFF, 0x0000, 0x0000 },
-    /* RULER   */ { 0x0000, 0x0000, 0x0000, 0x0000, 0xFFFF, 0x9249, 0x9249, 0x8209, 0x8001, 0x8001, 0x8001, 0xFFFF, 0x0000, 0x0000, 0x0000, 0x0000 },
-    /* GUIDES  */ { 0x0000, 0x3FFC, 0x2004, 0x2AA4, 0x2004, 0x2824, 0x2004, 0x2824, 0x2004, 0x2824, 0x2004, 0x2AA4, 0x2004, 0x3FFC, 0x0000, 0x0000 },
-    /* PGBRK   */ { 0x3FF8, 0x2008, 0x2BE8, 0x2008, 0x2BE8, 0x2008, 0x0000, 0xE739, 0xE739, 0x0000, 0x3FF8, 0x2008, 0x2BE8, 0x2008, 0x2BE8, 0x2008 },
-};
+/* the icons and their colour layers are the Atari version's (tools/icons.h) */
+#include "../tools/icons.h"
+#define icon16_src icon16
+#define NLAYER ((int)(sizeof layer16 / sizeof layer16[0]))
+static UWORD *layers16, *layers8, *rest16, *rest8;   /* chip: layers; each icon less its layers */
+
+/* the VDI pens of the layers as EdWord's */
+static int layer_pen(int vdi)
+{
+    static const unsigned char map[16] = { P_WHITE, P_BLACK, P_RED, P_GREEN, P_DBLUE, P_CYAN, P_YELLOW, P_MAGENTA,
+                                           P_LIGHT, P_TGREY, P_RED, P_GREEN, P_DBLUE, P_CYAN, P_AMBER, P_MAGENTA };
+    return map[vdi & 15];
+}
 
 void icons_init(void)
 {
-    int i, r;
+    int i, r, k;
     icons16 = (UWORD *)AllocMem(sizeof icon16_src, MEMF_CHIP);
     icons8 = (UWORD *)AllocMem(sizeof icon16_src / 2, MEMF_CHIP);
+    layers16 = (UWORD *)AllocMem(NLAYER * 32, MEMF_CHIP);
+    layers8 = (UWORD *)AllocMem(NLAYER * 16, MEMF_CHIP);
+    rest16 = (UWORD *)AllocMem(sizeof icon16_src, MEMF_CHIP);
+    rest8 = (UWORD *)AllocMem(sizeof icon16_src / 2, MEMF_CHIP);
     if (!icons16 || !icons8) return;
     memcpy(icons16, icon16_src, sizeof icon16_src);
     for (i = 0; i < IC_COUNT; i++)
         for (r = 0; r < 8; r++) icons8[i * 8 + r] = (UWORD)(icon16_src[i][2 * r] | icon16_src[i][2 * r + 1]);
+    if (!layers16 || !layers8 || !rest16 || !rest8) return;
+    memcpy(rest16, icon16_src, sizeof icon16_src);
+    for (k = 0; k < NLAYER; k++)
+        for (r = 0; r < 16; r++) {
+            layers16[k * 16 + r] = layer16[k].m[r];
+            rest16[layer16[k].ic * 16 + r] &= (UWORD)~layer16[k].m[r];
+        }
+    for (k = 0; k < NLAYER; k++)
+        for (r = 0; r < 8; r++) layers8[k * 8 + r] = (UWORD)(layer16[k].m[2 * r] | layer16[k].m[2 * r + 1]);
+    for (i = 0; i < IC_COUNT; i++)
+        for (r = 0; r < 8; r++) rest8[i * 8 + r] = (UWORD)(rest16[i * 16 + 2 * r] | rest16[i * 16 + 2 * r + 1]);
 }
 
 void icons_free(void)
 {
     if (icons16) FreeMem(icons16, sizeof icon16_src);
     if (icons8) FreeMem(icons8, sizeof icon16_src / 2);
-    icons16 = icons8 = NULL;
+    if (layers16) FreeMem(layers16, NLAYER * 32);
+    if (layers8) FreeMem(layers8, NLAYER * 16);
+    if (rest16) FreeMem(rest16, sizeof icon16_src);
+    if (rest8) FreeMem(rest8, sizeof icon16_src / 2);
+    icons16 = icons8 = layers16 = layers8 = rest16 = rest8 = NULL;
 }
 
 int icon_h(void) { return small_icons ? 8 : 16; }
 
+/* a toolbar icon: in colour on screens of 16 colours or more (its colour
+ * layers, then the rest of it in pen), else all in pen */
 void draw_tbicon(int ic, long x, long y, int pen)
 {
     UWORD *src = small_icons ? icons8 : icons16;
+    int k, ih = icon_h(), colour = npens >= 16 && layers16 && rest16;
     if (!src || !grp) return;
-    SetAPen(grp, PEN(pen));
     SetDrMd(grp, JAM1);
-    BltTemplate((PLANEPTR)(src + ic * icon_h()), 0, 2, grp, cw(x), cw(y), 16, icon_h());
+    if (colour) {
+        int any = 0;
+        for (k = 0; k < NLAYER; k++) {
+            if (layer16[k].ic != ic) continue;
+            any = 1;
+            SetAPen(grp, PEN(layer_pen(layer16[k].pen)));
+            BltTemplate((PLANEPTR)((small_icons ? layers8 : layers16) + k * ih), 0, 2, grp, cw(x), cw(y), 16, ih);
+        }
+        if (any) src = small_icons ? rest8 : rest16;
+    }
+    SetAPen(grp, PEN(pen));
+    BltTemplate((PLANEPTR)(src + ic * ih), 0, 2, grp, cw(x), cw(y), 16, ih);
 }
 
 /* a 1-bit picture (rows of rb bytes, 1 = ink) drawn in pen, 0 bits
@@ -452,6 +485,7 @@ void gfx_free(void)
 static struct Window *tw;
 static short tx, ty;
 static int   tq, released, tracking;
+static ULONG t_idcmp;                   /* the window's own events, put back after */
 
 void track_begin(struct Window *w)
 {
@@ -460,6 +494,7 @@ void track_begin(struct Window *w)
     tracking = 1;
     tx = w->MouseX; ty = w->MouseY;
     tq = 0;
+    t_idcmp = w->IDCMPFlags;
     ModifyIDCMP(w, w->IDCMPFlags | IDCMP_MOUSEMOVE | IDCMP_INTUITICKS);
     ReportMouse(TRUE, w);
 }
@@ -470,7 +505,7 @@ void track_end(void)
     tracking = 0;
     if (tw) {
         ReportMouse(FALSE, tw);
-        ModifyIDCMP(tw, tw->IDCMPFlags & ~(IDCMP_MOUSEMOVE | IDCMP_INTUITICKS));
+        ModifyIDCMP(tw, t_idcmp);           /* (a document window keeps its ticks: the caret flashes) */
     }
     tw = NULL;
 }
@@ -534,6 +569,18 @@ int double_click(ULONG secs, ULONG micros)
     lsecs = r ? 0 : secs;
     lmics = r ? 0 : micros;
     return r;
+}
+
+/* clicks in quick succession on about the same spot: 1, 2, 3, 4, then 1 again */
+static ULONG csecs, cmics;
+static short cx, cy, cn;
+int click_count(ULONG secs, ULONG micros, short x, short y)
+{
+    if (cn && DoubleClick(csecs, cmics, secs, micros) && x >= cx - 4 && x <= cx + 4 && y >= cy - 4 && y <= cy + 4)
+        cn = (short)(cn % 4 + 1);
+    else cn = 1;
+    csecs = secs; cmics = micros; cx = x; cy = y;
+    return cn;
 }
 
 /* ---- character sets ----------------------------------------------------------- */

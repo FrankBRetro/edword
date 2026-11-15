@@ -289,12 +289,17 @@ static void draw_text_pane(DOC *d, const GRECT *tpc, GRECT *clip)
     clip_off();
 }
 
+/* the codes pane in the colour theme's colours (light and text, as the
+ * Atari version has it) on the paper display */
+static int codes_themed(void) { return pref_display == DISP_NORMAL && theme_possible() && npens >= 16; }
+
 /* one wrapped line of the codes text; codes in another colour */
 static void draw_codes_line(CODES *c, long li, long x, long top, int cols)
 {
     long s = c->ls[li], n = codes_line_len(c, li), i = 0;
     char buf[256];
-    int fg = ed_fg(), pen = pref_display == DISP_NORMAL ? P_DBLUE : P_TGREY;
+    int th = codes_themed();
+    int fg = th ? P_TTEXT : ed_fg(), pen = pref_display == DISP_NORMAL ? (th && theme_dark() ? P_CYAN : P_DBLUE) : P_TGREY;
     if (npens < 16) pen = fg;
     if (n > cols) n = cols;
     if (n > 255) n = 255;
@@ -326,7 +331,7 @@ static void draw_codes_pane(DOC *d, const GRECT *cp, GRECT *clip)
 
     if (!rc_inter(cp, &r)) return;
     clip_set(&r);
-    fill_g(&r, ed_bg());
+    fill_g(&r, codes_themed() ? P_TLIGHT : ed_bg());
     for (li = c->top; li < c->nl; li++) {
         long y = y0 + (li - c->top) * chgt;
         if (y >= r.g_y + r.g_h) break;
@@ -414,22 +419,22 @@ static void draw_toolbar(DOC *d, const GRECT *tb, GRECT *clip)
 
     if (!rc_inter(tb, &r)) return;
     clip_set(&r);
-    fill_g(&r, P_GREY);
-    line(tb->g_x, tb->g_y + tb->g_h - 1, tb->g_x + tb->g_w - 1, tb->g_y + tb->g_h - 1, P_BLACK);
+    fill_g(&r, P_TFACE);
+    line(tb->g_x, tb->g_y + tb->g_h - 1, tb->g_x + tb->g_w - 1, tb->g_y + tb->g_h - 1, P_TDARK);
     for (i = 0; tbi[i].w; i++) {
         long bw = tbi[i].w - 2;
         if (tbi[i].icon >= 0) {
             GRECT b;
             int act = tb_active(d, tbi[i].cmd), dis = tb_disabled(d, tbi[i].cmd);
             b.g_x = (short)x; b.g_y = (short)by; b.g_w = (short)bw; b.g_h = (short)bh;
-            if (act) fill_rect(x + 1, by + 1, x + bw - 2, by + bh - 2, P_LIGHT);
+            if (act) fill_rect(x + 1, by + 1, x + bw - 2, by + bh - 2, P_TMARGIN);
             bevel(&b, act);
-            draw_tbicon(tbi[i].icon, x + 3, by + (bh - ih) / 2, P_BLACK);
+            draw_tbicon(tbi[i].icon, x + (bw - 16) / 2, by + (bh - ih) / 2, P_TTEXT);
             if (tbi[i].cmd < 0) {                     /* popup arrow */
                 long ax = x + bw - 9, ay = by + bh / 2 - 1, k;
-                for (k = 0; k < 3; k++) line(ax + k, ay + k, ax + 6 - k, ay + k, P_BLACK);
+                for (k = 0; k < 3; k++) line(ax + k, ay + k, ax + 6 - k, ay + k, P_TTEXT);
             }
-            if (dis) fill_pat(x + 1, by + 1, x + bw - 2, by + bh - 2, P_GREY, 1);
+            if (dis) fill_pat(x + 1, by + 1, x + bw - 2, by + bh - 2, P_TFACE, 1);
         }
         x += tbi[i].w;
     }
@@ -483,9 +488,15 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
         break;
     case TB_ZOOM:
         n = -1;
-        for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (zooms[k] == d->zoom) n = k; }
-        sel = popup(items, NZOOM, n, px, py);
-        if (sel >= 0) set_zoom(d, zooms[sel]);
+        for (k = 0; k < NZOOM; k++) { sprintf(zm[k], "%d%%", zooms[k]); items[k] = zm[k]; if (!d->fitw && zooms[k] == d->zoom) n = k; }
+        items[NZOOM] = L(M_ZOOMFIT);
+        items[NZOOM + 1] = L(M_ZOOMPAGE);
+        if (d->fitw == FIT_WIDTH) n = NZOOM;
+        if (d->fitw == FIT_PAGE) n = NZOOM + 1;
+        sel = popup(items, NZOOM + 2, n, px, py);
+        if (sel >= 0 && sel < NZOOM) set_zoom(d, zooms[sel]);
+        else if (sel == NZOOM) set_fit_width(d, FIT_WIDTH);
+        else if (sel == NZOOM + 1) set_fit_width(d, FIT_PAGE);
         break;
     default:
         if (!tb_disabled(d, tbi[i].cmd)) do_cmd(tbi[i].cmd);
@@ -500,7 +511,7 @@ static void draw_icon(DOC *d, const GRECT *wa)
     long cx = wa->g_x + wa->g_w / 2, y = wa->g_y + 3;
     char s[12];
     long k;
-    fill_g(wa, P_GREY);
+    fill_g(wa, P_TFACE);
     fill_rect(cx - 10, y, cx + 10, y + 26, P_WHITE);
     line(cx - 10, y, cx + 4, y, P_BLACK);                     /* a page with a folded corner */
     line(cx + 4, y, cx + 10, y + 6, P_BLACK);
@@ -561,8 +572,8 @@ static void draw_hruler(DOC *d, const GRECT *hr, const GRECT *tp, GRECT *clip)
     if (x0 > hr->g_x) fill_rect(hr->g_x, hr->g_y, x0 - 1, base, P_DESK);
     if (x0 + pw < hr->g_x + hr->g_w) fill_rect(x0 + pw, hr->g_y, hr->g_x + hr->g_w - 1, base, P_DESK);
     ml = zx(d, pt2px_x(f.ml)); mr = zx(d, pt2px_x(f.mr));
-    fill_rect(x0, hr->g_y + 1, x0 + ml - 1, base - 1, npens >= 16 ? P_LIGHT : P_GREY);
-    fill_rect(x0 + pw - mr, hr->g_y + 1, x0 + pw - 1, base - 1, npens >= 16 ? P_LIGHT : P_GREY);
+    fill_rect(x0, hr->g_y + 1, x0 + ml - 1, base - 1, P_TMARGIN);
+    fill_rect(x0 + pw - mr, hr->g_y + 1, x0 + pw - 1, base - 1, P_TMARGIN);
     wmm = (long)PS(d).w * 254 / 720;
     step = label_step(d, mm_x, 3 * wchar);
     for (mm = 0; mm <= wmm; mm++) {
@@ -621,8 +632,8 @@ static void draw_vruler(DOC *d, const GRECT *vr, const GRECT *tp, GRECT *clip)
         page_fmt(d, pg, &f);
         fill_rect(vr->g_x, y0, right, y0 + ph - 1, P_WHITE);
         mt = zx(d, pt2px_y(f.mt)); mb = zx(d, pt2px_y(f.mb));
-        fill_rect(vr->g_x + 1, y0, right - 1, y0 + mt - 1, npens >= 16 ? P_LIGHT : P_GREY);
-        fill_rect(vr->g_x + 1, y0 + ph - mb, right - 1, y0 + ph - 1, npens >= 16 ? P_LIGHT : P_GREY);
+        fill_rect(vr->g_x + 1, y0, right - 1, y0 + mt - 1, P_TMARGIN);
+        fill_rect(vr->g_x + 1, y0 + ph - mb, right - 1, y0 + ph - 1, P_TMARGIN);
         for (mm = 0; mm <= hmm; mm++) {
             long y = y0 + zx(d, mm_y(mm)), w;
             if (y < r.g_y - hchar || y > r.g_y + r.g_h + hchar) continue;
@@ -690,9 +701,9 @@ static void draw_window(DOC *d, GRECT *clip)
         dv.g_h = DIVH;
         r = *clip;
         if (rc_inter(&dv, &r)) {
-            fill_g(&r, P_GREY);
-            line(dv.g_x, dv.g_y, dv.g_x + dv.g_w - 1, dv.g_y, P_WHITE);
-            line(dv.g_x, dv.g_y + DIVH - 1, dv.g_x + dv.g_w - 1, dv.g_y + DIVH - 1, P_BLACK);
+            fill_g(&r, P_TFACE);
+            line(dv.g_x, dv.g_y, dv.g_x + dv.g_w - 1, dv.g_y, P_TLIGHT);
+            line(dv.g_x, dv.g_y + DIVH - 1, dv.g_x + dv.g_w - 1, dv.g_y + DIVH - 1, P_TDARK);
         }
     }
     if (cp.g_h) draw_codes_pane(d, &cp, clip);
@@ -1033,6 +1044,9 @@ static void edited(DOC *d, long from, int typing)
     edlog("edit: done");
 }
 
+static int fit_zoom(DOC *d);
+static void zoom_apply(DOC *d, int zoom);
+
 void after_edit(DOC *d, long from)   { edited(d, from, 0); update_menu(d); }
 void after_typing(DOC *d, long from) { edited(d, from, 1); }
 
@@ -1052,6 +1066,8 @@ void doc_changed(DOC *d)
     set_info(d);
     update_menu(d);
     preview_changed(d);
+    /* a new page size: fit it to the window again */
+    if (d->fitw && d->view != VIEW_CODES && fit_zoom(d) != d->zoom) zoom_apply(d, fit_zoom(d));
 }
 
 /* the caret at pos, inverted: drawing it twice takes it away again, so a
@@ -1071,6 +1087,39 @@ static void caret_xor(DOC *d, long pos)
     clip_set(&tp);
     xor_rect(x, y, x + (d->zoom >= 150 ? 1 : 0), y + zx(d, ln->asc + ln->desc) - 1);
     gfx_end();
+}
+
+/* The flashing caret. Every tick (a tenth of a second) the active window
+ * gets, five make a flash: the caret is inverted away and back. Everything
+ * else draws as if the caret were there, so before any other message is
+ * handled caret_unblink puts it back. */
+static DOC *blink_d;
+static long blink_pos;
+static int blink_n;
+
+void caret_unblink(void)
+{
+    DOC *d = blink_d;
+    blink_n = 0;
+    if (!d) return;
+    blink_d = NULL;
+    if (DW(d)->w && !d->iconified) caret_xor(d, blink_pos);
+}
+
+void caret_forget(DOC *d) { if (blink_d == d) blink_d = NULL; }
+
+static void caret_tick(DOC *d)
+{
+    struct Window *w = DW(d)->w;
+    if (++blink_n < 5) return;
+    if (blink_d) { caret_unblink(); return; }
+    blink_n = 0;
+    if (!w || d->iconified || !(w->Flags & WFLG_WINDOWACTIVE)) return;
+    if (d->anchor >= 0 || d->selobj >= 0 || !d->nlines) return;
+    if (!(d->view == VIEW_DOC || d->focus == 0)) return;
+    caret_xor(d, d->cursor);
+    blink_d = d;
+    blink_pos = d->cursor;
 }
 
 static void scroll_text(DOC *d, long osx, long osy);
@@ -1188,11 +1237,27 @@ void set_toolbar(DOC *d, int on)
     update_menu(d);
 }
 
-void set_zoom(DOC *d, int zoom)
+/* the zoom at which the page, its shadow and the gaps fill the page pane's
+ * width (and with FIT_PAGE, its height too) */
+static int fit_zoom(DOC *d)
 {
-    if (zoom < zooms[0]) zoom = zooms[0];
-    if (zoom > zooms[NZOOM - 1]) zoom = zooms[NZOOM - 1];
-    if (zoom == d->zoom) return;
+    GRECT tb, tp, cp;
+    long pw = page_w_px(d), ph = page_h_px(d), z;
+    get_panes(d, &tb, &tp, &cp);
+    if (pw <= 0 || tp.g_w <= 0 || ph <= 0 || tp.g_h <= 0) return d->zoom;
+    z = (tp.g_w - 2L * PGAP - 4) * 100 / pw;
+    if (d->fitw == FIT_PAGE) {
+        long zh = (tp.g_h - 2L * PGAP - 4) * 100 / ph;
+        if (zh < z) z = zh;
+    }
+    return (int)(z < ZOOM_MIN ? ZOOM_MIN : z > ZOOM_MAX ? ZOOM_MAX : z);
+}
+
+static void zoom_apply(DOC *d, int zoom)
+{
+    if (zoom < ZOOM_MIN) zoom = ZOOM_MIN;
+    if (zoom > ZOOM_MAX) zoom = ZOOM_MAX;
+    if (zoom == d->zoom) { update_menu(d); return; }
     d->zoom = zoom;
     if (d->view == VIEW_CODES) set_view(d, VIEW_DOC);
     clamp_scroll(d);
@@ -1203,12 +1268,26 @@ void set_zoom(DOC *d, int zoom)
     update_menu(d);
 }
 
+/* a zoom chosen by the user: the fit to the window ends */
+void set_zoom(DOC *d, int zoom) { d->fitw = 0; zoom_apply(d, zoom); }
+
+/* on: FIT_WIDTH or FIT_PAGE, 0 off */
+void set_fit_width(DOC *d, int on)
+{
+    d->fitw = on;
+    if (on && d->view == VIEW_CODES) set_view(d, VIEW_DOC);
+    if (on) zoom_apply(d, fit_zoom(d));
+    else update_menu(d);
+}
+
 void win_resized(DOC *d)
 {
     if (d->view != VIEW_DOC) {
         long cols = codes_cols_of(d);
         if (cols != d->cv.cols) codes_wrap(&d->cv, cols);
     }
+    /* fitting the page to the window: the zoom follows the new size */
+    if (d->fitw && !d->iconified && d->view != VIEW_CODES && fit_zoom(d) != d->zoom) { zoom_apply(d, fit_zoom(d)); return; }
     clamp_scroll(d);
     refresh_all(d);
     set_sliders(d);
@@ -1243,11 +1322,17 @@ static void add_scrollers(DWIN *w)
     c13_place_scrollers(w->w, g);
 }
 #else
-static struct Image *sysimage(ULONG which)
+/* a border image; w or h > 0 asks for that size (Workbench 3: sysiclass
+ * draws its frame and arrow to fit) */
+/* a system image in the size Intuition gives the screen's own border
+ * gadgets (as the developer examples have it): medium for a high res
+ * screen, low otherwise. w, h: only when its own size doesn't fit */
+static struct Image *sysimage(ULONG which, long w, long h)
 {
-    ULONG size = small_icons ? SYSISIZE_MEDRES : SYSISIZE_HIRES;
+    ULONG size = (scr->Flags & SCREENHIRES) ? SYSISIZE_MEDRES : SYSISIZE_LOWRES;
     return (struct Image *)NewObject(NULL, (UBYTE *)SYSICLASS, SYSIA_DrawInfo, (ULONG)dri, SYSIA_Which, which,
-                                     SYSIA_Size, size, TAG_END);
+                                     SYSIA_Size, size, w > 0 ? IA_Width : TAG_IGNORE, (ULONG)w,
+                                     h > 0 ? IA_Height : TAG_IGNORE, (ULONG)h, TAG_END);
 }
 
 static void free_scrollers(DWIN *w)
@@ -1257,16 +1342,34 @@ static void free_scrollers(DWIN *w)
     for (i = 0; i < 5; i++) if (w->img[i]) { DisposeObject(w->img[i]); w->img[i] = NULL; }
 }
 
-/* the right and bottom border scrollers, in the 2.0 style */
-static struct Gadget *make_scrollers(DWIN *w)
+/* The right and bottom border scrollers, in the 2.0 style. They are made
+ * once the window is open, to fit the borders Intuition gave it (its size
+ * gadget's): sw the right border's width, sh the bottom's height, top the
+ * title bar's. The arrows are made that wide (right) or high (bottom):
+ * with a system image set (a GUI theme, a graphics card's screen)
+ * sysiclass's own sizes can differ from Intuition's. */
+static struct Gadget *make_scrollers(DWIN *w, long sw, long sh, long top)
 {
     struct Gadget *prev = NULL, *first = NULL;
     struct Image **im = w->img;
-    long top = scr->WBorTop + scr->Font->ta_YSize + 1, sw, sh;
-    im[0] = sysimage(UPIMAGE); im[1] = sysimage(DOWNIMAGE);
-    im[2] = sysimage(LEFTIMAGE); im[3] = sysimage(RIGHTIMAGE); im[4] = sysimage(SIZEIMAGE);
-    if (!im[0] || !im[1] || !im[2] || !im[3] || !im[4]) return NULL;
-    sw = im[4]->Width; sh = im[4]->Height;
+    im[4] = NULL;
+    im[0] = sysimage(UPIMAGE, 0, 0); im[1] = sysimage(DOWNIMAGE, 0, 0);
+    im[2] = sysimage(LEFTIMAGE, 0, 0); im[3] = sysimage(RIGHTIMAGE, 0, 0);
+    if (!im[0] || !im[1] || !im[2] || !im[3]) return NULL;
+    edlog("borders: right %ld bottom %ld top %ld; arrows %dx%d, %dx%d; screen %s", sw, sh, top,
+          im[0]->Width, im[0]->Height, im[2]->Width, im[2]->Height, (scr->Flags & SCREENHIRES) ? "hires" : "lores");
+    /* their own size, as the size gadget's; made to the border only where
+     * that differs (a GUI theme's images, say) */
+    if (im[0]->Width != sw || im[2]->Height != sh) {
+        int i;
+        long uh = im[0]->Height, lw = im[2]->Width;
+        for (i = 0; i < 4; i++) { DisposeObject(im[i]); im[i] = NULL; }
+        if (uh > sw * 3 / 2 || uh < sw / 2) uh = sw;
+        if (lw > sh * 2 || lw < sh / 2) lw = sh + sh / 2;
+        im[0] = sysimage(UPIMAGE, sw, uh); im[1] = sysimage(DOWNIMAGE, sw, uh);
+        im[2] = sysimage(LEFTIMAGE, lw, sh); im[3] = sysimage(RIGHTIMAGE, lw, sh);
+        if (!im[0] || !im[1] || !im[2] || !im[3]) return NULL;
+    }
 #define BTN(gid, img, rr, rb, border) \
     w->g[gid] = (struct Gadget *)NewObject(NULL, (UBYTE *)BUTTONGCLASS, GA_Image, (ULONG)(img), \
         GA_RelRight, (ULONG)(rr), GA_RelBottom, (ULONG)(rb), border, TRUE, GA_ID, gid, \
@@ -1281,14 +1384,14 @@ static struct Gadget *make_scrollers(DWIN *w)
     BTN(GID_RIGHT, im[3], -(sw + im[3]->Width - 1), -(im[3]->Height - 1), GA_BottomBorder)
 #undef BTN
     w->g[GID_VPROP] = (struct Gadget *)NewObject(NULL, (UBYTE *)PROPGCLASS,
-        GA_RelRight, (ULONG)-(sw - 5), GA_Top, (ULONG)(top + 1), GA_Width, (ULONG)(sw - 8),
+        GA_RelRight, (ULONG)-(sw - 5), GA_Top, (ULONG)(top + 1), GA_Width, (ULONG)(sw - 8 > 4 ? sw - 8 : 4),
         GA_RelHeight, (ULONG)-(top + sh + im[0]->Height + im[1]->Height + 2), GA_RightBorder, TRUE,
         GA_ID, GID_VPROP, PGA_Freedom, FREEVERT, PGA_NewLook, TRUE, PGA_Borderless, TRUE,
         PGA_Total, 1, PGA_Visible, 1, PGA_Top, 0, ICA_TARGET, ICTARGET_IDCMP, GA_Previous, (ULONG)prev, TAG_END);
     if (!w->g[GID_VPROP]) return NULL;
     prev = w->g[GID_VPROP];
     w->g[GID_HPROP] = (struct Gadget *)NewObject(NULL, (UBYTE *)PROPGCLASS,
-        GA_Left, (ULONG)(scr->WBorLeft), GA_RelBottom, (ULONG)-(sh - 3), GA_Height, (ULONG)(sh - 4),
+        GA_Left, (ULONG)(scr->WBorLeft), GA_RelBottom, (ULONG)-(sh - 3), GA_Height, (ULONG)(sh - 4 > 3 ? sh - 4 : 3),
         GA_RelWidth, (ULONG)-(scr->WBorLeft + sw + im[2]->Width + im[3]->Width + 2), GA_BottomBorder, TRUE,
         GA_ID, GID_HPROP, PGA_Freedom, FREEHORIZ, PGA_NewLook, TRUE, PGA_Borderless, TRUE,
         PGA_Total, 1, PGA_Visible, 1, PGA_Top, 0, ICA_TARGET, ICTARGET_IDCMP, GA_Previous, (ULONG)prev, TAG_END);
@@ -1306,16 +1409,14 @@ static struct Gadget *make_scrollers(DWIN *w)
 
 #define DOC_IDCMP (IDCMP_CLOSEWINDOW | IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW | IDCMP_MOUSEBUTTONS | \
                    IDCMP_VANILLAKEY | IDCMP_RAWKEY | IDCMP_MENUPICK | IDCMP_IDCMPUPDATE | \
-                   IDCMP_ACTIVEWINDOW | IDCMP_GADGETUP | IDCMP_CHANGEWINDOW)
+                   IDCMP_ACTIVEWINDOW | IDCMP_GADGETUP | IDCMP_CHANGEWINDOW | IDCMP_INTUITICKS)
 
 static struct Window *make_window(DOC *d, long x, long y, long w, long h)
 {
     DWIN *dw = DW(d);
-    struct Gadget *gl;
+    struct Gadget *gl = NULL;
     static WORD zoom[MAX_DOCS][4];
     int slot = d->slot;
-    gl = make_scrollers(dw);
-    if (!gl) { free_scrollers(dw); return NULL; }
     zoom[slot][0] = 0; zoom[slot][1] = desk.g_y; zoom[slot][2] = scr_w; zoom[slot][3] = desk.g_h;
     sprintf(dw->title, "%s", lat(d->base));
     dw->w = open_ewin((struct TagItem *)(ULONG[]){
@@ -1324,10 +1425,17 @@ static struct Window *make_window(DOC *d, long x, long y, long w, long h)
         WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_SizeGadget, TRUE,
         WA_SizeBRight, TRUE, WA_SizeBBottom, TRUE, WA_SmartRefresh, TRUE, WA_Activate, TRUE,
         WA_MinWidth, 200, WA_MinHeight, 120, WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
-        WA_Zoom, (ULONG)zoom[slot], WA_Gadgets, (ULONG)AMI13_GADGETS(gl), WA_NewLookMenus, TRUE, TAG_END }, DOC_IDCMP);
-    if (!dw->w) { free_scrollers(dw); return NULL; }
+        WA_Zoom, (ULONG)zoom[slot], WA_NewLookMenus, TRUE, TAG_END }, DOC_IDCMP);
+    if (!dw->w) return NULL;
 #ifdef AMI13
+    (void)gl;
+    if (!make_scrollers(dw)) { close_ewin(dw->w); dw->w = NULL; free_scrollers(dw); return NULL; }
     add_scrollers(dw);
+#else
+    gl = make_scrollers(dw, dw->w->BorderRight, dw->w->BorderBottom, dw->w->BorderTop);
+    if (!gl) { close_ewin(dw->w); dw->w = NULL; free_scrollers(dw); return NULL; }
+    AddGList(dw->w, gl, (UWORD)~0, -1, NULL);
+    RefreshGList(gl, dw->w, NULL, -1);
 #endif
     return dw->w;
 }
@@ -1937,9 +2045,27 @@ static void text_click(DOC *d, GRECT *tp, short mx, short my, int qual, int clic
         live_popup(d, wa, wb, (short)(mx + w->LeftEdge), (short)(my + w->TopEdge));
         return;
     }
-    if (clicks >= 2) {                                  /* double click: word */
+    /* clicks in quick succession cycle: the word, the line, nothing */
+    if (clicks == 2) {
         if (word_at(d, pos, &wa, &wb, word, WORDMAX)) { d->anchor = wa; d->cursor = wb; }
         after_move(d, oc, oa);
+        update_menu(d);
+        return;
+    }
+    if (clicks == 3) {
+        LINE *ln = &d->lines[doc_find_line(d, pos)];
+        long e = ln->start + ln->len;
+        if (e > ln->start && e <= d->len && ISEND(d->text[e - 1].ch)) e--;
+        d->anchor = ln->start; d->cursor = e;
+        if (d->anchor == d->cursor) d->anchor = -1;
+        after_move(d, oc, oa);
+        update_menu(d);
+        return;
+    }
+    if (clicks == 4) {
+        d->anchor = -1; d->cursor = pos; d->want_x = -1;
+        after_move(d, oc, oa);
+        update_menu(d);
         return;
     }
     if (qual & KQ_SHIFT) { if (d->anchor < 0) d->anchor = d->cursor; }
@@ -2008,7 +2134,7 @@ static void win_click(DOC *d, short mx, short my, int qual, int clicks)
     else if (in_rect(&hr, mx, my) || in_rect(&vr, mx, my)) {
         /* a double click on a ruler: the indents, or the page layout */
         track_end();
-        if (clicks >= 2) do_cmd(in_rect(&hr, mx, my) && !doc_in_table(d, d->cursor, NULL, NULL) ? C_INDENTS : C_PAGE);
+        if (clicks == 2) do_cmd(in_rect(&hr, mx, my) && !doc_in_table(d, d->cursor, NULL, NULL) ? C_INDENTS : C_PAGE);
     }
     else if (in_rect(&tp, mx, my)) {
         if (d->view == VIEW_SPLIT) set_focus(d, 0);
@@ -2060,15 +2186,19 @@ void win_msg(DOC *d, struct IntuiMessage *m)
     case IDCMP_CHANGEWINDOW:
         return;
     case IDCMP_ACTIVEWINDOW:
+        theme_activate(d->slot);              /* the screen's pens in its theme */
         update_menu(d);
         fontsel_sync();
         return;
     case IDCMP_CLOSEWINDOW:
         close_doc(d);
         return;
+    case IDCMP_INTUITICKS:
+        caret_tick(d);
+        return;
     case IDCMP_MOUSEBUTTONS:
         if (m->Code != SELECTDOWN) return;
-        clicks = double_click(m->Seconds, m->Micros) ? 2 : 1;
+        clicks = click_count(m->Seconds, m->Micros, m->MouseX, m->MouseY);
         {
             int q = ((m->Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? KQ_SHIFT : 0) |
                     ((m->Qualifier & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? KQ_ALT : 0);

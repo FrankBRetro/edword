@@ -119,13 +119,25 @@ void exit(int code)
 typedef struct mnode { struct mnode *next, *prev; unsigned long size; unsigned long pad; } MNODE;
 static MNODE mlist = { &mlist, &mlist, 0, 0 };
 
+#ifdef EDLOG
+/* the log build checks the blocks: a mark before and after each */
+#define MMAGIC 0xED5A11CEUL
+#define MTAIL 4
+#else
+#define MTAIL 0
+#endif
+
 void *malloc(size_t n)
 {
     MNODE *m;
     if (n == 0) n = 1;
-    m = (MNODE *)AllocMem(n + sizeof(MNODE), MEMF_ANY);
+    m = (MNODE *)AllocMem(n + sizeof(MNODE) + MTAIL, MEMF_ANY);
     if (!m) return NULL;
-    m->size = n + sizeof(MNODE);
+    m->size = n + sizeof(MNODE) + MTAIL;
+#ifdef EDLOG
+    m->pad = MMAGIC;
+    { unsigned char *t = (unsigned char *)(m + 1) + n; t[0] = 0xA5; t[1] = 0x5A; t[2] = 0xC3; t[3] = 0x3C; }
+#endif
     m->next = mlist.next;
     m->prev = &mlist;
     mlist.next->prev = m;
@@ -157,7 +169,7 @@ void *realloc(void *p, size_t n)
     size_t old;
     if (!p) return malloc(n);
     if (!n) { free(p); return NULL; }
-    old = ((MNODE *)p - 1)->size - sizeof(MNODE);
+    old = ((MNODE *)p - 1)->size - sizeof(MNODE) - MTAIL;
     if (n <= old && n + 256 > old) return p;          /* shrinking a little: keep it */
     q = malloc(n);
     if (!q) return NULL;
@@ -165,6 +177,25 @@ void *realloc(void *p, size_t n)
     free(p);
     return q;
 }
+
+#ifdef EDLOG
+void edlog(const char *fmt, ...);
+/* every block still sound? the first broken one is logged */
+int ami_heap_check(const char *where)
+{
+    MNODE *m;
+    int n = 0;
+    for (m = mlist.next; m != &mlist; m = m->next, n++) {
+        unsigned char *t = (unsigned char *)m + m->size - MTAIL;
+        if (m->pad != MMAGIC || m->next->prev != m) { edlog("heap %s: block %d at %lx: header broken", where, n, (unsigned long)(m + 1)); return 0; }
+        if (t[0] != 0xA5 || t[1] != 0x5A || t[2] != 0xC3 || t[3] != 0x3C) {
+            edlog("heap %s: block %d at %lx (%lu bytes): written past its end", where, n, (unsigned long)(m + 1), m->size - sizeof(MNODE) - MTAIL);
+            return 0;
+        }
+    }
+    return 1;
+}
+#endif
 
 void ami_free_all(void)
 {
@@ -725,4 +756,53 @@ struct tm *localtime(const time_t *t)
     tm.tm_mday = (int)days + 1;
     tm.tm_isdst = 0;
     return &tm;
+}
+
+/* 64-bit multiply and divide for the code GCC generates from "long long"
+ * (the core's twip/pixel conversions); no libgcc here. Only 32-bit
+ * multiplies and one-bit shifts, which GCC does inline. */
+typedef unsigned long long u64_;
+long long __muldi3(long long a, long long b)
+{
+    unsigned long al = (unsigned long)a, ah = (unsigned long)((u64_)a >> 32);
+    unsigned long bl = (unsigned long)b, bh = (unsigned long)((u64_)b >> 32);
+    unsigned long a0 = al & 0xffff, a1 = al >> 16, b0 = bl & 0xffff, b1 = bl >> 16;
+    unsigned long p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
+    unsigned long mid = (p00 >> 16) + (p01 & 0xffff) + (p10 & 0xffff);
+    unsigned long lo = (p00 & 0xffff) | (mid << 16);
+    unsigned long hi = p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16) + al * bh + ah * bl;
+    return (long long)(((u64_)hi << 32) | lo);
+}
+static u64_ udiv64(u64_ n, u64_ d, u64_ *rem)
+{
+    u64_ q = 0, r = 0;
+    int i;
+    if (d == 0) { if (rem) *rem = 0; return 0; }
+    if ((n >> 32) == 0 && (d >> 32) == 0) {
+        unsigned long nl = (unsigned long)n, dl = (unsigned long)d;
+        if (rem) *rem = nl % dl;
+        return nl / dl;
+    }
+    for (i = 0; i < 64; i++) {
+        r = (r << 1) | (n >> 63);
+        n <<= 1;
+        q <<= 1;
+        if (r >= d) { r -= d; q |= 1; }
+    }
+    if (rem) *rem = r;
+    return q;
+}
+unsigned long long __udivdi3(unsigned long long a, unsigned long long b) { return udiv64(a, b, 0); }
+unsigned long long __umoddi3(unsigned long long a, unsigned long long b) { u64_ r; udiv64(a, b, &r); return r; }
+long long __divdi3(long long a, long long b)
+{
+    int neg = (a < 0) ^ (b < 0);
+    u64_ q = udiv64(a < 0 ? -(u64_)a : (u64_)a, b < 0 ? -(u64_)b : (u64_)b, 0);
+    return neg ? -(long long)q : (long long)q;
+}
+long long __moddi3(long long a, long long b)
+{
+    u64_ r;
+    udiv64(a < 0 ? -(u64_)a : (u64_)a, b < 0 ? -(u64_)b : (u64_)b, &r);
+    return a < 0 ? -(long long)r : (long long)r;
 }

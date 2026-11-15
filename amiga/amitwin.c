@@ -216,7 +216,7 @@ const TOOL find_tool = { f_owns, f_msg, f_key, f_close_tool, f_docgone };
 
 static TWIN sw;
 static struct {
-    int    ns, wrapped;
+    int    ns, wrapped, done;
     DOC   *d;
     long   s, e, from, start;
     char   word[WORDMAX], sug[6][WORDMAX], sugl[6][WORDMAX], head[80], chg[WORDMAX];
@@ -280,6 +280,27 @@ void spell_close(void)
 
 DOC *spell_doc(void) { return sw.open ? sp.d : NULL; }
 
+/* the check is over: the window says so and stays open (no requester to
+ * hold up the other windows) until Stop or its close gadget */
+static void sp_done(void)
+{
+    int i;
+    sp.done = 1;
+    strcpy(sp.head, L(S_SPELL_DONE));
+    sp.chg[0] = 0;
+    sp.ns = 0;
+    for (i = 0; i < 6; i++) { sp.sug[i][0] = 0; sp.sugl[i][0] = 0; dlg_show(&sw.g, sp.sb[i], 0); }
+    dlg_disable(&sw.g, sp.rep, 1);
+    dlg_disable(&sw.g, sp.ign, 1);
+    dlg_disable(&sw.g, sp.iga, 1);
+    dlg_disable(&sw.g, sp.add, 1);
+    sw.def = sp.stp;
+    for (i = 0; i < sw.g.nit; i++)
+        if (sw.g.it[i].buf == sp.chg && sw.g.it[i].gad)
+            GT_SetGadgetAttrs(sw.g.it[i].gad, sw.g.win, NULL, GTST_String, (ULONG)"", TAG_END);
+    tw_redraw(&sw);
+}
+
 static void sp_find(void)
 {
     DOC *d = sp.d;
@@ -292,19 +313,18 @@ static void sp_find(void)
         busy(0);
         if (sp.wrapped && (s < 0 || s >= sp.start)) s = -1;
         else if (s < 0 && !sp.wrapped && sp.start > 0) {
-            if (alert(1, 2, AL_SPELL_WRAP, AB_CONT_STOP) == 1) {
-                sp.wrapped = 1;
-                sp.from = 0;
-                continue;
-            }
+            /* at the end: on from the start, up to where it began */
+            sp.wrapped = 1;
+            sp.from = 0;
+            continue;
         }
         break;
     }
-    if (s < 0) {
-        spell_close();
-        alert(1, 1, AL_SPELL_DONE, AB_OK);
-        return;
-    }
+    if (s < 0) { sp_done(); return; }
+    sp.done = 0;
+    dlg_disable(&sw.g, sp.rep, 0);
+    dlg_disable(&sw.g, sp.ign, 0);
+    dlg_disable(&sw.g, sp.iga, 0);
     sp.s = s;
     sp.e = e;
     select_range(d, s, e);
@@ -342,7 +362,7 @@ static void sp_act(short it, int clicks)
     const char *with = NULL;
     int i;
     (void)clicks;
-    if (it == sp.stp) { spell_close(); return; }
+    if (it == sp.stp || sp.done) { spell_close(); return; }
     if (!sp_still_there()) {
         sp.from = sp.s <= d->len ? sp.s : d->len;
         sp_find();
@@ -379,6 +399,7 @@ void spell_run(DOC *d)
         int i;
         for (i = 0; i < 6; i++) strcpy(sp.sugl[i], "------------------");
     }
+    sp.done = 0;
     if (!tw_open(&sw, S_SPELL_TITLE, 1)) return;
     sp.d = d;
     sp.wrapped = 0;

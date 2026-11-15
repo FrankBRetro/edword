@@ -357,7 +357,7 @@ static int ed_control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
     if (s->dest == D_HF0 || s->dest == D_HF1) {
         int i = s->dest - D_HF0;
         if (!strcmp(w, "edj") && hasp && p >= 0 && p <= 2) HF(d).just[i] = (unsigned char)p;
-        else if (!strcmp(w, "edfs") && hasp && p >= 4 && p <= 72) HF(d).size = (unsigned char)p;
+        else if (!strcmp(w, "edfs") && hasp && p >= 4 && p <= 150) HF(d).size = (unsigned char)p;
         else if (!strcmp(w, "edfirst") && hasp) HF(d).first = (unsigned char)(p != 0);
         return 1;
     }
@@ -599,7 +599,7 @@ static void control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
     else if (!strcmp(w, "ulnone")) s->attr &= ~A_UNDER;
     else if (!strcmp(w, "plain")) { s->attr = 0; s->size = 12; s->fnum = -1; s->color = 0; }
     else if (!strcmp(w, "cf") && hasp) s->color = (p > 0 && p < nctab) ? ctab[p] : 0;
-    else if (!strcmp(w, "fs") && hasp) s->size = clampi(p / 2, 4, 120);
+    else if (!strcmp(w, "fs") && hasp) s->size = clampi(p / 2, 4, 150);
     else if (!strcmp(w, "f") && hasp) s->fnum = (int)p;
     else if (!strcmp(w, "deff") && hasp) deffnum = (int)p;
     else if (!strcmp(w, "ansicpg") && hasp) rtf_cp = (int)p;
