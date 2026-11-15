@@ -62,21 +62,34 @@ static void set_name(IMG *im, const char *path)
 typedef struct {
     IMG   *im;
     long   w, h, y;
+    long   step, iy;                /* a big picture: every step'th pixel and row */
+    unsigned char *sub;             /* a row of those pixels                  */
     short *e0, *e1;              /* error diffusion: this row and the next */
     int    colourful;            /* a pixel that isn't black or white      */
 } SINK;
 
 static int sink_begin(SINK *s, IMG *im, long w, long h, int colour)
 {
+    long step = 1;
     memset(s, 0, sizeof *s);
-    if (w < 1 || h < 1 || w > 4000 || h > 4000) return 0;
+    if (w < 1 || h < 1 || w > 64000L || h > 64000L) return 0;
+    /* bigger than 4000 pixels (a page scanned at 600 dpi): made smaller as
+     * it is read, keeping every step'th pixel and row */
+    while ((w + step - 1) / step > 4000 || (h + step - 1) / step > 4000) step++;
+    if (step > 1) {
+        s->step = step;
+        s->sub = (unsigned char *)malloc((size_t)((w + step - 1) / step) * 3);
+        if (!s->sub) return 0;
+        w = (w + step - 1) / step;
+        h = (h + step - 1) / step;
+    }
     s->im = im; s->w = w; s->h = h;
     im->w = (short)w; im->h = (short)h; im->rb = (short)((w + 7) / 8);
     im->bits = (unsigned char *)calloc((size_t)im->rb, (size_t)h);
     s->e0 = (short *)calloc((size_t)w + 2, sizeof(short));
     s->e1 = (short *)calloc((size_t)w + 2, sizeof(short));
     if (!im->bits || !s->e0 || !s->e1) {
-        free(s->e0); free(s->e1); img_free(im);
+        free(s->e0); free(s->e1); free(s->sub); img_free(im);
         return 0;
     }
     if (colour && w * h * 3 <= img_rgb_max) im->rgb = (unsigned char *)malloc((size_t)(w * h * 3));
@@ -91,6 +104,12 @@ static void sink_row(SINK *s, const unsigned char *rgb)
     long x;
     short *t;
     if (s->y >= s->h) return;
+    if (s->step > 1) {                          /* a big picture: one row and pixel in step */
+        long k;
+        if (s->iy++ % s->step) return;
+        for (k = 0; k < s->w; k++) memcpy(s->sub + k * 3, rgb + k * s->step * 3, 3);
+        rgb = s->sub;
+    }
     PROG(s->y, s->h);
     if (im->rgb) memcpy(im->rgb + s->y * s->w * 3, rgb, (size_t)(s->w * 3));
     memset(s->e1, 0, (size_t)(s->w + 2) * sizeof(short));
@@ -113,8 +132,8 @@ static void sink_row(SINK *s, const unsigned char *rgb)
 
 static int sink_end(SINK *s, int ok)
 {
-    free(s->e0); free(s->e1);
-    s->e0 = s->e1 = NULL;
+    free(s->e0); free(s->e1); free(s->sub);
+    s->e0 = s->e1 = NULL; s->sub = NULL;
     if (!ok || s->y == 0) { img_free(s->im); return 0; }
     while (s->y < s->h) {                       /* a short file: the rest white */
         if (s->im->rgb) memset(s->im->rgb + s->y * s->w * 3, 255, (size_t)(s->w * 3));
@@ -176,7 +195,10 @@ static int gem_img(const unsigned char *b, long n, IMG *im)
     if (n < 16) return 0;
     hlen = rd16(b + 2); nplanes = rd16(b + 4); patlen = rd16(b + 6);
     w = rd16(b + 12); h = rd16(b + 14);
-    if (rd16(b) > 3 || hlen < 8 || (long)hlen * 2 > n || patlen < 1 || patlen > 16 || !w || !h) return 0;
+    /* Writers differ: the version word is anything from 0 to a program's
+     * own number, the pattern length 0 (no pattern runs) to a few bytes */
+    if (hlen < 8 || (long)hlen * 2 > n || patlen > 255 || !w || !h) return 0;
+    if (patlen < 1) patlen = 2;
     chunky = nplanes == 16 || nplanes == 24 || nplanes == 32;
     if (!chunky && (nplanes < 1 || nplanes > 8)) return 0;
 
@@ -187,6 +209,19 @@ static int gem_img(const unsigned char *b, long n, IMG *im)
         else if (nplanes <= 4 && i < 16) { pal[i][0] = vdi16[i][0]; pal[i][1] = vdi16[i][1]; pal[i][2] = vdi16[i][2]; continue; }
         else g = nc > 1 ? 255 - (i * 255) / (nc - 1) : 255;
         pal[i][0] = pal[i][1] = pal[i][2] = (unsigned char)g;
+    }
+    /* STTT: the palette as Atari ST / STE colour words (0RGB) */
+    if (!chunky && hlen >= 11 && !memcmp(b + 16, "STTT", 4)) {
+        unsigned nc = rd16(b + 20);
+        if (nc > 1u << nplanes) nc = 1u << nplanes;
+        for (i = 0; i < nc && 22 + i * 2 + 2 <= hlen * 2u; i++) {
+            unsigned v = rd16(b + 22 + i * 2), ch;
+            for (ch = 0; ch < 3; ch++) {
+                unsigned c4 = (v >> (8 - ch * 4)) & 15;
+                c4 = ((c4 & 7) << 1) | ((c4 >> 3) & 1);      /* STE: the low bit is the top one */
+                pal[i][ch] = (unsigned char)(c4 * 17);
+            }
+        }
     }
     if (!chunky && hlen >= 11 && !memcmp(b + 16, "XIMG", 4) && rd16(b + 20) == 0) {
         unsigned nc = 1u << nplanes;
@@ -808,7 +843,10 @@ int img_detect(const unsigned char *b, long n)
 {
     if (n >= 8 && !memcmp(b, "\x89PNG\r\n\x1a\n", 8)) return 1;
     if (n >= 12 && !memcmp(b, "FORM", 4) && (!memcmp(b + 8, "ILBM", 4) || !memcmp(b + 8, "PBM ", 4))) return 1;
-    if (n >= 16 && rd16(b) <= 3 && rd16(b + 2) >= 8 && rd16(b + 6) >= 1 && rd16(b + 6) <= 16 && rd16(b + 12) && rd16(b + 14)) {
+    /* (only the first bytes may be here: an XIMG palette makes the header
+     * longer than that, so it isn't required to fit) */
+    if (n >= 16 && rd16(b + 2) >= 8 && rd16(b + 2) <= 2000 && rd16(b + 6) <= 255 &&
+        rd16(b + 12) && rd16(b + 14)) {
         unsigned pl = rd16(b + 4);
         return (pl >= 1 && pl <= 8) || pl == 16 || pl == 24 || pl == 32;
     }

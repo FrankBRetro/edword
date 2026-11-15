@@ -1057,7 +1057,7 @@ static void scroll_view(DOC *d, long osx, long osy)
     if (!dx && !dy) return;
     panes(d, &tb, &hr, &vr, &tp, &cp);
     if (!tp.g_h || !tp.g_w || (dx && dy) || (dx & 1) || (dy & 1) || (dx < 0 ? -dx : dx) >= tp.g_w - 8 || (dy < 0 ? -dy : dy) >= tp.g_h - 8 ||
-        !unobscured(d, &tp)) {
+        (dx && !theme_on()) || !unobscured(d, &tp)) {
         refresh_text(d);
         return;
     }
@@ -1097,6 +1097,27 @@ static void scroll_view(DOC *d, long osx, long osy)
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
     redraw_area(d, &ex);
+    /* The desk's VDI pattern: TOS's repeats every two pixels, but other
+     * VDIs' can be coarser, and then what was moved no longer lines up
+     * with the desk drawn beside it (bands that look like droppings).
+     * So with a patterned desk (no colour theme) the desk either side of
+     * the pages and between them is drawn again. */
+    if (dy && !theme_on()) {
+        long x = scr_x(d, &tp, 0) - 1, pw = zx(d, page_w_px(d)), ph = page_h_view(d);
+        int p, np = doc_npages(d);
+        GRECT k;
+        k = tp; if (x > tp.g_x) { k.g_w = (short)(x - tp.g_x); redraw_area(d, &k); }
+        k = tp; if (x + pw + 2 < tp.g_x + tp.g_w) { k.g_x = (short)(x + pw + 2); k.g_w = (short)(tp.g_x + tp.g_w - k.g_x); redraw_area(d, &k); }
+        for (p = 0; p + 1 < np; p++) {
+            long g0 = scr_y(d, &tp, p, 0) + ph + 1, g1 = scr_y(d, &tp, p + 1, 0) - 1;
+            if (g1 <= tp.g_y) continue;
+            if (g0 >= tp.g_y + tp.g_h) break;
+            if (g0 < tp.g_y) g0 = tp.g_y;
+            if (g1 > tp.g_y + tp.g_h) g1 = tp.g_y + tp.g_h;
+            k.g_x = (short)x; k.g_w = (short)(pw + 2); k.g_y = (short)g0; k.g_h = (short)(g1 - g0);
+            if (k.g_h > 0) redraw_area(d, &k);
+        }
+    }
     if (dy && vr.g_w) redraw_area(d, &vr);
     if (dx && hr.g_h) redraw_area(d, &hr);
 }
@@ -2398,6 +2419,52 @@ void win_click(DOC *d, short mx, short my, short ks, short clicks)
         set_focus(d, 1);
         codes_click(d, &cp, mx, my, ks);
     }
+}
+
+/* something dropped on the window at (mx, my): the cursor goes there, if
+ * that is on the text */
+void win_drop_point(DOC *d, short mx, short my)
+{
+    GRECT tb, tp, cp, hr, vr;
+    long oc = d->cursor, oa = d->anchor;
+    panes(d, &tb, &hr, &vr, &tp, &cp);
+    if (d->iconified || d->view == VIEW_CODES || !in_rect(&tp, mx, my)) return;
+    d->anchor = -1;
+    d->cursor = hit_text(d, &tp, mx, my);
+    d->want_x = -1;
+    after_move(d, oc, oa);
+}
+
+/* The right button on the text: a menu of what is most often wanted for
+ * the line there (its paragraph style, a list) and the clipboard. A click
+ * outside the selection puts the cursor there first. */
+void win_rclick(DOC *d, short mx, short my)
+{
+    static const short cmds[] = { C_HEAD1, C_HEAD2, C_HEAD3, C_BODY, 0, C_BULLETS, C_NUMBERS, 0, C_CUT, C_COPY, C_PASTE };
+    static const short text[] = { M_HEAD1, M_HEAD2, M_HEAD3, M_BODY, 0, M_BULLETS, M_NUMBERS, 0, M_CUT, M_COPY, M_PASTE };
+    const char *items[11];
+    GRECT tb, tp, cp, hr, vr;
+    PARA *p;
+    long pos, a, b;
+    int i, cur, cur2 = -1, sel;
+    panes(d, &tb, &hr, &vr, &tp, &cp);
+    if (d->iconified || !in_rect(&tp, mx, my) || d->view == VIEW_CODES) return;
+    if (d->view == VIEW_SPLIT) set_focus(d, 0);
+    pos = hit_text(d, &tp, mx, my);
+    if (!doc_sel(d, &a, &b) || pos < a || pos > b) {
+        long oc = d->cursor, oa = d->anchor;
+        d->anchor = -1;
+        d->cursor = pos;
+        d->want_x = -1;
+        after_move(d, oc, oa);
+    }
+    p = doc_para_at(d, d->cursor);
+    for (i = 0; i < 11; i++) items[i] = cmds[i] ? L(text[i]) : "-";
+    cur = p->toc >= 1 && p->toc <= 3 ? p->toc - 1 : 3;
+    if (p->list == LIST_BULLET) cur2 = 5;
+    else if (p->list == LIST_NUMBER) cur2 = 6;
+    sel = popup2(items, 11, cur, cur2, mx, my);
+    if (sel >= 0 && sel < 11 && cmds[sel]) do_cmd(cmds[sel]);
 }
 
 /* ================================================================= */

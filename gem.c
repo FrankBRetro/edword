@@ -7,6 +7,9 @@
 #include <gemx.h>
 #include <osbind.h>
 #include <mint/cookie.h>
+#ifndef PCGEM
+#include <mint/mintbind.h>             /* Psignal, for drag and drop */
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -117,7 +120,7 @@ static void load_prefs(void)
         if (!strcmp(line, "date") && v >= 0 && (v < NDATEFMT || v == DT_DOTS)) pref_date = v;
         else if (!strcmp(line, "toolbar")) pref_toolbar = v != 0;
         else if (!strcmp(line, "colour")) colour_on = v != 0;
-        else if (!strcmp(line, "pdfscale") && v >= 1 && v <= 3) pdf_scale = v;
+        else if (!strcmp(line, "pdfscale") && v >= 1 && v <= NPDFRES) pdf_scale = v;
         else if (!strcmp(line, "paper") && v >= 0 && v < NPAPER) pref_paper = v;
         else if (!strcmp(line, "landscape")) pref_land = v != 0;
         else if (!strcmp(line, "autosave")) pref_autosave = v != 0;
@@ -476,7 +479,7 @@ void set_language(int lang)
 /*  Tool windows                                                      */
 /* ================================================================= */
 
-static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &preview_tool, &draw_tool, NULL };
+static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &preview_tool, &draw_tool, &prefs_tool, &theme_tool, NULL };
 
 int tool_owns(short wh)
 {
@@ -1140,6 +1143,33 @@ static void cmd_undo(DOC *d, int redo)
     }
 }
 
+/* the Preferences window's Save: what the new settings change */
+void prefs_done(int lang, int keep)
+{
+    if (lay_keep != keep) {                         /* the pages break differently */
+        int i;
+        busy_begin(L(S_REPAGINATING));
+        for (i = 0; i < MAX_DOCS; i++)
+            if (DOC_USED(i)) { docs[i]->lay_full = 1; doc_layout(docs[i]); }
+        busy_end();
+    }
+    if (pref_live) spell_ensure(0);
+    save_prefs();
+    display_apply();
+    autosave_reset();
+    if (lang != ui_lang) { tools_close_all(); rebuild_menu(); }
+    update_menu(top_doc());
+    all_windows_refresh();
+}
+
+/* the colour theme window's OK: kept, and everything drawn again (the
+ * documents, the preview, the drawing window) */
+void theme_done(void)
+{
+    save_prefs();
+    form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+}
+
 void do_cmd(int cmd)
 {
     DOC *d = top_doc();
@@ -1153,15 +1183,7 @@ void do_cmd(int cmd)
     case C_OPEN:   if (ask_file(L(S_FS_OPEN), "*.EWR", NULL, path)) open_path(path, 0); return;
     case C_IMPORT: import_open(); return;
     case C_EXPORT: export_open(); return;
-    case C_THEME:
-        if (dlg_theme()) {
-            int i;
-            save_prefs();
-            (void)i;
-            /* everything again: the documents, the preview, the drawing window */
-            form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
-        }
-        return;
+    case C_THEME: theme_open(); return;
     case C_RULERS:
     case C_GUIDES:
         if (cmd == C_RULERS) pref_rulers = !pref_rulers; else pref_guides = !pref_guides;
@@ -1186,27 +1208,7 @@ void do_cmd(int cmd)
         update_menu(d);
         all_windows_refresh();
         return;
-    case C_PREFS: {
-        int lang = ui_lang;
-        int keep = lay_keep;
-        if (dlg_prefs()) {
-            if (lay_keep != keep) {                 /* the pages break differently */
-                int i;
-                busy_begin(L(S_REPAGINATING));
-                for (i = 0; i < MAX_DOCS; i++)
-                    if (DOC_USED(i)) { docs[i]->lay_full = 1; doc_layout(docs[i]); }
-                busy_end();
-            }
-            if (pref_live) spell_ensure(0);
-            save_prefs();
-            display_apply();
-            autosave_reset();
-            if (lang != ui_lang) { tools_close_all(); rebuild_menu(); }
-            update_menu(d);
-            all_windows_refresh();
-        }
-        return;
-    }
+    case C_PREFS: prefs_open(); return;
     case C_UDLOAD:
         if (ask_file(L(S_FS_UDLOAD), "*.UDC", NULL, path)) {
             if (spell_user_load(path, 0) < 0) alert(1, 3, AL_UD_LOAD, AB_OK);
@@ -1342,6 +1344,19 @@ void do_cmd(int cmd)
     case C_CUT:
         if (d->selobj >= 0) { if (clip_copy(d)) do_cmd(C_OBJDEL); }
         else if (doc_sel(d, &a, &b)) { clip_copy(d); doc_delete_sel(d); after_edit(d, a); }
+        else if (!doc_in_table(d, d->cursor, NULL, NULL)) {
+            /* nothing selected: the whole line (paragraph) and its
+             * Return, as in qed and other text editors */
+            a = doc_para_start(d, d->cursor);
+            b = doc_para_end(d, d->cursor);
+            if (b < d->len) b++;
+            if (b > a) {
+                d->anchor = a; d->cursor = b;
+                clip_copy(d);
+                doc_delete_sel(d);
+                after_edit(d, a);
+            }
+        }
         break;
     case C_PASTE:  clip_paste(d); break;
     case C_SELALL:
@@ -1407,10 +1422,185 @@ static void font_changed(short *msg)
     }
 }
 
+/* ================================================================= */
+/*  Files from the desktop: the VA protocol and drag and drop          */
+/* ================================================================= */
+
+/* Desktops (Thing, Jinnee, Gemini, MagiC's, TeraDesk...) hand EdWord
+ * files three ways: VA_START (onto EdWord's icon: open them),
+ * VA_DRAGACCWIND (onto a window, after AV_PROTOKOLL) and AP_DRAGDROP
+ * (MultiTOS drag and drop, through a pipe). Pictures dropped on a
+ * document go into it where they were dropped; anything else opens.
+ * (Atari only: PC GEM's desktops have none of these.) */
+#ifndef PCGEM
+#define AV_PROTOKOLL   0x4700
+#define VA_PROTOSTATUS 0x4701
+#define VA_START       0x4711
+#define VA_DRAGACCWIND 0x4725
+#define AV_STARTED     0x4738
+#define AV_EXIT        0x4736
+#define AP_DRAGDROP    63
+
+static short av_server = -1;
+static char *av_name;                   /* "EDWORD  ", in memory others can read */
+
+static void av_send(short to, short *m)
+{
+    m[1] = ap_id; m[2] = 0;
+    appl_write(to, 16, m);
+}
+
+/* say hello to the desktop's AV server, if there is one */
+void av_init(void)
+{
+    static const char *servers[] = { "AVSERVER", "THING   ", "JINNEE  ", "GEMINI  ", "MAGXDESK", "TERADESK", "EASE    ", NULL };
+    char nm[9], *env = getenv("AVSERVER");
+    short m[8];
+    int i;
+    long p;
+    if (env && *env) {
+        sprintf(nm, "%-8.8s", env);
+        for (i = 0; nm[i]; i++) if (nm[i] >= 'a' && nm[i] <= 'z') nm[i] -= 32;
+        av_server = appl_find(nm);
+    }
+    for (i = 0; av_server < 0 && servers[i]; i++) av_server = appl_find(servers[i]);
+    if (av_server < 0) return;
+    p = Mxalloc(10, 0x23);                         /* global memory (MiNT's memory protection) */
+    if (p == -32L) p = (long)Malloc(10);           /* no Mxalloc: plain TOS */
+    if (p <= 0) return;
+    av_name = (char *)p;
+    strcpy(av_name, "EDWORD  ");
+    memset(m, 0, sizeof m);
+    m[0] = AV_PROTOKOLL;
+    m[3] = 0x0002 | 0x0004 | 0x0010;               /* VA_START, AV_STARTED, quoted names */
+    *(char **)(m + 6) = av_name;
+    av_send(av_server, m);
+    edlog("AV server %d", av_server);
+}
+
+void av_exit(void)
+{
+    short m[8];
+    if (av_server < 0) return;
+    memset(m, 0, sizeof m);
+    m[0] = AV_EXIT;
+    m[3] = ap_id;
+    av_send(av_server, m);
+}
+
+/* is it a picture EdWord reads? (its first bytes) */
+static int is_picture(const char *path)
+{
+    unsigned char b[32];
+    long fh = Fopen(path, 0), n;
+    if (fh < 0) return 0;
+    n = Fread((short)fh, sizeof b, b);
+    Fclose((short)fh);
+    return n > 0 && img_detect(b, n);
+}
+
+/* names, separated by spaces, 'quoted' when they hold one ('' for a '):
+ * each picture into the document under (x, y), the rest opened */
+static void drop_files(DOC *d, short x, short y, const char *list)
+{
+    char name[300];
+    const char *p = list;
+    while (*p) {
+        int n = 0;
+        while (*p == ' ') p++;
+        if (!*p) break;
+        if (*p == '\'') {
+            for (p++; *p; p++) {
+                if (*p == '\'') { if (p[1] == '\'') { p++; } else { p++; break; } }
+                if (n < (int)sizeof name - 1) name[n++] = *p;
+            }
+        } else
+            while (*p && *p != ' ') { if (n < (int)sizeof name - 1) name[n++] = *p; p++; }
+        name[n] = 0;
+        if (!n) continue;
+        edlog("dropped: %s", name);
+        if (is_picture(name) && (d || (d = top_doc()) != NULL)) {   /* off a window: the top document */
+            if (d != top_doc()) wind_set(d->wh, WF_TOP, 0, 0, 0, 0);
+            win_drop_point(d, x, y);
+            picture_insert(d, name);
+        } else
+            open_path(name, 0);
+    }
+}
+
+/* AP_DRAGDROP: the files come through the pipe named in the message */
+static void drag_drop(short *msg)
+{
+    char pipe[] = "U:\\PIPE\\DRAGDROP.AA", ok[33], *data = NULL, type[5];
+    unsigned char c;
+    short hlen;
+    long fh, size = 0, old;
+    unsigned char hdr[64];
+    pipe[17] = (char)(msg[7] >> 8);
+    pipe[18] = (char)(msg[7] & 0xff);
+    fh = Fopen(pipe, 2);
+    if (fh < 0) return;
+    old = Psignal(13, (void *)1L);                 /* SIGPIPE: ignored while we talk */
+    memset(ok, 0, sizeof ok);
+    ok[0] = 0;                                     /* DD_OK, and the one kind we want */
+    memcpy(ok + 1, "ARGS", 4);
+    if (Fwrite((short)fh, 33, ok) == 33 && Fread((short)fh, 2, &hlen) == 2 && hlen >= 8) {
+        long got = Fread((short)fh, hlen > (short)sizeof hdr ? (long)sizeof hdr : hlen, hdr);
+        if (hlen > (short)sizeof hdr) {             /* the rest of a long header */
+            long skip = hlen - (long)sizeof hdr;
+            while (skip-- > 0 && Fread((short)fh, 1, &c) == 1) ;
+        }
+        memcpy(type, hdr, 4); type[4] = 0;
+        size = ((long)hdr[4] << 24) | ((long)hdr[5] << 16) | ((long)hdr[6] << 8) | hdr[7];
+        if (got >= 8 && !memcmp(type, "ARGS", 4) && size > 0 && size < 32768L && (data = (char *)malloc((size_t)size + 1)) != NULL) {
+            c = 0;                                 /* DD_OK */
+            Fwrite((short)fh, 1, &c);
+            if (Fread((short)fh, size, data) != size) { free(data); data = NULL; }
+            else data[size] = 0;
+        } else {
+            c = 1;                                 /* DD_NAK: not something we take */
+            Fwrite((short)fh, 1, &c);
+        }
+    }
+    Fclose((short)fh);
+    Psignal(13, (void *)old);
+    if (data) {
+        drop_files(doc_of(msg[3]), msg[4], msg[5], data);
+        free(data);
+    }
+}
+
+#else
+void av_init(void) {}
+void av_exit(void) {}
+#endif
+
 void handle_msg(short *msg)
 {
     DOC *d;
     switch (msg[0]) {
+#ifndef PCGEM
+    case VA_START: {
+        short m[8];
+        const char *list = *(char **)(msg + 3);
+        if (list) drop_files(NULL, 0, 0, list);
+        memset(m, 0, sizeof m);
+        m[0] = AV_STARTED;
+        m[3] = msg[3]; m[4] = msg[4];
+        av_send(msg[1], m);
+        return;
+    }
+    case VA_DRAGACCWIND: {
+        const char *list = *(char **)(msg + 6);
+        if (list) drop_files(doc_of(msg[3]), msg[4], msg[5], list);
+        return;
+    }
+    case AP_DRAGDROP:
+        drag_drop(msg);
+        return;
+    case VA_PROTOSTATUS:
+        return;
+#endif
     case MN_SELECTED:
         menu_tnormal(mtree, msg[3], 1);
         if (msg[4] >= 0 && msg[4] < MN_COUNT) do_cmd(mcmd[msg[4]]);
@@ -1560,6 +1750,7 @@ void handle_key(short ks, short key)
     DOC *d = top_doc();
 
     wind_get(0, WF_TOP, &h, &d1, &d2, &d3);
+    edlog("key %04x shift %x: top window %d (owner %d), document %d", (unsigned short)key, ks, h, d1, d ? d->wh : -1);
     if (!(ks & 4) && tool_route_key(h, ks, key)) return;
     if (!(ks & 4) && special_key(ks, key)) return;
     if (ks & 4) {                               /* Control */
@@ -1609,6 +1800,23 @@ void handle_click(short mx, short my, short ks, short clicks)
     win_click(d, mx, my, ks, clicks);
 }
 
+/* the right button: on a document window's text, its menu */
+static void handle_rclick(short mx, short my)
+{
+    short wh = wind_find(mx, my), mb, d1, d2, d3;
+    int i;
+    for (i = 0; i < MAX_DOCS; i++)
+        if (DOC_USED(i) && docs[i]->wh == wh && wh > 0) {
+            DOC *d = docs[i];
+            /* a window behind: brought to the front first (the commands
+             * act on the top one) */
+            if (d != top_doc()) wind_set(d->wh, WF_TOP, 0, 0, 0, 0);
+            else win_rclick(d, mx, my);
+            break;
+        }
+    do graf_mkstate(&d1, &d2, &mb, &d3); while (mb & 2);    /* the button up again */
+}
+
 /* split view and quick edit: apply edited codes, or refresh stale ones,
  * when idle; a stale preview is redrawn too */
 static int idle_work(int run)
@@ -1645,6 +1853,13 @@ int main(int argc, char *argv[])
 #endif
     ap_id = appl_init();
     if (ap_id < 0) return 1;
+    /* our name in the desk menu and task managers (MultiTOS, MagiC,
+     * XaAES, MyAES...), not the file's EDWORD; a single-tasking AES
+     * (one application at a time) keeps its menu for accessories */
+    if (aes_global[1] != 1) {
+        static char name[] = "  EdWord";
+        menu_register(ap_id, name);
+    }
 
     /* where we were started from: the dictionary and the log live there */
     progdir[0] = (char)('A' + Dgetdrv());
@@ -1755,6 +1970,7 @@ int main(int argc, char *argv[])
     }
     if (pref_live) spell_ensure(1);
     if (!top_doc() && !demo_on) cmd_new();
+    av_init();                  /* the desktop: files dropped on our windows */
     edlog("first window open, entering the event loop");
 
     while (!quit_now) {
@@ -1762,13 +1978,18 @@ int main(int argc, char *argv[])
         long tmo = need ? (demo_on ? 50L : 400L) : 5000L, bl = blink_wait(), since;
         if (demo_on) need = timer = 1;
         if (bl >= 0) { timer = 1; if (bl < tmo) tmo = bl; }
-        ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON | (timer ? MU_TIMER : 0), 2, 1, 1,
+        /* (0x102, 3, 0: either button pressed, with double clicks) */
+        ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON | (timer ? MU_TIMER : 0), 0x102, 3, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         msg, tmo, &mx, &my, &mb, &ks, &key, &br);
         if (ev & (MU_MESAG | MU_KEYBD | MU_BUTTON)) { blink_wake(); last_input = clock(); }
         if (ev & MU_MESAG) handle_msg(msg);
         if (ev & MU_KEYBD) handle_key(ks, key);
-        if (ev & MU_BUTTON) handle_click(mx, my, ks, br);
+        if (ev & MU_BUTTON) {
+            edlog("button event: buttons %d, clicks %d at %d,%d", mb, br, mx, my);
+            if (mb & 2) handle_rclick(mx, my);
+            else handle_click(mx, my, ks, br);
+        }
         since = (long)(clock() - last_input) * 1000L / CLOCKS_PER_SEC;
         if ((ev & MU_TIMER) && need && (demo_on || since >= 380)) idle_work(1);
         if ((ev & MU_TIMER) && !quit_now) blink_tick();
@@ -1779,6 +2000,7 @@ int main(int argc, char *argv[])
     }
 
     edlog("quitting");
+    av_exit();
     tools_close_all();
     theme_exit();
     display_restore();

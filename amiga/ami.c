@@ -99,7 +99,7 @@ static void load_prefs(void)
         if (!strcmp(line, "date") && v >= 0 && v <= DT_DOTS && v != DT_TIME) pref_date = v;
         else if (!strcmp(line, "toolbar")) pref_toolbar = v != 0;
         else if (!strcmp(line, "colour")) colour_on = v != 0;
-        else if (!strcmp(line, "pdfscale") && v >= 1 && v <= 3) pdf_scale = v;
+        else if (!strcmp(line, "pdfscale") && v >= 1 && v <= NPDFRES) pdf_scale = v;
         else if (!strcmp(line, "paper") && v >= 0 && v < NPAPER) pref_paper = v;
         else if (!strcmp(line, "landscape")) pref_land = v != 0;
         else if (!strcmp(line, "autosave")) pref_autosave = v != 0;
@@ -1141,6 +1141,8 @@ void apply_style(DOC *d, int what, int val)
 {
     long a, b;
     char code[48];
+    edlog("apply_style %d %d: iconified %d, codes focus %d, selection %d, typing size %d",
+          what, val, d->iconified, codes_focus(d), doc_sel(d, &a, &b), d->ins.size);
     if (d->iconified) return;
     if (codes_focus(d)) { codes_insert_code(d, code_of(what, val, code)); return; }
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
@@ -1338,6 +1340,7 @@ void do_cmd(int cmd)
     DOC *d = top_doc();
     long a, b;
     char path[256];
+    edlog("command %d (doc %d, view %d, codes focus %d)", cmd, d ? d->slot : -1, d ? d->view : -1, d ? codes_focus(d) : -1);
 
     switch (cmd) {
     case C_ABOUT:  dlg_about(); return;
@@ -1531,6 +1534,19 @@ void do_cmd(int cmd)
     case C_COPY:   clip_copy(d); break;
     case C_CUT:
         if (doc_sel(d, &a, &b)) { clip_copy(d); doc_delete_sel(d); after_edit(d, a); }
+        else if (!doc_in_table(d, d->cursor, NULL, NULL)) {
+            /* nothing selected: the whole line (paragraph) and its
+             * Return, as in qed and other text editors */
+            a = doc_para_start(d, d->cursor);
+            b = doc_para_end(d, d->cursor);
+            if (b < d->len) b++;
+            if (b > a) {
+                d->anchor = a; d->cursor = b;
+                clip_copy(d);
+                doc_delete_sel(d);
+                after_edit(d, a);
+            }
+        }
         break;
     case C_PASTE:  clip_paste(d); break;
     case C_SELALL:
@@ -1773,6 +1789,9 @@ static void menu_pick(UWORD code)
 ULONG upd_id;
 LONG  upd_top;
 
+static int menu_on;                     /* between MENUVERIFY and MENUPICK */
+static ULONG pick_s, pick_m;            /* when the last menu choice came */
+
 /* every message is copied and replied to at once; the handlers get the copy */
 static void dispatch(struct IntuiMessage *m)
 {
@@ -1786,13 +1805,36 @@ static void dispatch(struct IntuiMessage *m)
     }
     GT_ReplyIMsg(m);
     if (cm.Class != IDCMP_INTUITICKS) caret_unblink();   /* the caret back before anything else */
+#ifdef EDLOG
+    if (cm.Class == IDCMP_MOUSEBUTTONS || cm.Class == IDCMP_MENUPICK || cm.Class == IDCMP_VANILLAKEY || cm.Class == IDCMP_RAWKEY) {
+        DOC *t = top_doc();
+        long sa = -1, sb = -1;
+        if (t) doc_sel(t, &sa, &sb);
+        edlog("event %08lx code %04x qual %04x at %d,%d: selection %ld-%ld, typing size %d", (unsigned long)cm.Class,
+              (unsigned)cm.Code, (unsigned)cm.Qualifier, cm.MouseX, cm.MouseY, sa, sb, t ? t->ins.size : -1);
+    }
+#endif
     switch (cm.Class) {
+    case IDCMP_MENUVERIFY:                /* the menus are opening */
+        menu_on = 1;
+        return;
     case IDCMP_MENUPICK:
+        menu_on = 0;
+        pick_s = cm.Seconds; pick_m = cm.Micros;
         menu_pick(cm.Code);
         return;
     case IDCMP_VANILLAKEY:
     case IDCMP_RAWKEY:
         k = map_key(cm.Class, cm.Code, cm.Qualifier);
+        /* Cursor keys while the menus are open, or straight after a choice,
+         * aren't the user's: some menu commodities and emulator setups send
+         * them, and they'd move the cursor off the selection the menu is
+         * meant for */
+        if (k >= K_LEFT && k <= K_DOWN &&
+            (menu_on || (long)(cm.Seconds - pick_s) * 1000000L + (long)cm.Micros - (long)pick_m < 300000L)) {
+            edlog("cursor key %d ignored (menus)", k);
+            return;
+        }
         if (k) handle_key(w, k, key_qual(cm.Qualifier));
         return;
     }
@@ -2126,7 +2168,7 @@ static int screen_up(void)
     if (!on_wb) backdrop = open_ewin((struct TagItem *)(ULONG[]){ WA_Left, 0, WA_Top, (ULONG)desk.g_y, WA_Width, (ULONG)scr_w,
                          WA_Height, (ULONG)desk.g_h, WA_Backdrop, TRUE, WA_Borderless, TRUE,
                          WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE, WA_Activate, TRUE, TAG_END },
-                         IDCMP_MENUPICK | IDCMP_VANILLAKEY | IDCMP_RAWKEY);
+                         IDCMP_MENUPICK | IDCMP_VANILLAKEY | IDCMP_RAWKEY | IDCMP_MENUVERIFY);
     busy(0);
     if (!backdrop && !on_wb) return 0;
     return 1;

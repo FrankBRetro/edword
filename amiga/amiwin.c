@@ -1409,7 +1409,8 @@ static struct Gadget *make_scrollers(DWIN *w, long sw, long sh, long top)
 
 #define DOC_IDCMP (IDCMP_CLOSEWINDOW | IDCMP_NEWSIZE | IDCMP_REFRESHWINDOW | IDCMP_MOUSEBUTTONS | \
                    IDCMP_VANILLAKEY | IDCMP_RAWKEY | IDCMP_MENUPICK | IDCMP_IDCMPUPDATE | \
-                   IDCMP_ACTIVEWINDOW | IDCMP_GADGETUP | IDCMP_CHANGEWINDOW | IDCMP_INTUITICKS)
+                   IDCMP_ACTIVEWINDOW | IDCMP_GADGETUP | IDCMP_CHANGEWINDOW | IDCMP_INTUITICKS | \
+                   IDCMP_MENUVERIFY)
 
 static struct Window *make_window(DOC *d, long x, long y, long w, long h)
 {

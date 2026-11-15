@@ -27,6 +27,7 @@ typedef struct {
     int  (*build)(void);
     void (*changed)(short item);        /* a radio button or check box changed */
     void (*topped)(void);               /* the window came to the top          */
+    void (*closed)(void);               /* it is closing (Esc, closer, Close)  */
 } TWIN;
 
 static int tw_top(TWIN *t)
@@ -86,6 +87,7 @@ static void tw_redraw(TWIN *t)
 static void tw_close(TWIN *t)
 {
     if (!t->open) return;
+    if (t->closed) t->closed();
     winpos_save(t->name, t->wh);
     wind_close(t->wh);
     wind_delete(t->wh);
@@ -102,10 +104,18 @@ static int tw_open(TWIN *t, int title, int at_bottom)
     if (!t->build()) return 0;
     tw_place(t);
     wind_calc(WC_BORDER, TWKIND, 0, 0, t->g.w, t->g.h, &x, &y, &w, &h);
-    if (at_bottom) { x = (short)(desk.g_x + (desk.g_w - w) / 2); y = (short)(desk.g_y + desk.g_h - h - 2); }
-    else { x = (short)(desk.g_x + desk.g_w - w - 4); y = (short)(desk.g_y + 20); }
+    /* at the mouse pointer, where the user is working (on a big screen
+     * the desk's edges can be a long way from the document); kept on
+     * the desk */
+    {
+        short mx, my, mb, ks;
+        graf_mkstate(&mx, &my, &mb, &ks);
+        x = (short)(mx - w / 2);
+        y = (short)(my + 16);
+        if (y + h > desk.g_y + desk.g_h) y = (short)(my - h - 16);   /* above it, if there's no room below */
+    }
+    (void)at_bottom;
     sprintf(t->name, " %s ", L(title));
-    winpos_get(t->name, &x, &y, NULL, NULL);          /* where it was last time */
     winpos_clamp(&x, &y, w, h);
     t->wh = wind_create(TWKIND, x, y, w, h);
     if (t->wh < 0) { alert(1, 3, AL_NO_WINDOWS, AB_OK); return 0; }
@@ -157,7 +167,8 @@ static void tw_click(TWIN *t, short mx, short my, short clicks)
     short o, mb, ks, x, y;
     OBJECT *tr = t->g.o;
     if (!t->open) return;
-    if (!tw_top(t)) { wind_set(t->wh, WF_TOP, 0, 0, 0, 0); if (t->topped) t->topped(); tw_cursor(t, 1); return; }
+    /* a window behind: to the front, and the click counts too */
+    if (!tw_top(t)) { wind_set(t->wh, WF_TOP, 0, 0, 0, 0); if (t->topped) t->topped(); tw_cursor(t, 1); }
     o = objc_find(tr, 0, 8, mx, my);
     if (o <= 0 || (tr[o].ob_state & OS_DISABLED)) return;
     if (tr[o].ob_flags & OF_EDITABLE) {
@@ -172,9 +183,12 @@ static void tw_click(TWIN *t, short mx, short my, short clicks)
             short p = o, k;
             while (tr[p].ob_next >= 0 && tr[tr[p].ob_next].ob_tail != p) p = tr[p].ob_next;
             p = tr[p].ob_next;      /* the parent */
+            /* (only the selected bit changes: the rest of the state is
+             * the look, MagiC's round button and its shortcut letter) */
             for (k = tr[p].ob_head; k != p && k >= 0; k = tr[k].ob_next)
-                if (k != o && (tr[k].ob_state & OS_SELECTED)) objc_change(tr, k, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, 0, 1);
-            objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, OS_SELECTED, 1);
+                if (k != o && (tr[k].ob_state & OS_SELECTED))
+                    objc_change(tr, k, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, tr[k].ob_state & ~OS_SELECTED, 1);
+            objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, tr[o].ob_state | OS_SELECTED, 1);
         } else
             objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, tr[o].ob_state ^ OS_SELECTED, 1);
         do graf_mkstate(&x, &y, &mb, &ks); while (mb & 1);
@@ -184,9 +198,9 @@ static void tw_click(TWIN *t, short mx, short my, short clicks)
     }
     /* press feedback, act on release over the button */
     wind_update(BEG_UPDATE);
-    objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, OS_SELECTED, 1);
+    objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, tr[o].ob_state | OS_SELECTED, 1);
     do graf_mkstate(&x, &y, &mb, &ks); while (mb & 1);
-    objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, 0, 1);
+    objc_change(tr, o, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h, tr[o].ob_state & ~OS_SELECTED, 1);
     wind_update(END_UPDATE);
     if (objc_find(tr, 0, 8, x, y) == o) t->act(item_of(t, o), clicks);
 }
@@ -195,6 +209,7 @@ static void tw_key(TWIN *t, short ks, short key)
 {
     short scan = (key >> 8) & 0xff;
     (void)ks;
+    edlog("tool window %d: key %04x, field %d (cursor %d, top %d)", t->wh, (unsigned short)key, t->ed, t->curs, tw_top(t));
     if (!t->open) return;
     if (scan == 0x1C || scan == 0x72) { t->act(t->def, 1); return; }    /* Return: default button */
     if (scan == 0x01) { tw_close(t); return; }                         /* Esc */
@@ -214,6 +229,25 @@ static void tw_key(TWIN *t, short ks, short key)
         return;
     }
     tw_cursor(t, 1);
+    {
+        short np = t->idx;
+        if (field_edit(t->g.o, t->ed, key, &np)) {       /* the text edited here, the field drawn again */
+            GRECT fr;
+            tw_cursor(t, 0);
+            objc_offset(t->g.o, t->ed, &fr.g_x, &fr.g_y);
+            fr.g_w = t->g.o[t->ed].ob_width; fr.g_h = t->g.o[t->ed].ob_height;
+            tw_draw(t, &fr);                             /* (which puts the cursor at the end) */
+            wind_update(BEG_UPDATE);
+            graf_mouse(M_OFF, NULL);
+            {
+                int n;
+                for (n = t->idx - np; n > 0; n--) objc_edit(t->g.o, t->ed, 0x4B00, &t->idx, ED_CHAR);
+            }
+            graf_mouse(M_ON, NULL);
+            wind_update(END_UPDATE);
+            return;
+        }
+    }
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
     objc_edit(t->g.o, t->ed, key, &t->idx, ED_CHAR);
@@ -230,8 +264,14 @@ static void show_obj(TWIN *t, short item, int show)
 
 static void set_disabled(TWIN *t, short item, int dis)
 {
-    short o = t->g.it[item].obj;
-    if (dis) t->g.o[o].ob_state |= OS_DISABLED; else t->g.o[o].ob_state &= ~OS_DISABLED;
+    short o = t->g.it[item].obj, ul = t->g.it[item].ul;
+    unsigned short st = (unsigned short)t->g.o[o].ob_state;
+    if (dis) st |= OS_DISABLED; else st &= ~OS_DISABLED;
+    /* MagiC draws the shortcut letter black in a grey label: none while
+     * it's disabled */
+    if ((st & 0x8000) && (st & OS_WHITEBAK))
+        st = (unsigned short)((st & ~0x7F00) | ((dis || ul < 0 ? 0x7F : ul) << 8));
+    t->g.o[o].ob_state = (short)st;
 }
 
 static DOC *live_doc(DOC *d) { return d && d->used ? d : active_doc(); }
@@ -865,7 +905,7 @@ const TOOL import_tool = { i_owns, i_msg, i_click, i_key, i_close_tool, i_docgon
 
 static TWIN ew;
 static int ex_fmt = FT_RTF, ex_crlf = 1, ex_cs = CS_ATARI;
-static short ex_f[6], ex_e[2], ex_c[4], ex_p[3], ex_go, ex_close, ex_doc, ex_stat;
+static short ex_f[6], ex_e[2], ex_c[4], ex_p[NPDFRES], ex_go, ex_close, ex_doc, ex_stat;
 static char ex_docline[48], ex_status[48];
 
 static void ex_read(void)
@@ -874,7 +914,7 @@ static void ex_read(void)
     for (i = 0; i < 6; i++) if (dlg_on(&ew.g, ex_f[i])) ex_fmt = i;
     ex_crlf = dlg_on(&ew.g, ex_e[0]);
     for (i = 0; i < 4; i++) if (dlg_on(&ew.g, ex_c[i])) ex_cs = i + 1;
-    for (i = 0; i < 3; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
+    for (i = 0; i < NPDFRES; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
 }
 
 static void ex_name(void)
@@ -890,7 +930,7 @@ static void ex_enable(void)
     DOC *d = live_doc(NULL);
     for (i = 0; i < 2; i++) set_disabled(&ew, ex_e[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
     for (i = 0; i < 4; i++) set_disabled(&ew, ex_c[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
-    for (i = 0; i < 3; i++) set_disabled(&ew, ex_p[i], ex_fmt != FT_PDF);
+    for (i = 0; i < NPDFRES; i++) set_disabled(&ew, ex_p[i], ex_fmt != FT_PDF);
     set_disabled(&ew, ex_go, !d);
     if (ex_fmt == FT_TEXT && !ex_status[0]) strcpy(ex_status, L(S_XF_STYLES));
     else if (ex_fmt != FT_TEXT && !strcmp(ex_status, L(S_XF_STYLES))) ex_status[0] = 0;
@@ -906,7 +946,7 @@ static int ex_build(void)
     ex_e[0] = WEX_E0; ex_e[1] = WEX_E1;
     dlg_set(g, ex_e[0], ex_crlf); dlg_set(g, ex_e[1], !ex_crlf);
     for (i = 0; i < 4; i++) { ex_c[i] = (short)(WEX_C0 + i); dlg_set(g, ex_c[i], ex_cs == i + 1); }
-    for (i = 0; i < 3; i++) { ex_p[i] = (short)(WEX_P0 + i); dlg_set(g, ex_p[i], pdf_scale == i + 1); }
+    for (i = 0; i < NPDFRES; i++) { ex_p[i] = (short)(WEX_P0 + i); dlg_set(g, ex_p[i], pdf_scale == i + 1); }
     ex_doc = WEX_DOC; ex_stat = WEX_STATUS; ex_close = WEX_CLOSE; ex_go = WEX_GO;
     ex_docline[0] = 0;
     dlg_str(g, ex_doc, ex_docline);
@@ -978,3 +1018,295 @@ void xfer_refresh(void)
         if (dis != !live_doc(NULL)) ix_changed(-1);
     }
 }
+
+/* ================================================================= */
+/*  Preferences and the colour theme, in windows of their own         */
+/* ================================================================= */
+
+/* A dialog made for a modal run, in a tool window: its title goes to the
+ * window's title bar and the window has the frame */
+static void tw_untitle(TWIN *t, short title)
+{
+    DLG *g = &t->g;
+    short i, dy = (short)(hchar + hchar / 2);
+    if (title > 0 && title < g->n) {
+        g->o[title].ob_flags |= OF_HIDETREE;
+        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != title) g->o[i].ob_y -= dy;
+        g->o[0].ob_height -= dy;
+    }
+    g->o[0].ob_state &= ~OS_OUTLINED;
+    g->o[0].ob_spec.index &= ~0x00FF0000L;
+    for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y += hchar / 4;
+    g->o[0].ob_height += hchar / 2;
+    g->w = g->o[0].ob_width;
+    g->h = g->o[0].ob_height;
+}
+
+/* ---- Preferences: two pages under tabs ------------------------------- */
+
+void docdir_changed(void);
+static TWIN pw;
+static char pw_dl[NDATEFMT_ST][32], pw_mins[3], pw_dd[41];
+static int  pw_lang, pw_keep;
+static const int pw_order[NDATEFMT_ST] = { DT_SHORT, DT_DOTS, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
+
+/* the edit fields of a page usable or not (a hidden field mustn't take
+ * the text cursor); first: the first one */
+static void pw_edits(short obj, int on, short *first)
+{
+    DLG *g = &pw.g;
+    short c;
+    for (c = g->o[obj].ob_head; c > 0 && c != obj; c = g->o[c].ob_next) {
+        if (g->o[c].ob_type == G_FTEXT || g->o[c].ob_type == G_FBOXTEXT) {
+            if (on) { g->o[c].ob_flags |= OF_EDITABLE; if (first && !*first) *first = c; }
+            else g->o[c].ob_flags &= ~OF_EDITABLE;
+        }
+        if (g->o[c].ob_head > 0) pw_edits(c, on, first);
+    }
+}
+
+static void pw_page(int n)
+{
+    DLG *g = &pw.g;
+    short first = 0, show = n ? PF_PAGE1 : PF_PAGE0, hide = n ? PF_PAGE0 : PF_PAGE1;
+    tw_cursor(&pw, 0);
+    g->o[hide].ob_flags |= OF_HIDETREE;
+    pw_edits(hide, 0, NULL);
+    g->o[show].ob_flags &= ~OF_HIDETREE;
+    pw_edits(show, 1, &first);
+    dlg_set(g, PF_TAB0, n == 0);
+    dlg_set(g, PF_TAB1, n == 1);
+    pw.ed = first ? first : -1;
+    pw.idx = 0;
+}
+
+static int pw_build(void)
+{
+    DLG *g = &pw.g;
+    int i;
+    for (i = 0; i < NDATEFMT_ST; i++) fmt_now(pw_dl[i], pw_order[i]);
+    sprintf(pw_mins, "%d", pref_asmin);
+    strncpy(pw_dd, pref_docdir, 40);
+    pw_dd[40] = 0;
+    if (!tw_tree(&pw, RT_PREFS)) return 0;
+    for (i = 0; i < NLANG; i++) dlg_set(g, (short)(PF_LANG0 + i), ui_lang == i);
+    for (i = 0; i < NDATEFMT_ST; i++) { dlg_str(g, (short)(PF_DATE0 + i), pw_dl[i]); dlg_set(g, (short)(PF_DATE0 + i), pref_date == pw_order[i]); }
+    for (i = 0; i < NPAPER; i++) dlg_set(g, (short)(PF_PAPER0 + i), pref_paper == i);
+    dlg_set(g, PF_PORTRAIT, !pref_land);
+    dlg_set(g, PF_LAND, pref_land);
+    dlg_set(g, PF_TOOLBAR, pref_toolbar);
+    dlg_set(g, PF_COLOURS, colour_on);
+    for (i = 0; i < 4; i++) dlg_set(g, (short)(PF_DISP0 + i), pref_display == i);
+    dlg_set(g, PF_ASON, pref_autosave);
+    dlg_edtext(g, PF_ASMIN, pw_mins);
+    dlg_set(g, PF_ASCOPY, !pref_asmode);
+    dlg_set(g, PF_ASDOC, pref_asmode);
+    for (i = 0; i < 3; i++) dlg_set(g, (short)(PF_KEEP0 + i), lay_keep == i);
+    for (i = 0; i < NLANG; i++) dlg_set(g, (short)(PF_DICT0 + i), spell_lang == i);
+    dlg_set(g, PF_LIVE, pref_live);
+    for (i = 0; i < NPDFRES; i++) dlg_set(g, (short)(PF_PDF1 + i), pdf_scale == i + 1);
+    dlg_edtext(g, PF_DOCDIR, pw_dd);
+    dlg_tree_end(g);
+    tw_untitle(&pw, PF_TITLE);
+    pw.def = (short)item_of(&pw, PF_OK);
+    pw_lang = ui_lang;
+    pw_keep = lay_keep;
+    pw_page(0);
+    return 1;
+}
+
+static void pw_changed(short it)
+{
+    short o = it >= 0 ? pw.g.it[it].obj : -1;
+    if (o != PF_TAB0 && o != PF_TAB1) return;
+    pw_page(o == PF_TAB1);
+    tw_redraw(&pw);
+}
+
+static void pw_act(short it, int clicks)
+{
+    DLG *g = &pw.g;
+    short o = it >= 0 ? g->it[it].obj : -1;
+    int i, v;
+    (void)clicks;
+    if (o != PF_OK) { tw_close(&pw); return; }
+    for (i = 0; i < 4; i++) if (dlg_on(g, (short)(PF_DISP0 + i))) pref_display = i;
+    pref_autosave = dlg_on(g, PF_ASON);
+    v = atoi(pw_mins);
+    pref_asmin = v < 1 ? 1 : v > 99 ? 99 : v;
+    pref_asmode = dlg_on(g, PF_ASDOC);
+    for (i = 0; i < NDATEFMT_ST; i++) if (dlg_on(g, (short)(PF_DATE0 + i))) pref_date = pw_order[i];
+    for (i = 0; i < NPAPER; i++) if (dlg_on(g, (short)(PF_PAPER0 + i))) pref_paper = i;
+    pref_land = dlg_on(g, PF_LAND);
+    pref_toolbar = dlg_on(g, PF_TOOLBAR);
+    colour_on = dlg_on(g, PF_COLOURS);
+    for (i = 0; i < 3; i++) if (dlg_on(g, (short)(PF_KEEP0 + i))) lay_keep = i;
+    pref_live = dlg_on(g, PF_LIVE);
+    for (i = 0; i < NPDFRES; i++) if (dlg_on(g, (short)(PF_PDF1 + i))) pdf_scale = i + 1;
+    for (i = 0; i < NLANG; i++)
+        if (dlg_on(g, (short)(PF_DICT0 + i)) && i != spell_lang) {   /* another dictionary: loaded when next needed */
+            spell_unload_main();
+            spell_lang = i;
+        }
+    if (strncmp(pw_dd, pref_docdir, 40)) {
+        strncpy(pref_docdir, pw_dd, sizeof pref_docdir - 1);
+        docdir_changed();
+    }
+    tw_close(&pw);
+    for (i = 0; i < NLANG; i++) if (dlg_on(g, (short)(PF_LANG0 + i)) && i != ui_lang) set_language(i);
+    prefs_done(pw_lang, pw_keep);
+}
+
+void prefs_open(void)
+{
+    pw.act = pw_act;
+    pw.build = pw_build;
+    pw.changed = pw_changed;
+    tw_open(&pw, S_PREFS_TITLE, 0);
+}
+
+static int  pw_owns(short wh) { return pw.open && wh == pw.wh; }
+static void pw_msg(short *m) { tw_msg(&pw, m); }
+static void pw_click(short x, short y, short c) { tw_click(&pw, x, y, c); }
+static void pw_key(short ks, short k) { tw_key(&pw, ks, k); }
+static void pw_close_tool(void) { tw_close(&pw); }
+static void pw_docgone(DOC *d) { (void)d; }
+const TOOL prefs_tool = { pw_owns, pw_msg, pw_click, pw_key, pw_close_tool, pw_docgone };
+
+/* ---- the colour theme ---------------------------------------------------
+ * On a screen without a palette it can be for the top document's window
+ * alone ("This document") or for every window that has none of its own
+ * ("All documents"); on a palette screen it is for all. While the window
+ * is open, theme_id and theme_rgb hold the theme being edited (the
+ * picture shows them); the one for all is kept aside and put back unless
+ * OK or Apply made it the new one. */
+
+static TWIN thw;
+static const short th_fo[TH_NROLES][3] = {
+    { DTH_R0, DTH_G0, DTH_B0 }, { DTH_R1, DTH_G1, DTH_B1 }, { DTH_R2, DTH_G2, DTH_B2 },
+    { DTH_R3, DTH_G3, DTH_B3 }, { DTH_R4, DTH_G4, DTH_B4 }, { DTH_R5, DTH_G5, DTH_B5 } };
+static char th_f[TH_NROLES][3][4], th_pick[24];
+static USERBLK th_pv;
+static unsigned char th_grgb[TH_NROLES][3], th_wrgb[TH_NROLES][3];
+static int th_gid, th_per, th_slot, th_wid, th_shown, th_kept;
+
+/* the fields and the popup's text from theme_id and theme_rgb */
+static void ct_fields(void)
+{
+    int i, k;
+    for (i = 0; i < TH_NROLES; i++)
+        for (k = 0; k < 3; k++) sprintf(th_f[i][k], "%d", theme_rgb[i][k]);
+    sprintf(th_pick, "%.17s", theme_id == THEME_CUSTOM ? L(S_THEME_CUSTOM) : theme_name(theme_id));
+    dlg_str(&thw.g, DTH_PICK, th_pick);
+}
+
+static int ct_build(void)
+{
+    DLG *g = &thw.g;
+    DOC *d = top_doc();
+    int i, k;
+    if (!theme_possible()) return 0;
+    th_gid = theme_id;
+    th_per = theme_per_window() && d;
+    th_slot = d ? d->slot : -1;
+    th_wid = th_per ? theme_window(th_slot, th_wrgb) : -1;
+    th_shown = th_kept = 0;
+    memcpy(th_grgb, theme_rgb, sizeof th_grgb);
+    if (!tw_tree(&thw, RT_THEME)) return 0;
+    theme_userdef(&g->o[DTH_PREVIEW], &th_pv, 2);   /* the picture of it */
+    if (th_wid >= 0) { theme_id = th_wid; memcpy(theme_rgb, th_wrgb, sizeof th_wrgb); }   /* this window's own */
+    dlg_set(g, DTH_THISDOC, th_wid >= 0);
+    dlg_set(g, DTH_ALLDOCS, th_wid < 0);
+    if (!th_per) {                               /* a palette: one theme for all */
+        g->o[DTH_THISDOC].ob_state |= OS_DISABLED;
+        g->o[DTH_ALLDOCS].ob_state |= OS_DISABLED;
+    }
+    theme_preview_pens();
+    for (i = 0; i < TH_NROLES; i++)
+        for (k = 0; k < 3; k++) dlg_edtext(g, th_fo[i][k], th_f[i][k]);
+    ct_fields();
+    dlg_tree_end(g);
+    tw_untitle(&thw, DTH_TITLE);
+    thw.def = (short)item_of(&thw, DTH_OK);
+    return 1;
+}
+
+/* closing without OK: the theme as it was (on screen too, if Apply or
+ * the popup showed another) */
+static void ct_closed(void)
+{
+    if (th_kept) return;
+    theme_id = th_gid;
+    memcpy(theme_rgb, th_grgb, sizeof th_grgb);
+    if (th_per) theme_set_window(th_slot, th_wid, th_wid >= 0 ? th_wrgb : NULL);
+    theme_apply();
+    if (th_shown) form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+}
+
+static void ct_act(short it, int clicks)
+{
+    DLG *g = &thw.g;
+    short o = it >= 0 ? g->it[it].obj : -1, x, y;
+    unsigned char erg[TH_NROLES][3];
+    int i, k, v, eid;
+    (void)clicks;
+    if (o == DTH_PICK) {
+        objc_offset(g->o, DTH_PICK, &x, &y);
+        v = popup_rsc(RT_POPTHEME, theme_id < NTHEMES ? theme_id : -1, x, (short)(y + g->o[DTH_PICK].ob_height));
+        if (v >= 0 && v < NTHEMES) { theme_pick(v); theme_preview_pens(); ct_fields(); tw_redraw(&thw); }
+        return;
+    }
+    if (o != DTH_APPLY && o != DTH_OK) { tw_close(&thw); return; }
+    /* the colours as typed: a theme of its own if they're not one */
+    for (i = 0; i < TH_NROLES; i++)
+        for (k = 0; k < 3; k++) {
+            v = atoi(th_f[i][k]);
+            v = v < 0 ? 0 : v > 255 ? 255 : v;
+            if (v != theme_rgb[i][k]) { theme_rgb[i][k] = (unsigned char)v; theme_id = THEME_CUSTOM; }
+        }
+    /* this window's, or everyone's (and then this window follows it) */
+    eid = theme_id;
+    memcpy(erg, theme_rgb, sizeof erg);
+    if (th_per && dlg_on(g, DTH_THISDOC)) {
+        theme_set_window(th_slot, eid, erg);
+        th_wid = eid;
+        memcpy(th_wrgb, erg, sizeof erg);
+        theme_id = th_gid;
+        memcpy(theme_rgb, th_grgb, sizeof th_grgb);
+    } else {
+        if (th_per) theme_set_window(th_slot, -1, NULL);
+        th_wid = -1;
+        th_gid = eid;
+        memcpy(th_grgb, erg, sizeof erg);
+    }
+    theme_apply();
+    if (o == DTH_OK) {
+        th_kept = 1;
+        tw_close(&thw);
+        theme_done();
+        return;
+    }
+    /* Apply: seen on the screen, the window stays for more */
+    th_shown = 1;
+    form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+    theme_id = eid;                              /* still editing it */
+    memcpy(theme_rgb, erg, sizeof erg);
+    theme_preview_pens();
+    ct_fields();
+}
+
+void theme_open(void)
+{
+    thw.act = ct_act;
+    thw.build = ct_build;
+    thw.closed = ct_closed;
+    tw_open(&thw, S_THEME_TITLE, 0);
+}
+
+static int  ct_owns(short wh) { return thw.open && wh == thw.wh; }
+static void ct_msg(short *m) { tw_msg(&thw, m); }
+static void ct_click(short x, short y, short c) { tw_click(&thw, x, y, c); }
+static void ct_key(short ks, short k) { tw_key(&thw, ks, k); }
+static void ct_close_tool(void) { tw_close(&thw); }
+static void ct_docgone(DOC *d) { (void)d; }
+const TOOL theme_tool = { ct_owns, ct_msg, ct_click, ct_key, ct_close_tool, ct_docgone };

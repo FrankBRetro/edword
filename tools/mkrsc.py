@@ -38,7 +38,7 @@ RSCNAME = {'en': 'EDWORD.RSC', 'de': 'EDWORDDE.RSC', 'es': 'EDWORDES.RSC', 'it':
 G_BOX, G_TEXT, G_BOXTEXT, G_IMAGE, G_USERDEF, G_IBOX, G_BUTTON, G_BOXCHAR, G_STRING, \
     G_FTEXT, G_FBOXTEXT, G_ICON, G_TITLE = range(20, 33)
 SELECTABLE, DEFAULT, EXIT, EDITABLE, RBUTTON, LASTOB, TOUCHEXIT, HIDETREE = 1, 2, 4, 8, 16, 32, 64, 128
-DISABLED, OUTLINED = 8, 16
+SELECTED, DISABLED, OUTLINED = 1, 8, 16
 IBM = 3
 
 # ---- strings -------------------------------------------------------------------
@@ -116,16 +116,17 @@ def add(parent, o):
     return o
 
 # ---- the dialog builder: the same layout rules as gemdlg.c ------------------------
-T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG, T_SIDE = range(9)
+T_TITLE, T_LABEL, T_TEXT, T_RADIO, T_CHECK, T_EDIT, T_BUTTON, T_BIG, T_SIDE, T_TAB = range(10)
 
 class Dlg:
     def __init__(self, title):
-        self.items, self.row = [], 0
+        self.items, self.row, self.pg = [], 0, None
         if title is not None:
             self.item(T_TITLE, title, name='TITLE')
         self.row = 1
     def item(self, typ, s, wc=None, name=None, **kw):
-        it = dict(type=typ, s=s, wc=len(s) if wc is None else wc, row=self.row, lrow=self.row, name=name, **kw)
+        it = dict(type=typ, s=s, wc=len(s) if wc is None else wc, row=self.row, lrow=self.row, name=name,
+                  page=None if typ in (T_TITLE, T_BUTTON) else self.pg, **kw)
         self.items.append(it)
         return it
     def nl(self): self.row += 1
@@ -140,6 +141,15 @@ class Dlg:
         self.item(T_EDIT, t, len(t), name, n=n, valid=valid, buf=buf, pre=pre, post=post, post_name=post_name)
     def button(self, s, name, flags=0): self.item(T_BUTTON, s, len(s), name, flags=flags)
     def big(self, s, wc, name, flags=EXIT): self.item(T_BIG, s, wc, name, flags=flags)
+    # Tabs: a row of buttons, one for each page (TABn), and the pages that
+    # follow (page(0), page(1)...) share the rows under it; each page's
+    # objects are in a box (PAGEn) that EdWord hides or shows
+    def tabs(self, labels):
+        for i, s in enumerate(labels): self.item(T_TAB, s, len(s) + 2, 'TAB%d' % i)
+        self.row += 1
+    def page(self, n):
+        self.pg = n
+        self.row += 1
     # a box to the right of this row and the n-1 after it (a picture EdWord
     # draws in it), wc characters wide
     def side(self, wc, n, name): self.item(T_SIDE, b'', wc, name, n=n)
@@ -152,8 +162,18 @@ class Dlg:
         maxw = limit
         if labw > maxw // 2: labw = maxw // 2
         vrow, lastrow, x, maxx, nbtn, btnw = 0, -1, 0, 0, 0, 0
+        curpage, page0, pagemax = None, 0, 0
         for it in items:
             t = it['type']
+            if t == T_TAB:
+                if it['row'] != lastrow: vrow += 1; lastrow = it['row']; x = 0
+                it['row'], it['col'] = vrow, x + 2
+                x += it['wc'] + 1
+                maxx = max(maxx, x); continue
+            if it['page'] != curpage and t not in (T_BUTTON, T_SIDE, T_TITLE):
+                if curpage is None: page0 = vrow          # the pages start under the tabs
+                else: pagemax = max(pagemax, vrow); vrow = page0
+                curpage = it['page']; lastrow = -1
             if t == T_BUTTON:
                 nbtn += 1; btnw = max(btnw, it['wc']); continue
             if t == T_SIDE: continue
@@ -173,6 +193,7 @@ class Dlg:
             it['row'], it['col'] = vrow, x + 2
             x += it['wc'] + 2
             maxx = max(maxx, x)
+        vrow = max(vrow, pagemax)
         for it in items:
             if it['type'] != T_SIDE: continue
             span = [o for o in items if o['type'] not in (T_SIDE, T_BUTTON, T_TITLE) and it['lrow'] <= o['lrow'] < it['lrow'] + it['n']]
@@ -204,6 +225,23 @@ class Dlg:
                 bx -= 2
         root = Obj(G_BOX, cp(0), cp(0), cp(cols), cp(nrows), state=OUTLINED if framed else 0,
                    spec=0x00021100 if framed else 0x00001100, ext=5 if nbtn else 6, name='ROOT')
+        # each page's objects in a box of its own, from the row under the tabs
+        pages, prow = {}, {}
+        for it in items:
+            p = it.get('page')
+            if p is None or p in pages: continue
+            rows = [o['row'] for o in items if o.get('page') == p]
+            prow[p] = min(rows)
+            pages[p] = add(root, Obj(G_IBOX, cp(0), cp(prow[p]), cp(cols), cp(vrow - prow[p] + 1),
+                                     flags=HIDETREE if p else 0, ext=2, name='PAGE%d' % p))
+        def par(it):
+            p = it.get('page')
+            return (pages[p], prow[p]) if p is not None else (root, 0)
+        for it in items:
+            if it['type'] != T_TAB: continue
+            add(root, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
+                          flags=SELECTABLE | RBUTTON | TOUCHEXIT, state=SELECTED if it['name'] == 'TAB0' else 0,
+                          spec=('str', it['s']), ext=1, name=it['name']))
         # radio groups first, in boxes
         done = set()
         for i, it in enumerate(items):
@@ -212,37 +250,43 @@ class Dlg:
             grp = [t for t in items if t['type'] == T_RADIO and t['group'] == it['group']]
             gx0 = min(t['col'] for t in grp); gy0 = min(t['row'] for t in grp)
             gx1 = max(t['col'] + t['wc'] for t in grp); gy1 = max(t['row'] + 1 for t in grp)
-            box = add(root, Obj(G_IBOX, cp(gx0), cp(gy0), cp(gx1 - gx0), cp(gy1 - gy0), ext=2,
+            pp, r0 = par(grp[0])
+            box = add(pp, Obj(G_IBOX, cp(gx0), cp(gy0 - r0), cp(gx1 - gx0), cp(gy1 - gy0), ext=2,
                                 name=(grp[0]['name'] + 'GRP') if grp[0]['name'] else None))
             for t in grp:
                 add(box, Obj(G_BUTTON, cp(t['col'] - gx0), cp(t['row'] - gy0), cp(t['wc']), cp(1),
                              flags=SELECTABLE | RBUTTON, spec=('str', t['s']), ext=1, name=t['name']))
         for it in items:
             t = it['type']
+            if t in (T_LABEL, T_TEXT, T_CHECK, T_EDIT, T_BIG, T_SIDE) and it.get('page') is not None:
+                pp, r0 = par(it)
+                it = dict(it, row=it['row'] - r0)
+            else:
+                pp = root
             if t in (T_TITLE, T_LABEL, T_TEXT):
-                add(root, Obj(G_STRING, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
+                add(pp, Obj(G_STRING, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
                               spec=('str', it['s']), ext=4 if t == T_TITLE else 1, name=it['name']))
             elif t == T_CHECK:
-                add(root, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1), flags=SELECTABLE,
+                add(pp, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1), flags=SELECTABLE,
                               spec=('str', it['s']), ext=1, name=it['name']))
             elif t == T_EDIT:
                 # the prompt and the text after it as strings, the field just the characters:
                 # it looks right with and without the 3D look
                 c, pre, post = it['col'], it['pre'], it['post']
                 if pre:
-                    add(root, Obj(G_STRING, cp(c), cp(it['row']), cp(len(pre)), cp(1), spec=('str', pre), ext=1))
-                add(root, Obj(G_FTEXT, cp(c + len(pre)), cp(it['row']), cp(it['n']), cp(1), flags=EDITABLE,
+                    add(pp, Obj(G_STRING, cp(c), cp(it['row']), cp(len(pre)), cp(1), spec=('str', pre), ext=1))
+                add(pp, Obj(G_FTEXT, cp(c + len(pre)), cp(it['row']), cp(it['n']), cp(1), flags=EDITABLE,
                               spec=('ted', dict(text=it['buf'], tmpl=b'_' * it['n'], valid=it['valid'], color=0x1180)),
                               ext=1, name=it['name']))
                 if post:
-                    add(root, Obj(G_STRING, cp(c + len(pre) + it['n']), cp(it['row']), cp(len(post)), cp(1),
+                    add(pp, Obj(G_STRING, cp(c + len(pre) + it['n']), cp(it['row']), cp(len(post)), cp(1),
                                   spec=('str', post), ext=1, name=it.get('post_name')))
             elif t == T_BIG:
-                add(root, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
+                add(pp, Obj(G_BUTTON, cp(it['col']), cp(it['row']), cp(it['wc']), cp(1),
                               flags=SELECTABLE | it.get('flags', 0), spec=('str', it['s'].ljust(it['wc'])[:it['wc']] if not it['s'].strip() else it['s']),
                               ext=1, name=it['name']))
             elif t == T_SIDE:
-                add(root, Obj(G_BOX, cp(it['col']), cp(it['row']), cp(it['wc']), cp(it['nr']),
+                add(pp, Obj(G_BOX, cp(it['col']), cp(it['row']), cp(it['wc']), cp(it['nr']),
                               spec=0x00011100, ext=2, name=it['name']))
             elif t == T_BUTTON:
                 add(root, Obj(G_BUTTON, cp(it['col']), cp(nrows - nbrow + it['brow']), cp(it['bw']), cp(1),
@@ -281,7 +325,10 @@ def dlg_print(L):
     return t
 
 def dlg_prefs(L):
+    # two pages under tabs: everyday settings, then documents and spelling
     g = Dlg(L('S_PREFS_TITLE'))
+    g.tabs([L('S_TAB_GENERAL'), L('S_TAB_DOCUMENTS')])
+    g.page(0)
     g.label(L('S_LANGUAGE'))
     for i, n in enumerate(L.names()): g.radio(1, n, 'LANG%d' % i)
     g.nl(); g.label(L('S_DATE_FORMAT'))
@@ -297,27 +344,20 @@ def dlg_prefs(L):
     g.check(L('S_ON'), 'ASON')
     g.edit(L('S_EVERY'), 2, L('S_MINUTES'), digits(2), b'5', 'ASMIN')
     g.radio(7, L('S_BACKUP_COPY'), 'ASCOPY'); g.radio(7, L('S_SAVE_DOC'), 'ASDOC')
-    g.button(L('S_PREFS_MORE'), 'MORE')
-    g.button(L('S_CANCEL'), 'CANCEL')
-    g.button(L('S_SAVE_BTN'), 'OK', DEFAULT)
-    return g.build('PREFS')
-
-def dlg_prefs2(L):
-    g = Dlg(L('S_PREFS_TITLE'))
+    g.page(1)
     g.label(L('S_KEEP'))
-    for i, s in enumerate(('S_KEEP_ANY', 'S_KEEP_WIDOWS', 'S_KEEP_TOGETHER')): g.radio(1, L(s), 'KEEP%d' % i)
-    # spelling and PDF here: the first page has the languages and dates
+    for i, s in enumerate(('S_KEEP_ANY', 'S_KEEP_WIDOWS', 'S_KEEP_TOGETHER')): g.radio(11, L(s), 'KEEP%d' % i)
     g.nl(); g.label(L('S_SPELLING')); g.check(L('S_LIVE_SPELL'), 'LIVE')
     g.nl(); g.label(L('S_DICTIONARY'))
     for i, n in enumerate(L.names()): g.radio(8, n, 'DICT%d' % i)
     g.nl(); g.label(L('S_PDF_PICTURES'))
-    g.radio(5, L('S_SCREEN'), 'PDF1'); g.radio(5, b'2x', 'PDF2'); g.radio(5, b'3x', 'PDF3')
+    g.radio(5, L('S_SCREEN'), 'PDF1')
+    for i, s in enumerate((b'150', b'300', b'600', b'1200')): g.radio(5, s, 'PDF%d' % (i + 2))
     g.nl(); g.label(L('S_DOCDIR'))
     g.edit(None, 40, None, anyc(40), b'', 'DOCDIR')
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_SAVE_BTN'), 'OK', DEFAULT)
-    return g.build('PREFS2')
-
+    return g.build('PREFS')
 
 def blank(n): return b' ' * n
 
@@ -593,7 +633,8 @@ def tw_export(L):
     g.nl(); g.label(L('S_CHARACTERS'))
     for i, s in enumerate((b'Atari ST', b'Windows', b'UTF-8', b'UTF-16')): g.radio(3, s, 'C%d' % i)
     g.nl(); g.label(L('S_PDF_PICTURES'))
-    g.radio(4, L('S_SCREEN'), 'P0'); g.radio(4, b'2x', 'P1'); g.radio(4, b'3x', 'P2')
+    g.radio(4, L('S_SCREEN'), 'P0')
+    for i, s in enumerate((b'150', b'300', b'600', b'1200')): g.radio(4, s, 'P%d' % (i + 1))
     g.nl(); g.text(blank(46), 'STATUS')
     g.button(L('S_CLOSE'), 'CLOSE')
     g.button(L('M_EXPORT'), 'GO', DEFAULT)
@@ -939,7 +980,7 @@ def main():
     for lg in LANGS:
         L = Lang(text, lg)
         menu, cmds = menubar(L)
-        trees = [menu, dlg_print(L), dlg_prefs(L), dlg_prefs2(L), fontsel(L),
+        trees = [menu, dlg_print(L), dlg_prefs(L), fontsel(L),
                  dlg_page(L), dlg_wrap(L), dlg_size(L), dlg_headfoot(L), dlg_indents(L), dlg_table(L, True),
                  dlg_table(L, False), dlg_objprops(L, False), dlg_objprops(L, True), dlg_summary(L), dlg_about(L),
                  dlg_textimport(L), dlg_textexport(L), dlg_goto(L), dlg_pagenum(L), dlg_template(L),
@@ -973,7 +1014,7 @@ def main():
         for ti, (tname, objs) in enumerate(names):
             f.write('#define RT_%s %d\n' % (tname, ti))
         f.write('#define RT_COUNT %d\n\n' % len(names))
-        pre = {'MENU': 'MN', 'PRINT': 'PR', 'PREFS': 'PF', 'PREFS2': 'PF2', 'FONTSEL': 'FS', 'TOOLBAR': 'TBO',
+        pre = {'MENU': 'MN', 'PRINT': 'PR', 'PREFS': 'PF', 'FONTSEL': 'FS', 'TOOLBAR': 'TBO',
                'PAGE': 'DPG', 'WRAP': 'DWR', 'SIZE': 'DSZ', 'HEADFOOT': 'DHF', 'INDENTS': 'DIN', 'TBLINS': 'DTI',
                'TBLPROP': 'DTP', 'PICPROPS': 'DPP', 'DRAWPROPS': 'DDP', 'SUMMARY': 'DSU', 'ABOUT': 'DAB',
                'TEXTIMP': 'DTXI', 'TEXTEXP': 'DTXE', 'GOTO': 'DGT', 'PAGENUM': 'DPN', 'TEMPLATE': 'DTM',

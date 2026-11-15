@@ -2801,6 +2801,26 @@ de: Piktogramme für gesicherte Dokumente
 es: Crear iconos al guardar documentos
 it: Creare icone per i documenti salvati
 fr: Créer des icônes à l'enregistrement
+@S_TAB_GENERAL
+en: General
+de: Allgemein
+es: General
+it: Generale
+fr: Général
+cs: Obecné
+@S_TAB_DOCUMENTS
+en: Documents
+de: Dokumente
+es: Documentos
+it: Documenti
+fr: Documents
+cs: Dokumenty
+@S_AMI_CHOOSE
+en: Choose...
+de: Wählen...
+es: Elegir...
+it: Scegli...
+fr: Choisir...
 @S_AMI_SETTINGS
 en: Settings
 de: Einstellungen

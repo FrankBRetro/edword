@@ -210,7 +210,7 @@ int print_page(DOC *d, int page, PRTOUT *o)
     if ((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112) > scale)
         scale = (int)((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112));
     if (scale < 1) scale = 1;
-    if (scale > 8) scale = 8;
+    if (scale > 16) scale = 16;                     /* 1200 dpi from a 75-90 dpi screen */
     o->scale = scale;
     sw = pt2px_x(PS(d).w) * scale;
     sh = pt2px_y(PS(d).h) * scale;

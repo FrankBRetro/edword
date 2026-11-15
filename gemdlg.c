@@ -58,24 +58,36 @@ void dlg_init(void)
 static int upc(int c) { return c >= 'a' && c <= 'z' ? c - 32 : c >= 0x80 ? st_upper((unsigned char)c) : c; }
 
 /* give each button and check box a shortcut letter, unique in the dialog */
+/* each button's Alternate letter: the first free letter that starts a
+ * word, else any free letter in it; a digit only when it starts the label
+ * (no 1_5_0 in a row of numbers) */
+static int short_ok(const char *s, int k, int pass)
+{
+    int c = upc((unsigned char)s[k]);
+    int start = k == 0 || s[k - 1] == ' ' || s[k - 1] == '/' || s[k - 1] == '-';
+    if (c >= '0' && c <= '9') return k == 0;
+    if (!((c >= 'A' && c <= 'Z') || c >= 0x80)) return 0;
+    return pass || start;
+}
+
 static void pick_shortcuts(DLG *g)
 {
     char used[64];
-    int nu = 0, i, k;
+    int nu = 0, i, k, pass;
     used[0] = 0;
     for (i = 0; i < g->nit; i++) {
         DITEM *it = &g->it[i];
         it->ul = -1;
         if (it->type != T_BUTTON && it->type != T_BIG && it->type != T_CHECK && it->type != T_RADIO) continue;
-        for (k = 0; it->s[k]; k++) {
-            int c = upc((unsigned char)it->s[k]);
-            if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c >= 0x80)) continue;
-            if (memchr(used, c, nu)) continue;
-            if (nu < (int)sizeof used) used[nu++] = (char)c;
-            it->ul = (short)k;
-            it->key = (short)c;
-            break;
-        }
+        for (pass = 0; pass < 2 && it->ul < 0; pass++)
+            for (k = 0; it->s[k]; k++) {
+                int c = upc((unsigned char)it->s[k]);
+                if (!short_ok(it->s, k, pass) || memchr(used, c, nu)) continue;
+                if (nu < (int)sizeof used) used[nu++] = (char)c;
+                it->ul = (short)k;
+                it->key = (short)c;
+                break;
+            }
     }
 }
 
@@ -149,8 +161,16 @@ int dlg_tree(DLG *g, int tree)
             break;
         case G_FTEXT: case G_FBOXTEXT:
             if (g->nte < MAXTED) {
-                g->te[g->nte] = *o->ob_spec.tedinfo;      /* a copy: the text goes where the caller says */
-                o->ob_spec.tedinfo = &g->te[g->nte++];
+                TEDINFO *te = &g->te[g->nte++];
+                const char *m;
+                short k = 0;
+                *te = *o->ob_spec.tedinfo;                 /* a copy: the text goes where the caller says */
+                o->ob_spec.tedinfo = te;
+                /* the AES's rsrc_load made te_txtlen the length of the
+                 * empty text in the file, one: the room is the
+                 * template's, a character for each underscore */
+                for (m = te->te_ptmplt; m && *m; m++) if (*m == '_') k++;
+                if (k) te->te_txtlen = (short)(k + 1);
             }
             it->type = T_EDIT;
             it->s = "";
@@ -267,6 +287,69 @@ void winpos_clamp(short *x, short *y, short w, short h)
     if (*y < desk.g_y) *y = desk.g_y;
 }
 
+/* ---- typing into an edit field ------------------------------------------
+ * MagiC's objc_edit moves the text cursor but in EdWord's fields wouldn't
+ * take characters, Backspace or Delete. There EdWord edits the field's
+ * text itself (by its validation string) and objc_edit only places the
+ * cursor. 1: key used, *pos the cursor's new place in the text. */
+static int valid_ch(char v, int *c)
+{
+    int ch = *c;
+    switch (v) {
+    case '9': return ch >= '0' && ch <= '9';
+    case 'A': if (ch >= 'a' && ch <= 'z') *c = ch - 32; return (*c >= 'A' && *c <= 'Z') || ch == ' ' || ch >= 0x80;
+    case 'a': return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == ' ' || ch >= 0x80;
+    case 'N': if (ch >= 'a' && ch <= 'z') *c = ch - 32;
+              return (*c >= 'A' && *c <= 'Z') || (ch >= '0' && ch <= '9') || ch == ' ' || ch >= 0x80;
+    case 'n': return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == ' ' || ch >= 0x80;
+    case 'F': case 'm': return ch != ':' && ch != '\\';
+    default:  return 1;                          /* X x P p and any other: anything */
+    }
+}
+
+int field_edit(OBJECT *tree, short obj, short key, short *pos)
+{
+    TEDINFO *t;
+    char *b;
+    int len, max, p, ch = key & 0xff, scan = (key >> 8) & 0xff, vlen;
+    if (obj <= 0 || !(tree[obj].ob_flags & OF_EDITABLE)) return 0;
+    t = tree[obj].ob_spec.tedinfo;
+    if (!t || !t->te_ptext) return 0;
+    b = t->te_ptext;
+    len = (int)strlen(b);
+    max = t->te_txtlen - 1;
+    p = *pos < 0 ? 0 : *pos > len ? len : *pos;
+    if (scan == 0x0E) {                          /* Backspace */
+        if (p == 0) return 1;
+        memmove(b + p - 1, b + p, (size_t)(len - p + 1));
+        *pos = (short)(p - 1);
+        return 1;
+    }
+    if (scan == 0x53) {                          /* Delete */
+        if (p < len) memmove(b + p, b + p + 1, (size_t)(len - p));
+        *pos = (short)p;
+        return 1;
+    }
+    if (scan == 0x01) { b[0] = 0; *pos = 0; return 1; }   /* Esc: empty */
+    if (ch < 32 || ch == 127) return 0;          /* the cursor keys: the AES's */
+    vlen = t->te_pvalid ? (int)strlen(t->te_pvalid) : 0;
+    if (vlen && !valid_ch(t->te_pvalid[p < vlen ? p : vlen - 1], &ch)) return 1;
+    if (len >= max) return 1;                    /* full */
+    memmove(b + p + 1, b + p, (size_t)(len - p + 1));
+    b[p] = (char)ch;
+    *pos = (short)(p + 1);
+    return 1;
+}
+
+/* the cursor at pos in a field just drawn again: ED_INIT puts it at the
+ * end, the left arrow brings it back */
+void field_cursor(OBJECT *tree, short obj, short *idx, short pos)
+{
+    int n;
+    objc_edit(tree, obj, 0, idx, ED_INIT);
+    for (n = *idx - pos; n > 0; n--) objc_edit(tree, obj, 0x4B00, idx, ED_CHAR);
+}
+
 /* ---- running a dialog ------------------------------------------------- */
 
 /* Dialogs open in windows of their own, so the documents and the other
@@ -277,6 +360,35 @@ void winpos_clamp(short *x, short *y, short w, short h)
 static DLG  *open_dlg;
 static short dlg_wh = -1;
 int dlg_busy;
+/* how dlg_run changed the tree for its window, to put it back */
+static short s_title = -1, s_dy;
+static short s_st0;
+static long  s_sp0;
+static char  wtitle[60];
+
+/* the dialog's window closed and its tree as it was, so the dialog can
+ * be shown again (Print after an alert) */
+static void dlg_shut(DLG *g)
+{
+    short i;
+    if (open_dlg != g || dlg_wh < 0) return;
+    winpos_save(wtitle, dlg_wh);
+    wind_close(dlg_wh);
+    wind_delete(dlg_wh);
+    dlg_wh = -1;
+    open_dlg = NULL;
+    dlg_busy = 0;
+    for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
+    g->o[0].ob_height -= hchar / 2 + hchar / 4;
+    if (s_title > 0) {
+        g->o[s_title].ob_flags &= ~OF_HIDETREE;
+        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != s_title) g->o[i].ob_y += s_dy;
+        g->o[0].ob_height += s_dy;
+    }
+    g->o[0].ob_state = s_st0; g->o[0].ob_spec.index = s_sp0;
+}
+
+void dlg_close(DLG *g) { dlg_shut(g); }
 
 void dlg_front(void) { if (dlg_busy && dlg_wh >= 0) wind_set(dlg_wh, WF_TOP, 0, 0, 0, 0); }
 
@@ -375,7 +487,7 @@ short dlg_run(DLG *g)
     long sp0;
     int cur_on = 0;
     const char *tname = NULL;
-    static char wtitle[60];
+    int force = 0;
 
     eddiag("dlg_run: busy %d, windows %d, 3D %d, MagiC %d, %d objects, %d items, root %d,%d %dx%d",
            dlg_busy, win_dialogs, aes_3d, aes_magic, g->n, g->nit, g->o[0].ob_x, g->o[0].ob_y, g->o[0].ob_width, g->o[0].ob_height);
@@ -385,6 +497,17 @@ short dlg_run(DLG *g)
                g->o[i].ob_flags, g->o[i].ob_state, (long)g->o[i].ob_spec.index, g->o[i].ob_next, g->o[i].ob_head, g->o[i].ob_tail,
                g->o[i].ob_x, g->o[i].ob_y, g->o[i].ob_width, g->o[i].ob_height);
 #endif
+    if (open_dlg == g && dlg_wh >= 0) {
+        /* still open (stay): on with the same window, drawn again with
+         * what the caller changed */
+        GRECT a;
+        wind_get(dlg_wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
+        g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
+        a.g_x = g->x; a.g_y = g->y; a.g_w = w; a.g_h = h;
+        dlg_redraw(g, &a, 0, 0, 0);
+        title = s_title; dy = s_dy;
+        goto run;
+    }
     if (dlg_busy) { dlg_front(); return -1; }
     if (!win_dialogs) return dlg_modal(g);
     st0 = g->o[0].ob_state; sp0 = g->o[0].ob_spec.index;
@@ -433,7 +556,9 @@ short dlg_run(DLG *g)
     g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
     open_dlg = g;
     dlg_busy = 1;
-    edit = g->edit1 > 0 ? g->edit1 : 0;
+    s_title = title; s_dy = dy; s_st0 = st0; s_sp0 = sp0;
+run:
+    edit = g->edit1 > 0 && (g->o[g->edit1].ob_flags & OF_EDITABLE) ? g->edit1 : 0;
 #ifdef EDDEMO
     if (demo_on) {
         GRECT a;
@@ -471,6 +596,7 @@ short dlg_run(DLG *g)
                 case WM_CLOSED:
                     ex = dlg_cancel_obj(g);
                     if (ex < 0) ex = 0;
+                    force = 1;
                     goto done;
                 case WM_MOVED:
                     winpos_clamp(&msg[4], &msg[5], msg[6], msg[7]);
@@ -480,7 +606,7 @@ short dlg_run(DLG *g)
                     break;
                 }
             } else handle_msg(msg);
-            if (quit_now) { ex = dlg_cancel_obj(g); goto done; }
+            if (quit_now) { ex = dlg_cancel_obj(g); force = 1; goto done; }
         }
         if ((ev & MU_KEYBD) && dlg_is_top()) {
             short scan = (key >> 8) & 0xff, o;
@@ -494,6 +620,18 @@ short dlg_run(DLG *g)
                 continue;
             }
             if (edit && !cur_on) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 1; }
+            {
+                short np = idx;
+                if (edit && scan != 0x1C && scan != 0x72 && scan != 0x0F && field_edit(g->o, edit, key, &np)) {
+                    GRECT fr;
+                    objc_edit(g->o, edit, 0, &idx, ED_END);
+                    objc_offset(g->o, edit, &fr.g_x, &fr.g_y);
+                    fr.g_w = g->o[edit].ob_width; fr.g_h = g->o[edit].ob_height;
+                    dlg_redraw(g, &fr, 0, 0, 0);
+                    field_cursor(g->o, edit, &idx, np);
+                    continue;
+                }
+            }
             cont = form_keybd(g->o, edit, next, key, &next, &key);
             if (key && edit) objc_edit(g->o, edit, key, &idx, ED_CHAR);
             if (!cont) { ex = next; goto done; }
@@ -520,22 +658,9 @@ short dlg_run(DLG *g)
     }
 done:
     if (edit && cur_on && dlg_is_top()) objc_edit(g->o, edit, 0, &idx, ED_END);
-    winpos_save(wtitle, dlg_wh);
-    wind_close(dlg_wh);
-    wind_delete(dlg_wh);
-    dlg_wh = -1;
-    open_dlg = NULL;
-    dlg_busy = 0;
-    /* the tree as it was, so the dialog can be shown again (Print after
-     * an alert, Apply in the colour theme) */
-    for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
-    g->o[0].ob_height -= hchar / 2 + hchar / 4;
-    if (title > 0) {
-        g->o[title].ob_flags &= ~OF_HIDETREE;
-        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != title) g->o[i].ob_y += dy;
-        g->o[0].ob_height += dy;
-    }
-    g->o[0].ob_state = st0; g->o[0].ob_spec.index = sp0;
+    /* stay: the window stays for the caller's next dlg_run (or dlg_close),
+     * unless it was closed or EdWord is quitting */
+    if (!g->stay || force) dlg_shut(g);
     return dlg_finish(g, ex & 0x7fff);
 }
 
@@ -561,7 +686,8 @@ int alert(int def, int icon, int text, int buttons, ...)
 /*  Popup menu                                                        */
 /* ================================================================= */
 
-/* the AES has popup menus (menu_popup): AES 4, MagiC, XaAES, MyAES... */
+/* the AES has popup menus (menu_popup): AES 3.30 and later (TOS 4,
+ * MultiTOS), MagiC, XaAES, MyAES... */
 static int aes_popups(void)
 {
     static int known = -1;
@@ -569,7 +695,7 @@ static int aes_popups(void)
     if (known >= 0) return known;
     known = 0;
     if (appl_getinfo(9, &o1, &o2, &o3, &o4) == 1) known = o2 != 0;
-    else if (aes_global[0] >= 0x0400) known = 1;
+    else if (aes_global[0] >= 0x0330) known = 1;     /* menu_popup came with AES 3.30 (TOS 4) */
     edlog("AES popup menus: %d", known);
     return known;
 }
@@ -922,8 +1048,8 @@ int dlg_size(int *size)
     dlg_tree_end(&g);
     if (dlg_run(&g) != DSZ_OK) return 0;
     v = atoi(sz);
-    if (v < 4 || v > 150) return 0;
-    *size = v;
+    if (v <= 0) return 0;
+    *size = v < 4 ? 4 : v > 150 ? 150 : v;         /* out of range: the nearest size there is */
     return 1;
 }
 
@@ -1210,85 +1336,6 @@ void busy_end(void)
 /* ================================================================= */
 /*  Preferences                                                       */
 /* ================================================================= */
-
-/* the second page of the preferences: how pages break, where documents go */
-static void prefs_more(void)
-{
-    static char dd[41];
-    DLG g;
-    short kp[3], ok;
-    int i;
-    strncpy(dd, pref_docdir, 40);
-    dd[40] = 0;
-    if (!dlg_load(&g, RT_PREFS2)) return;
-    for (i = 0; i < 3; i++) { kp[i] = (short)(PF2_KEEP0 + i); dlg_set(&g, kp[i], lay_keep == i); }
-    for (i = 0; i < NLANG; i++) dlg_set(&g, PF2_DICT0 + i, spell_lang == i);
-    dlg_set(&g, PF2_LIVE, pref_live);
-    for (i = 0; i < 3; i++) dlg_set(&g, PF2_PDF1 + i, pdf_scale == i + 1);
-    dlg_edtext(&g, PF2_DOCDIR, dd);
-    g.cancel = PF2_CANCEL;
-    ok = PF2_OK;
-    dlg_tree_end(&g);
-    if (dlg_run(&g) != ok) return;
-    for (i = 0; i < 3; i++) if (dlg_on(&g, kp[i])) lay_keep = i;
-    pref_live = dlg_on(&g, PF2_LIVE);
-    for (i = 0; i < 3; i++) if (dlg_on(&g, PF2_PDF1 + i)) pdf_scale = i + 1;
-    for (i = 0; i < NLANG; i++)
-        if (dlg_on(&g, PF2_DICT0 + i) && i != spell_lang) {     /* another dictionary: loaded when next needed */
-            spell_unload_main();
-            spell_lang = i;
-        }
-    if (strncmp(dd, pref_docdir, 40)) {
-        strncpy(pref_docdir, dd, sizeof pref_docdir - 1);
-        docdir_changed();
-    }
-}
-
-int dlg_prefs(void)
-{
-    static const int order[NDATEFMT_ST] = { DT_SHORT, DT_DOTS, DT_US, DT_ISO, DT_LONG, DT_DAYLONG };
-    static char dl[NDATEFMT_ST][32], mins[3];
-    DLG g;
-    short lang[NLANG], dr[NDATEFMT_ST], pp[NPAPER], land, tbar, col, dm[4], ason, asm1, ok, more, r;
-    int i, v;
-
-    for (i = 0; i < NDATEFMT_ST; i++) fmt_now(dl[i], order[i]);
-    sprintf(mins, "%d", pref_asmin);
-    if (!dlg_load(&g, RT_PREFS)) return 0;
-    for (i = 0; i < NLANG; i++) {
-        lang[i] = (short)(PF_LANG0 + i); dlg_set(&g, lang[i], ui_lang == i);
-    }
-    for (i = 0; i < NDATEFMT_ST; i++) { dr[i] = (short)(PF_DATE0 + i); dlg_str(&g, dr[i], dl[i]); dlg_set(&g, dr[i], pref_date == order[i]); }
-    for (i = 0; i < NPAPER; i++) { pp[i] = (short)(PF_PAPER0 + i); dlg_set(&g, pp[i], pref_paper == i); }
-    dlg_set(&g, PF_PORTRAIT, !pref_land);
-    dlg_set(&g, land = PF_LAND, pref_land);
-    dlg_set(&g, tbar = PF_TOOLBAR, pref_toolbar);
-    dlg_set(&g, col = PF_COLOURS, colour_on);
-    for (i = 0; i < 4; i++) { dm[i] = (short)(PF_DISP0 + i); dlg_set(&g, dm[i], pref_display == i); }
-    dlg_set(&g, ason = PF_ASON, pref_autosave);
-    dlg_edtext(&g, PF_ASMIN, mins);
-    dlg_set(&g, PF_ASCOPY, !pref_asmode);
-    dlg_set(&g, asm1 = PF_ASDOC, pref_asmode);
-    more = PF_MORE; ok = PF_OK;
-    g.cancel = PF_CANCEL;
-    dlg_tree_end(&g);
-    r = dlg_run(&g);
-    if (r != ok && r != more) return 0;
-
-    for (i = 0; i < 4; i++) if (dlg_on(&g, dm[i])) pref_display = i;
-    pref_autosave = dlg_on(&g, ason);
-    v = atoi(mins);
-    pref_asmin = v < 1 ? 1 : v > 99 ? 99 : v;
-    pref_asmode = dlg_on(&g, asm1);
-    for (i = 0; i < NDATEFMT_ST; i++) if (dlg_on(&g, dr[i])) pref_date = order[i];
-    for (i = 0; i < NPAPER; i++) if (dlg_on(&g, pp[i])) pref_paper = i;
-    pref_land = dlg_on(&g, land);
-    pref_toolbar = dlg_on(&g, tbar);
-    colour_on = dlg_on(&g, col);
-    for (i = 0; i < NLANG; i++) if (dlg_on(&g, lang[i]) && i != ui_lang) set_language(i);
-    if (r == more) prefs_more();        /* this page's choices kept, then the next */
-    return 1;
-}
 
 /* ================================================================= */
 /*  Headers and footers                                               */
@@ -1681,91 +1728,4 @@ int dlg_template(int *kind)
 /*  Colour theme                                                      */
 /* ================================================================= */
 
-/* the theme from the popup, or each colour by hand; Apply shows it
- * without closing. 1: changed (and kept) */
-/* The colour theme. On a screen without a palette it can be for the top
- * document's window alone ("This document") or for every window that has
- * none of its own ("All documents"); on a palette screen it is for all.
- * While the dialog is up, theme_id and theme_rgb hold the theme being
- * edited (the picture shows them); the one for all is kept aside. */
-int dlg_theme(void)
-{
-    static const short fo[TH_NROLES][3] = {
-        { DTH_R0, DTH_G0, DTH_B0 }, { DTH_R1, DTH_G1, DTH_B1 }, { DTH_R2, DTH_G2, DTH_B2 },
-        { DTH_R3, DTH_G3, DTH_B3 }, { DTH_R4, DTH_G4, DTH_B4 }, { DTH_R5, DTH_G5, DTH_B5 } };
-    static char f[TH_NROLES][3][4], pick[24];
-    static DLG g;
-    static USERBLK pv;
-    unsigned char grgb[TH_NROLES][3], wrgb[TH_NROLES][3], erg[TH_NROLES][3];
-    DOC *d = top_doc();
-    int gid = theme_id, per = theme_per_window() && d, slot = d ? d->slot : -1;
-    int wid = per ? theme_window(slot, wrgb) : -1, shown = 0, i, k, v, eid, mine;
-    short r, x, y;
-
-    if (!theme_possible()) return 0;
-    memcpy(grgb, theme_rgb, sizeof grgb);
-    if (!dlg_load(&g, RT_THEME)) return 0;
-    theme_userdef(&g.o[DTH_PREVIEW], &pv, 2);   /* the picture of it */
-    if (wid >= 0) { theme_id = wid; memcpy(theme_rgb, wrgb, sizeof wrgb); }   /* this window's own */
-    dlg_set(&g, DTH_THISDOC, wid >= 0);
-    dlg_set(&g, DTH_ALLDOCS, wid < 0);
-    if (!per) {                                  /* a palette: one theme for all */
-        g.o[DTH_THISDOC].ob_state |= OS_DISABLED;
-        g.o[DTH_ALLDOCS].ob_state |= OS_DISABLED;
-    }
-    theme_preview_pens();
-    for (i = 0; i < TH_NROLES; i++)
-        for (k = 0; k < 3; k++) dlg_edtext(&g, fo[i][k], f[i][k]);
-    g.cancel = DTH_CANCEL;
-    dlg_tree_end(&g);
-    for (;;) {
-        for (i = 0; i < TH_NROLES; i++)
-            for (k = 0; k < 3; k++) sprintf(f[i][k], "%d", theme_rgb[i][k]);
-        sprintf(pick, "%.17s", theme_id == THEME_CUSTOM ? L(S_THEME_CUSTOM) : theme_name(theme_id));
-        dlg_str(&g, DTH_PICK, pick);
-        r = dlg_run(&g);
-        if (r == DTH_PICK) {
-            objc_offset(g.o, DTH_PICK, &x, &y);
-            v = popup_rsc(RT_POPTHEME, theme_id < NTHEMES ? theme_id : -1, x, (short)(y + g.o[DTH_PICK].ob_height));
-            if (v >= 0 && v < NTHEMES) { theme_pick(v); theme_preview_pens(); shown = 1; }
-            continue;
-        }
-        if (r != DTH_APPLY && r != DTH_OK) {
-            /* Cancel: as it was, on screen too if Apply showed another */
-            theme_id = gid;
-            memcpy(theme_rgb, grgb, sizeof grgb);
-            if (per) theme_set_window(slot, wid, wid >= 0 ? wrgb : NULL);
-            theme_apply();
-            if (shown) form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
-            return 0;
-        }
-        /* the colours as typed: a theme of its own if they're not one */
-        for (i = 0; i < TH_NROLES; i++)
-            for (k = 0; k < 3; k++) {
-                v = atoi(f[i][k]);
-                v = v < 0 ? 0 : v > 255 ? 255 : v;
-                if (v != theme_rgb[i][k]) { theme_rgb[i][k] = (unsigned char)v; theme_id = THEME_CUSTOM; }
-            }
-        /* this window's, or everyone's (and then this window follows it) */
-        eid = theme_id;
-        memcpy(erg, theme_rgb, sizeof erg);
-        mine = per && dlg_on(&g, DTH_THISDOC);
-        if (mine) {
-            theme_set_window(slot, eid, erg);
-            theme_id = gid;
-            memcpy(theme_rgb, grgb, sizeof grgb);
-        } else {
-            if (per) theme_set_window(slot, -1, NULL);
-            gid = eid;
-            memcpy(grgb, erg, sizeof grgb);
-        }
-        theme_apply();
-        if (r == DTH_OK) return 1;
-        shown = 1;
-        form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
-        pump_redraws();
-        theme_id = eid;                          /* still editing it */
-        memcpy(theme_rgb, erg, sizeof erg);
-        theme_preview_pens();
-    }
-}
+/* (the colour theme is a window of its own: gemtwin.c) */

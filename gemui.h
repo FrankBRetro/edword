@@ -81,7 +81,8 @@ void  theme_global(void);           /* ... after */
 int   theme_window(int slot, unsigned char rgb[TH_NROLES][3]);
 void  theme_set_window(int slot, int id, unsigned char rgb[TH_NROLES][3]);
 void  theme_userdef(OBJECT *o, USERBLK *ub, long parm);
-int   dlg_theme(void);
+void  theme_open(void);                  /* the colour theme window */
+void  theme_done(void);
 extern GRECT desk;
 extern int   has_gdos, gdos_fsm, colour_on, pdf_scale;
 extern int   native_iconify, native_bottom, quit_now;
@@ -197,6 +198,10 @@ void  send_to_back(DOC *d);
 void  tile_windows(int how);
 void  win_key(DOC *d, short ks, short key);
 void  win_click(DOC *d, short mx, short my, short ks, short clicks);
+void  win_rclick(DOC *d, short mx, short my);
+void  win_drop_point(DOC *d, short mx, short my);
+void  av_init(void);                     /* the desktop's AV server */
+void  av_exit(void);   /* the right button: the line's menu */
 void  win_msg(DOC *d, short *msg);
 void  win_resized(DOC *d);
 void  select_range(DOC *d, long a, long b);
@@ -274,8 +279,13 @@ typedef struct {
     short   nit, framed, edit1;
     short   x, y, w, h;             /* on screen                                    */
     short   cancel;                 /* the Cancel button (Esc)                      */
+    short   stay;                   /* exit buttons leave the window open: the next
+                                     * dlg_run carries on in it; dlg_close ends it  */
 } DLG;
 short dlg_run(DLG *g);
+int   field_edit(OBJECT *tree, short obj, short key, short *pos);   /* typing into a field, on every AES */
+void  field_cursor(OBJECT *tree, short obj, short *idx, short pos);
+void  dlg_close(DLG *g);                 /* a dialog run with stay set */
 int   dlg_on(DLG *g, short item);
 int   dlg_tree(DLG *g, int tree);   /* the dialog's tree; 0 if the file hasn't it   */
 int   dlg_load(DLG *g, int tree);   /* the same, with an alert if it hasn't         */
@@ -296,7 +306,8 @@ int   dlg_wrapcol(DOC *d);
 int   dlg_size(int *size);
 int   dlg_textimport(int eol, int det, int *cs, int *join);
 int   dlg_textexport(int *crlf, int *cs);
-int   dlg_prefs(void);
+void  prefs_open(void);                  /* the Preferences window */
+void  prefs_done(int lang, int keep);
 int   dlg_headfoot(DOC *d);
 int   dlg_pagenum(DOC *d);
 int   dlg_indents(DOC *d, int *left, int *first);
@@ -354,7 +365,7 @@ int   preview_idle(int run);
 int   preview_area(GRECT *r);
 
 /* gemobj.c: pictures and drawings in the document view */
-extern const TOOL draw_tool;
+extern const TOOL draw_tool, prefs_tool, theme_tool;
 int   obj_at(DOC *d, int page, long px, long py);
 int   obj_click(DOC *d, GRECT *tp, short mx, short my, short ks, short clicks);
 void  obj_select(DOC *d, int i);

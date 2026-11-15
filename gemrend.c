@@ -1343,7 +1343,7 @@ int export_pdf(DOC *d, const char *path, void (*gauge)(long done, long total))
     int ok;
 
     memset(&r, 0, sizeof r);
-    r.scale = pdf_scale < 1 ? 1 : pdf_scale;
+    r.scale = pdf_res_scale(pdf_scale);
     r.gauge = gauge;
     memset(&o, 0, sizeof o);
     o.scale = r.scale;

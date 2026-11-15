@@ -434,6 +434,7 @@ int dlg_event(DLG *g, struct IntuiMessage *m, short *item, int *clicks)
         if (i < 0) return 0;
         switch (g->it[i].type) {
         case T_BUTTON: case T_BIG:
+            if (!(g->it[i].flags & OF_EXIT)) return 0;     /* acts in place (dlg_run_cb's changed) */
             if (clicks) {
                 *clicks = i == g->lastitem && DoubleClick(g->lsecs, g->lmics, m->Seconds, m->Micros) ? 2 : 1;
                 g->lastitem = *clicks == 2 ? -1 : i;
@@ -546,7 +547,11 @@ short dlg_run_cb(DLG *g, void (*changed)(DLG *g, short item))
             done = dlg_event(g, &cm, &item, NULL);
             if (!done && changed && cm.Class == IDCMP_GADGETUP) {
                 short i = dlg_item_of(g, (struct Gadget *)cm.IAddress);
-                if (i >= 0 && g->it[i].type == T_RADIO) { changed(g, i); dlg_repaint(g); }
+                if (i >= 0 && (g->it[i].type == T_RADIO ||
+                               ((g->it[i].type == T_BIG || g->it[i].type == T_BUTTON) && !(g->it[i].flags & OF_EXIT)))) {
+                    changed(g, i);
+                    dlg_repaint(g);
+                }
             }
         }
     }
@@ -867,8 +872,8 @@ int dlg_size(int *size)
     dlg_end(&g);
     if (dlg_run(&g) != ok) return 0;
     v = atoi(sz);
-    if (v < 4 || v > 150) return 0;
-    *size = v;
+    if (v <= 0) return 0;
+    *size = v < 4 ? 4 : v > 150 ? 150 : v;         /* out of range: the nearest size there is */
     return 1;
 }
 
@@ -974,6 +979,10 @@ void busy_end(void)
 
 /* the screen mode requester (asl.library 38, Workbench 2.1) for the
  * screen EdWord opens next time */
+/* Preferences' screen mode, picked in the requester: kept until Save */
+static ULONG pm_id;
+static int pm_w, pm_h, pm_depth, pm_picked;
+
 static int pick_screenmode(void)
 {
     struct ScreenModeRequester *sm;
@@ -983,25 +992,51 @@ static int pick_screenmode(void)
     if (!AslBase || AslBase->lib_Version < 38) return 0;
     sm = (struct ScreenModeRequester *)AllocAslRequestTags(ASL_ScreenModeRequest,
              ASLSM_TitleText, (ULONG)L(S_SCR_PICK), ASLSM_Window, (ULONG)w,
-             ASLSM_InitialDisplayID, (ULONG)(pref_modeid ? pref_modeid : HIRES_KEY),
-             ASLSM_InitialDisplayWidth, (ULONG)(pref_scrw ? pref_scrw : 640),
-             ASLSM_InitialDisplayHeight, (ULONG)(pref_scrh ? pref_scrh : 256),
-             ASLSM_InitialDisplayDepth, (ULONG)(pref_scrdepth ? pref_scrdepth : 4),
+             ASLSM_InitialDisplayID, (ULONG)(pm_id ? pm_id : HIRES_KEY),
+             ASLSM_InitialDisplayWidth, (ULONG)(pm_w ? pm_w : 640),
+             ASLSM_InitialDisplayHeight, (ULONG)(pm_h ? pm_h : 256),
+             ASLSM_InitialDisplayDepth, (ULONG)(pm_depth ? pm_depth : 4),
              ASLSM_DoWidth, TRUE, ASLSM_DoHeight, TRUE, ASLSM_DoDepth, TRUE,
              ASLSM_MinWidth, 640, ASLSM_MinHeight, 200, ASLSM_MinDepth, 2, ASLSM_MaxDepth, 24, TAG_END);
     if (!sm) return 0;
     block_input(1);
     if (AslRequest(sm, NULL)) {
-        pref_modeid = sm->sm_DisplayID;
-        pref_scrw = (int)sm->sm_DisplayWidth;
-        pref_scrh = (int)sm->sm_DisplayHeight;
-        pref_scrdepth = (int)sm->sm_DisplayDepth;
-        pref_colours = pref_scrdepth == 5 ? 0 : pref_scrdepth;   /* the Colours setting shows it */
-        ok = 1;
+        pm_id = sm->sm_DisplayID;
+        pm_w = (int)sm->sm_DisplayWidth;
+        pm_h = (int)sm->sm_DisplayHeight;
+        pm_depth = (int)sm->sm_DisplayDepth;
+        pm_picked = ok = 1;
     }
     block_input(0);
     FreeAslRequest(sm);
     return ok;
+}
+
+/* the Screen setting: Other mode... opens the screen mode requester at
+ * once, and Choose... at any time; cancelled, the setting stays as it was */
+static short pf_scr_lead = -1, pf_scr_other = -1, pf_choose = -1;
+static int pf_scr_prev;
+
+static void pf_set_screen(DLG *g, int n)
+{
+    g->it[pf_scr_lead].on = n;
+    if (g->it[pf_scr_lead].gad && g->win)
+        GT_SetGadgetAttrs(g->it[pf_scr_lead].gad, g->win, NULL, GTCY_Active, (ULONG)n, TAG_END);
+}
+
+static void prefs_changed(DLG *g, short item)
+{
+    int other = pf_scr_other >= 0 ? g->it[pf_scr_other].n : -1;
+    if (pf_scr_lead < 0) return;
+    if (item == pf_choose) {
+        if (pick_screenmode()) { pf_set_screen(g, other); pf_scr_prev = other; }
+        return;
+    }
+    if (item != pf_scr_lead && g->it[item].lead != pf_scr_lead) return;
+    if (g->it[pf_scr_lead].on == other && other >= 0) {
+        if (pick_screenmode()) pf_scr_prev = other;
+        else pf_set_screen(g, pf_scr_prev);       /* cancelled: as it was */
+    } else pf_scr_prev = g->it[pf_scr_lead].on;
 }
 
 int dlg_prefs(void)
@@ -1017,7 +1052,7 @@ int dlg_prefs(void)
     static const int scrname[NSCR] = { S_SCR_HIRES, S_SCR_LACE, S_SCR_LIKEWB, S_SCR_OTHER, S_SCR_WB };
     short scrr[NSCR];
     int nscr;
-    short lang[NLANG], dict[NLANG], dr[NDF], pp[NPAPER], land, tbar, live, col, ps[3], dm[4], ason, asm1, ok, ncol[7], icons = -1;
+    short lang[NLANG], dict[NLANG], dr[NDF], pp[NPAPER], land, tbar, live, col, ps[NPDFRES], dm[4], ason, asm1, ok, ncol[7], icons = -1;
     int i, v;
 
     for (i = 0; i < NDF; i++) { fmt_now(st, order[i]); strcpy(dl[i], lat(st)); }
@@ -1046,6 +1081,7 @@ int dlg_prefs(void)
     dlg_label(&g, L(S_AMI_SCREEN));
     for (i = 0; i < NSCR; i++)
         scrr[i] = i == SCR_OTHER && (!AslBase || AslBase->lib_Version < 38) ? -1 : dlg_radio(&g, 9, L(scrname[i]), pref_screen == i);
+    pf_choose = scrr[SCR_OTHER] >= 0 ? dlg_bigbutton(&g, L(S_AMI_CHOOSE), (int)strlen(L(S_AMI_CHOOSE)) + 4, 0) : -1;
     dlg_row(&g);
     dlg_label(&g, L(S_AMI_COLOURS));
     coln[5] = L(S_AMI_HICOLOUR);
@@ -1059,8 +1095,7 @@ int dlg_prefs(void)
     dlg_row(&g);
     dlg_label(&g, L(S_PDF_PICTURES));
     ps[0] = dlg_radio(&g, 5, L(S_SCREEN), pdf_scale == 1);
-    ps[1] = dlg_radio(&g, 5, "2x", pdf_scale == 2);
-    ps[2] = dlg_radio(&g, 5, "3x", pdf_scale == 3);
+    for (i = 1; i < NPDFRES; i++) ps[i] = dlg_radio(&g, 5, pdf_res_name[i], pdf_scale == i + 1);
     dlg_row(&g);
     dlg_label(&g, L(S_EDITING));
     dm[0] = dlg_radio(&g, 6, L(S_D_NORMAL), pref_display == 0);
@@ -1082,15 +1117,23 @@ int dlg_prefs(void)
     dlg_button(&g, L(S_CANCEL), OF_EXIT);
     ok = dlg_button(&g, L(S_SAVE_BTN), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
-    if (dlg_run(&g) != ok) return 0;
+    pf_scr_lead = scrr[0] >= 0 ? g.it[scrr[0]].lead : -1;
+    pf_scr_other = scrr[SCR_OTHER];
+    pf_scr_prev = pf_scr_lead >= 0 ? g.it[pf_scr_lead].on : 0;
+    pm_id = pref_modeid; pm_w = pref_scrw; pm_h = pref_scrh; pm_depth = pref_scrdepth; pm_picked = 0;
+    if (dlg_run_cb(&g, prefs_changed) != ok) return 0;
 
     for (i = 0; i < 4; i++) if (dlg_on(&g, dm[i])) pref_display = i;
     for (i = 0; i < ncols; i++) if (dlg_on(&g, ncol[i])) pref_colours = i == 1 ? 0 : colv[i];
     nscr = pref_screen;
     for (i = 0; i < NSCR; i++) if (dlg_on(&g, scrr[i])) nscr = i;
-    /* Other mode: the screen mode requester when it is newly chosen (its
-     * colours then set the Colours setting) */
-    if (nscr != SCR_OTHER || pref_screen == SCR_OTHER || pick_screenmode()) pref_screen = nscr;
+    /* (Other mode: its mode was picked in the requester as it was chosen) */
+    pref_screen = nscr;
+    if (pm_picked && nscr == SCR_OTHER) {             /* the mode picked: its colours set Colours too */
+        pref_modeid = pm_id;
+        pref_scrw = pm_w; pref_scrh = pm_h; pref_scrdepth = pm_depth;
+        pref_colours = pm_depth == 5 ? 0 : pm_depth;
+    }
     pref_autosave = dlg_on(&g, ason);
     if (icons >= 0) pref_icons = dlg_on(&g, icons);
     v = atoi(mins);
@@ -1102,7 +1145,7 @@ int dlg_prefs(void)
     pref_toolbar = dlg_on(&g, tbar);
     pref_live = dlg_on(&g, live);
     colour_on = dlg_on(&g, col);
-    for (i = 0; i < 3; i++) if (dlg_on(&g, ps[i])) pdf_scale = i + 1;
+    for (i = 0; i < NPDFRES; i++) if (dlg_on(&g, ps[i])) pdf_scale = i + 1;
     for (i = 0; i < NLANG; i++) if (dlg_on(&g, lang[i]) && i != ui_lang) set_language(i);
     for (i = 0; i < NLANG; i++)
         if (dlg_on(&g, dict[i]) && i != spell_lang) { spell_unload_main(); spell_lang = i; }

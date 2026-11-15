@@ -795,7 +795,7 @@ const TOOL import_tool = { i_owns, i_msg, i_key, i_close_tool, i_docgone };
 
 static TWIN ew;
 static int ex_fmt = FT_RTF, ex_crlf = 0, ex_cs = CS_WIN;
-static short ex_f[6], ex_e[2], ex_c[4], ex_p[3], ex_go, ex_close;
+static short ex_f[6], ex_e[2], ex_c[4], ex_p[NPDFRES], ex_go, ex_close;
 static char ex_docline[48] = " ", ex_status[48] = " ", ex_doclabel[24];
 
 static void ex_read(void)
@@ -804,7 +804,7 @@ static void ex_read(void)
     for (i = 0; i < 6; i++) if (dlg_on(&ew.g, ex_f[i])) ex_fmt = i;
     ex_crlf = dlg_on(&ew.g, ex_e[1]);
     for (i = 0; i < 4; i++) if (dlg_on(&ew.g, ex_c[i])) ex_cs = i + 1;
-    for (i = 0; i < 3; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
+    for (i = 0; i < NPDFRES; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
 }
 
 static void ex_name(void)
@@ -819,7 +819,7 @@ static void ex_enable(void)
     int i;
     for (i = 0; i < 2; i++) dlg_disable(&ew.g, ex_e[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
     for (i = 0; i < 4; i++) dlg_disable(&ew.g, ex_c[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
-    for (i = 0; i < 3; i++) dlg_disable(&ew.g, ex_p[i], ex_fmt != FT_PDF);
+    for (i = 0; i < NPDFRES; i++) dlg_disable(&ew.g, ex_p[i], ex_fmt != FT_PDF);
     dlg_disable(&ew.g, ex_go, !live_doc(NULL));
     if (ex_fmt == FT_TEXT && ex_status[0] == ' ') strcpy(ex_status, L(S_XF_STYLES));
     else if (ex_fmt != FT_TEXT && !strcmp(ex_status, L(S_XF_STYLES))) strcpy(ex_status, " ");
@@ -856,8 +856,7 @@ static void ex_build(void)
     dlg_row(g);
     dlg_label(g, L(S_PDF_PICTURES));
     ex_p[0] = dlg_radio(g, 4, L(S_SCREEN), pdf_scale == 1);
-    ex_p[1] = dlg_radio(g, 4, "2x", pdf_scale == 2);
-    ex_p[2] = dlg_radio(g, 4, "3x", pdf_scale == 3);
+    for (i = 1; i < NPDFRES; i++) ex_p[i] = dlg_radio(g, 4, pdf_res_name[i], pdf_scale == i + 1);
     dlg_row(g);
     dlg_text(g, ex_status);
     ex_go = dlg_button(g, L(M_EXPORT), OF_EXIT | OF_DEFAULT);

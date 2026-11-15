@@ -604,6 +604,10 @@ typedef struct {
     void (*log)(void *ctx, const char *msg);             /* may be NULL */
 } PDFOUT;
 int  pdf_export(DOC *d, const char *path, PDFOUT *o);
+/* the PDF's picture resolution: choice 1 the screen's, 2-5 150 to 1200 dpi */
+#define NPDFRES 5
+extern const char *const pdf_res_name[NPDFRES];
+int  pdf_res_scale(int choice);
 
 /* prt.c - a page to a printer as bitmap bands at its resolution */
 typedef struct {

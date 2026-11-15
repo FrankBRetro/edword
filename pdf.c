@@ -115,6 +115,20 @@ static void write_rgb_image(FILE *f, int num, const IMG *im, long *cnt)
     fputs("\nendstream\nendobj\n", f);
 }
 
+const char *const pdf_res_name[NPDFRES] = { "", "150", "300", "600", "1200" };
+static const short pdf_res_dpi[NPDFRES] = { 0, 150, 300, 600, 1200 };
+
+/* the whole multiple of the screen's pixels nearest the chosen dpi: the
+ * pages are drawn at that and the pictures kept at it */
+int pdf_res_scale(int choice)
+{
+    long dpi, s;
+    if (choice < 2 || choice > NPDFRES || dev_pixw <= 0) return 1;
+    dpi = pdf_res_dpi[choice - 1];
+    s = (dpi * dev_pixw + 12700L) / 25400L;
+    return s < 1 ? 1 : s > 16 ? 16 : (int)s;
+}
+
 int pdf_export(DOC *d, const char *path, PDFOUT *o)
 {
     FILE *f;
