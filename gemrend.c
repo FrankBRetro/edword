@@ -557,13 +557,13 @@ static void draw_row(short h, DOC *d, TROW *t, const SCALE *sc, long ox, long oy
 /* a table's chart: colours on colour screens, else patterns */
 static void draw_vdi_chart(short h, DOC *d, int t, long ox, long oy, const SCALE *sc, int fg, int dark)
 {
-    static CHOP op[CH_MAXOPS];
+    CHOP *op = chart_buf();
     static const short pint[7] = { FIS_SOLID, FIS_PATTERN, FIS_HATCH, FIS_HATCH, FIS_HATCH, FIS_HATCH, FIS_PATTERN };
     static const short psty[7] = { 1, 4, 1, 3, 2, 6, 2 };
     const CHBOX *cb = &d->cbox[t];
     const METRICS *m = get_metrics(default_font(), CHART_PT, 0);
     long bx = ox + SP(cb->x, sc), by = oy + SP(cb->y, sc), sz = CHART_PT * sc->sn / sc->sd;
-    int n = chart_ops(d, t, cb->w, cb->h, op, CH_MAXOPS), i, k, colour = colour_on && npens >= 8 && !dark;
+    int n = op ? chart_ops(d, t, cb->w, cb->h, op, CH_MAXOPS) : 0, i, k, colour = colour_on && npens >= 8 && !dark;
     short p[2 * (CH_MAXPTS + 1)];
     vsl_type(h, 1); vsl_width(h, 1); vsl_color(h, fg);
     for (i = 0; i < n; i++) {
@@ -1484,67 +1484,87 @@ void print_timing(DOC *d, int colour)
 }
 #endif
 
-int print_doc(DOC *d, const unsigned char *sel, int copies, int colour)
+/* the printer (GDOS device 21) opened for a job: 1, 0 failed, -1 cancelled */
+static int prt_open(PCTX *c, int colour)
 {
     short work_in[11], work_out[57], i;
-    PCTX c;
-    int p, k, ok = 1, np;
     if (!has_gdos) return 0;
     for (i = 0; i < 10; i++) work_in[i] = 1;
     work_in[0] = 21;
     work_in[10] = 2;
-    memset(&c, 0, sizeof c);
-    v_opnwk(work_in, &c.ph, work_out);
-    edlog("print: v_opnwk(21) -> handle %d, %dx%d pixels of %dx%d microns", c.ph, work_out[0] + 1,
+    memset(c, 0, sizeof *c);
+    v_opnwk(work_in, &c->ph, work_out);
+    edlog("print: v_opnwk(21) -> handle %d, %dx%d pixels of %dx%d microns", c->ph, work_out[0] + 1,
           work_out[1] + 1, work_out[3], work_out[4]);
-    if (c.ph <= 0) return 0;
+    if (c->ph <= 0) return 0;
     /* ask the printer again: Hatari's extended VDI mode overwrites the
      * size v_opnwk returns with its screen size, whatever the device,
      * but leaves vq_extnd alone (same values on a real machine) */
-    vq_extnd(c.ph, 0, work_out);
+    vq_extnd(c->ph, 0, work_out);
     edlog("print: vq_extnd -> %dx%d pixels of %dx%d microns", work_out[0] + 1,
           work_out[1] + 1, work_out[3], work_out[4]);
-    if (work_out[3] <= 0 || work_out[4] <= 0) { v_clswk(c.ph); return 0; }
+    if (work_out[3] <= 0 || work_out[4] <= 0) { v_clswk(c->ph); return 0; }
     /* a colour printer: each colour in its own pen, set to EdWord's colour */
-    c.npens = work_out[13];
-    c.o.colour = colour && c.npens >= 8;
-    edlog("print: %d pens, %s", c.npens, c.o.colour ? "colour" : "black and white");
-    if (colour && !c.o.colour && alert(1, 2, AL_PRT_NO_COLOUR, AB_PRINT_CANCEL, c.npens) != 1) { v_clswk(c.ph); return -1; }
-    if (c.o.colour) {
+    c->npens = work_out[13];
+    c->o.colour = colour && c->npens >= 8;
+    edlog("print: %d pens, %s", c->npens, c->o.colour ? "colour" : "black and white");
+    if (colour && !c->o.colour && alert(1, 2, AL_PRT_NO_COLOUR, AB_PRINT_CANCEL, c->npens) != 1) { v_clswk(c->ph); return -1; }
+    if (c->o.colour) {
         int k;
         for (k = 1; k < NCOLORS; k++)
-            if (pen_of[k] < c.npens) {
+            if (pen_of[k] < c->npens) {
                 short rgb[3];
                 rgb[0] = (short)(color_rgb[k][0] * 1000L / 255);
                 rgb[1] = (short)(color_rgb[k][1] * 1000L / 255);
                 rgb[2] = (short)(color_rgb[k][2] * 1000L / 255);
-                vs_color(c.ph, pen_of[k], rgb);
+                vs_color(c->ph, pen_of[k], rgb);
             }
         /* the inks of colour pictures: pure colours in pens of their own (10 to
          * 15) when the printer has 16 or more, else the nearest text colour's */
         for (k = 1; k < 7; k++) {
             static const short near[7] = { 0, 1, 2, 6, 3, 5, 4 };     /* text colour nearest each ink */
-            if (c.npens >= 16) {
+            if (c->npens >= 16) {
                 short rgb[3];
-                c.ink[k] = (short)(9 + k);
+                c->ink[k] = (short)(9 + k);
                 rgb[0] = (short)(k & 1 ? 1000 : 0); rgb[1] = (short)(k & 2 ? 1000 : 0); rgb[2] = (short)(k & 4 ? 1000 : 0);
-                vs_color(c.ph, c.ink[k], rgb);
-            } else c.ink[k] = pen_of[near[k]];
+                vs_color(c->ph, c->ink[k], rgb);
+            } else c->ink[k] = pen_of[near[k]];
         }
     }
-    c.o.w = work_out[0] + 1L; c.o.h = work_out[1] + 1L;
-    c.o.pixw = work_out[3]; c.o.pixh = work_out[4];
-    c.o.band = 128;
-    c.o.render = prt_render;
-    c.o.out = prt_out;
-    c.o.progress = prt_progress;
-    c.o.ctx = &c;
+    c->o.w = work_out[0] + 1L; c->o.h = work_out[1] + 1L;
+    c->o.pixw = work_out[3]; c->o.pixh = work_out[4];
+    c->o.band = 128;
+    c->o.render = prt_render;
+    c->o.out = prt_out;
+    c->o.progress = prt_progress;
+    c->o.ctx = c;
+    return 1;
+}
+
+static int bg_jobs(void);
+
+/* what printing leaves behind, once nothing is printing any more */
+static void prt_tidy(void)
+{
+    if (bg_jobs()) { style_reset(); return; }
+    glyph_cache_free();
+    free(edges);
+    edges = NULL;
+    nedge = edgecap = 0;
+    rs_end();
+    style_reset();
+}
+
+int print_doc(DOC *d, const unsigned char *sel, int copies, int colour)
+{
+    PCTX c;
+    int p, k, ok = 1, np;
+    if ((k = prt_open(&c, colour)) <= 0) return k;
     np = doc_npages(d);
     for (p = 0, k = 0; p < np; p++) if (!sel || sel[p]) k++;
     if (!k) { v_clswk(c.ph); return 0; }       /* nothing to print: close the printer again */
     c.npg = k * copies;
-    memset(orient, 0, sizeof orient);
-    ncal = 0;
+    if (!bg_jobs()) { memset(orient, 0, sizeof orient); ncal = 0; }
     gauge_cancelable();
     gauge_open(L(S_PRINTING), NULL);
     doc_layout(d);
@@ -1565,11 +1585,143 @@ int print_doc(DOC *d, const unsigned char *sel, int copies, int colour)
     gauge_close();
     if (c.stop) edlog("print: cancelled after %d pages", c.done);
     v_clswk(c.ph);
-    glyph_cache_free();
-    free(edges);
-    edges = NULL;
-    nedge = edgecap = 0;
-    rs_end();
-    style_reset();
+    prt_tidy();
     return c.stop ? -1 : ok;
+}
+
+/* ---- printing in the background (XGDOS) ---------------------------------- */
+
+/* With XGDOS each printer workstation is a PDF file of its own, so any
+ * number of documents can print at once. A job prints a copy of the
+ * document as it was when Print was chosen, a band at a time between
+ * other work; its window's status line shows the page it is on. */
+typedef struct {
+    DOC   copy;                 /* the document as it was               */
+    DOC  *owner;                /* its window's document (NULL: closed) */
+    PCTX  c;
+    unsigned char *sel;
+    int   copies, cp, page, inpage;
+    PRTPAGE st;
+} BGJOB;
+#define MAXJOBS 8
+static BGJOB *jobs[MAXJOBS];
+
+static int bg_jobs(void)
+{
+    int i, n = 0;
+    for (i = 0; i < MAXJOBS; i++) if (jobs[i]) n++;
+    return n;
+}
+int bgprint_active(void) { return bg_jobs(); }
+
+static void bg_progress(void *ctx, int done, int total) { (void)ctx; (void)done; (void)total; }
+
+static void bg_owner_info(BGJOB *j, int page)
+{
+    if (!j->owner || !j->owner->used) return;
+    j->owner->bgprint = page;
+    set_info(j->owner);
+}
+
+static void bg_free(int i)
+{
+    BGJOB *j = jobs[i];
+    if (!j) return;
+    if (j->inpage) prt_end(&j->st);
+    if (j->c.ph > 0) v_clswk(j->c.ph);
+    bg_owner_info(j, 0);
+    doc_free(&j->copy);
+    free(j->sel);
+    free(j);
+    jobs[i] = NULL;
+    prt_tidy();
+}
+
+/* start printing d in the background: 1, 0 failed, -1 cancelled */
+int bgprint_start(DOC *d, const unsigned char *sel, int copies, int colour)
+{
+    BGJOB *j;
+    int i, k, np = doc_npages(d), r;
+    for (i = 0; i < MAXJOBS && jobs[i]; i++) ;
+    if (i == MAXJOBS) return print_doc(d, sel, copies, colour);     /* all busy: now, as usual */
+    j = (BGJOB *)calloc(1, sizeof(BGJOB));
+    if (!j) return 0;
+    j->sel = (unsigned char *)malloc((size_t)np + 1);
+    if (!j->sel) { free(j); return 0; }
+    for (k = 0; k < np; k++) j->sel[k] = (unsigned char)(!sel || sel[k]);
+    doc_init(&j->copy);
+    busy_ptr(1);
+    k = doc_clone(&j->copy, d);
+    busy_ptr(0);
+    if (!k) { free(j->sel); free(j); return 0; }
+    doc_layout(&j->copy);
+    if ((r = prt_open(&j->c, colour)) <= 0) { doc_free(&j->copy); free(j->sel); free(j); return r; }
+    j->c.o.progress = bg_progress;
+    j->c.o.ctx = &j->c;
+    j->owner = d;
+    j->copies = copies < 1 ? 1 : copies;
+    j->page = -1;
+    if (!bg_jobs()) { memset(orient, 0, sizeof orient); ncal = 0; }
+    jobs[i] = j;
+    bg_owner_info(j, 1);
+    edlog("print: background job %d for %s", i, d->base);
+    return 1;
+}
+
+/* its window closed: the job goes on, without telling it */
+void bgprint_doc_closed(DOC *d)
+{
+    int i;
+    for (i = 0; i < MAXJOBS; i++) if (jobs[i] && jobs[i]->owner == d) jobs[i]->owner = NULL;
+}
+
+/* work on the jobs for about ms milliseconds; 1 while any are left */
+int bgprint_idle(long ms)
+{
+    clock_t end = clock() + ms * CLOCKS_PER_SEC / 1000;
+    int i, any = 0;
+    do {
+        any = 0;
+        for (i = 0; i < MAXJOBS; i++) {
+            BGJOB *j = jobs[i];
+            int r;
+            if (!j) continue;
+            any = 1;
+            if (!j->inpage) {
+                int np = doc_npages(&j->copy);
+                do {                             /* the next page to print */
+                    j->page++;
+                    if (j->page >= np) { j->page = 0; j->cp++; }
+                } while (j->cp < j->copies && !j->sel[j->page]);
+                if (j->cp >= j->copies) {        /* all printed */
+                    edlog("print: background job %d done, %d pages", i, j->c.done);
+                    bg_free(i);
+                    continue;
+                }
+                if (!prt_begin(&j->st, &j->copy, j->page, &j->c.o)) { bg_free(i); continue; }
+                j->inpage = 1;
+            }
+            r = prt_step(&j->st);
+            if (r <= 0) {
+                prt_end(&j->st);
+                j->inpage = 0;
+                if (r < 0) { bg_free(i); continue; }
+                v_updwk(j->c.ph);
+                v_clrwk(j->c.ph);
+                j->c.done++;
+                bg_owner_info(j, j->c.done + 1);
+            }
+        }
+    } while (any && clock() < end);
+    style_reset();
+    return bg_jobs() != 0;
+}
+
+/* quitting: what is left is printed first */
+void bgprint_finish(void)
+{
+    if (!bg_jobs()) return;
+    busy_begin(L(S_PRINTING));
+    while (bgprint_idle(1000)) ;
+    busy_end();
 }

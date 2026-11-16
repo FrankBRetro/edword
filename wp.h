@@ -233,7 +233,8 @@ typedef struct {
     int   ready, full;         /* full: compare the whole text next time */
 } UNDO;
 
-enum { VIEW_DOC, VIEW_SPLIT, VIEW_CODES };
+enum { VIEW_DOC, VIEW_SPLIT, VIEW_CODES, VIEW_PREVIEW };
+#define NBMARK 10               /* bookmarks 1-9 and 0 in each document */
 
 typedef struct {
     int   used, dirty, shown_dirty;
@@ -254,7 +255,7 @@ typedef struct {
     PARA  insp;                 /* paragraph format for an empty document  */
     char  path[256];
     char  base[40];             /* short title, e.g. "LETTER.RTF"          */
-    char  name[80], info[120];
+    char  name[80], info[200];
     /* front end state */
     short wh;                   /* GEM window handle, -1 if none           */
     short vsz, vpos, hsz, hpos;
@@ -274,6 +275,15 @@ typedef struct {
     long  lay_lo, lay_hi, lay_shift;
     int   lay_full;
     DOCAUX *lay_aux;            /* page set-up, formats... as laid out     */
+    long  bmark[NBMARK];        /* bookmarks: text positions, -1 none      */
+    int   colmode;              /* Column Select is on: selections are blocks */
+    int   colsel;               /* the selection is a block (column)      */
+    /* split window: the second pane's own scroll, the size of the first */
+    int   split2, pane2, split_at; /* split on; the focus in pane 2; 1st pane's share (1/1000) */
+    long  scroll2_y, scroll2_x, cv_top2;
+    long  pv_page, pv_sx, pv_sy; int pv_zoom, pv_view, pv_stale;  /* print preview */
+    int   slotdoc;              /* Tools > Clipboard Slots: saving writes the slots */
+    int   bgprint;              /* printing in the background: pages done (+1)     */
 } DOC;
 
 /* shorthands for the document's settings */
@@ -316,6 +326,7 @@ long tab_px(void);
 int  default_font(void);
 int  default_size(void);
 void doc_init(DOC *d);
+int  doc_clone(DOC *d, const DOC *src);
 void doc_free(DOC *d);
 int  doc_insert(DOC *d, long pos, const CELL *c, long n);
 void doc_delete(DOC *d, long pos, long n);
@@ -372,6 +383,13 @@ int  doc_paste(DOC *d);
 int  doc_insert_doc(DOC *d, DOC *src, long a, long b);
 void doc_clip_free(void);
 int  doc_in_table(DOC *d, long pos, long *row_start, int *cell);
+/* column (block) selection: from the anchor's line and x to the caret's */
+int  col_block(DOC *d, long *la, long *lb, long *x0, long *x1);
+void col_span(DOC *d, long li, long x0, long x1, long *a, long *b);
+int  col_has_table(DOC *d);
+int  col_copy(DOC *d, DOC *t);
+int  col_delete(DOC *d);
+int  col_paste(DOC *d, DOC *src);
 long doc_cell_start(DOC *d, long pos);
 long doc_cell_end(DOC *d, long pos);
 long doc_next_cell(DOC *d, long pos, int dir);
@@ -519,6 +537,7 @@ typedef struct {
 int  chart_number(const char *s, long *v);    /* in hundredths */
 int  chart_data(DOC *d, int tbl, CHDATA *cd);
 int  chart_ops(DOC *d, int tbl, long w, long h, CHOP *op, int max);
+CHOP *chart_buf(void);   /* CH_MAXOPS of them, allocated when first needed */
 int  chart_color(int series);
 int  chart_pattern(int series);
 void chart_size(const TBL *T, long tw, long colw, long *w, long *h);
@@ -625,6 +644,18 @@ typedef struct {
     int  scale;                 /* set by print_page: render at this scale */
 } PRTOUT;
 int  print_page(DOC *d, int page, PRTOUT *o);
+/* the same a band at a time */
+typedef struct {
+    DOC  *d; PRTOUT *o;
+    int   page, scale, npass, col[32], use_map;
+    long  sw, sh, pw, ph, srb, prb, band, sband, y;
+    unsigned char *src, *dst, *tmp;
+    long *dlo;
+    void *map;
+} PRTPAGE;
+int  prt_begin(PRTPAGE *s, DOC *d, int page, PRTOUT *o);
+int  prt_step(PRTPAGE *s);       /* 1: more bands, 0: the page is done, -1: failed */
+void prt_end(PRTPAGE *s);
 unsigned page_colours(DOC *d, int page);
 /* colour pictures on a printer: dithered to six inks besides black, each
  * printed in a pass of its own, colour PRT_INK + k (k: 1 red, 2 green,

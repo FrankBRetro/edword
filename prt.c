@@ -192,95 +192,125 @@ static void or_row(unsigned char *t, const unsigned char *s, long n)
     while (i < n) { t[i] |= s[i]; i++; }
 }
 
-int print_page(DOC *d, int page, PRTOUT *o)
+/* A page is printed a band at a time: prt_begin() sets up, each
+ * prt_step() does the next band (in every colour), prt_end() frees. So a
+ * page can be printed bit by bit between other work (in the background). */
+int prt_begin(PRTPAGE *s, DOC *d, int page, PRTOUT *o)
 {
-    long sw, sh, pw, ph, srb, prb, band, y, sband, sx;
-    long *dlo;
-    unsigned char *src, *dst, *tmp;
-    int scale, ok = 1, pass, npass = 0, col[32], use_map;
-    BYTEMAP map;
+    long sx;
+    int pass;
     unsigned used;
-
+    memset(s, 0, sizeof *s);
     if (o->pixw <= 0 || o->pixh <= 0) return 0;
     lead_init();
+    s->d = d; s->page = page; s->o = o;
     /* the smallest whole scale whose pixels are at most 12% bigger than the
      * printer's (it costs the square of the scale; the difference doesn't
      * show at printer resolutions) */
-    scale = (int)((dev_pixw * 100 + o->pixw * 112 - 1) / (o->pixw * 112));
-    if ((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112) > scale)
-        scale = (int)((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112));
-    if (scale < 1) scale = 1;
-    if (scale > 16) scale = 16;                     /* 1200 dpi from a 75-90 dpi screen */
-    o->scale = scale;
-    sw = pt2px_x(PS(d).w) * scale;
-    sh = pt2px_y(PS(d).h) * scale;
+    s->scale = (int)((dev_pixw * 100 + o->pixw * 112 - 1) / (o->pixw * 112));
+    if ((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112) > s->scale)
+        s->scale = (int)((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112));
+    if (s->scale < 1) s->scale = 1;
+    if (s->scale > 16) s->scale = 16;               /* 1200 dpi from a 75-90 dpi screen */
+    o->scale = s->scale;
+    s->sw = pt2px_x(PS(d).w) * s->scale;
+    s->sh = pt2px_y(PS(d).h) * s->scale;
     /* the page in printer pixels, cut to what the printer can print */
-    pw = (long)PS(d).w * 25400L / 72L / o->pixw;
-    ph = (long)PS(d).h * 25400L / 72L / o->pixh;
-    if (o->w > 0 && pw > o->w) pw = o->w;
-    if (o->h > 0 && ph > o->h) ph = o->h;
-    band = o->band > 0 ? o->band : 64;
-    srb = ((sw + 31) / 32) * 4;                     /* whole longs: the white is skipped by longs */
-    prb = ((pw + 31) / 32) * 4;
+    s->pw = (long)PS(d).w * 25400L / 72L / o->pixw;
+    s->ph = (long)PS(d).h * 25400L / 72L / o->pixh;
+    if (o->w > 0 && s->pw > o->w) s->pw = o->w;
+    if (o->h > 0 && s->ph > o->h) s->ph = o->h;
+    s->band = o->band > 0 ? o->band : 64;
+    s->srb = ((s->sw + 31) / 32) * 4;               /* whole longs: the white is skipped by longs */
+    s->prb = ((s->pw + 31) / 32) * 4;
     /* source rows a band of printer rows needs, with rows to spare */
-    sband = band * o->pixh * scale / dev_pixh + 4;
+    s->sband = s->band * o->pixh * s->scale / dev_pixh + 4;
     /* the colours to print: one pass each, or all in black at once */
     used = o->colour ? page_colours(d, page) | page_inks(d, page) : 1u;
     if (o->colour && (used & ~1u)) {
-        for (pass = 0; pass < 32; pass++) if (used & (1u << pass)) col[npass++] = pass;
-    } else col[npass++] = -1;
-    src = (unsigned char *)malloc(srb * sband);
-    dst = (unsigned char *)malloc(prb * band);
-    tmp = (unsigned char *)malloc(prb);
-    dlo = (long *)malloc((sw + 1) * sizeof(long));
-    if (!src || !dst || !tmp || !dlo) { free(src); free(dst); free(tmp); free(dlo); return 0; }
+        for (pass = 0; pass < 32; pass++) if (used & (1u << pass)) s->col[s->npass++] = pass;
+    } else s->col[s->npass++] = -1;
+    s->src = (unsigned char *)malloc(s->srb * s->sband);
+    s->dst = (unsigned char *)malloc(s->prb * s->band);
+    s->tmp = (unsigned char *)malloc(s->prb);
+    s->dlo = (long *)malloc((s->sw + 1) * sizeof(long));
+    if (!s->src || !s->dst || !s->tmp || !s->dlo) { prt_end(s); return 0; }
     /* source column -> its first printer column */
-    for (sx = 0; sx <= sw; sx++) dlo[sx] = sx * dev_pixw / ((long)scale * o->pixw);
-    use_map = bytemap_make(&map, sw, dlo, pw);
-    for (y = 0; y < ph && ok; y += band) {
-        long rows = ph - y < band ? ph - y : band;
-        /* the source rows whose printer rows fall in this band */
-        long sy0 = y * o->pixh * scale / dev_pixh - 1;
-        long sy1 = (y + rows) * o->pixh * scale / dev_pixh + 2;
-        if (sy0 < 0) sy0 = 0;
-        if (sy1 > sh) sy1 = sh;
-        if (sy1 - sy0 > sband) sy1 = sy0 + sband;
-        for (pass = 0; pass < npass && ok; pass++) {
-            long sy;
-            memset(dst, 0, prb * rows);
-            if (sy1 > sy0) {
-                memset(src, 0, srb * (sy1 - sy0));
-                if (!o->render(o->ctx, d, page, col[pass], sy0, sy1 - sy0, sw, src, srb)) { ok = 0; break; }
-                /* nothing in this colour here: no need to scale it or send it */
-                if (npass > 1) {
-                    const unsigned char *q = src, *qe = src + srb * (sy1 - sy0);
-                    while (q < qe && !*q) q++;
-                    if (q == qe) continue;
-                }
+    for (sx = 0; sx <= s->sw; sx++) s->dlo[sx] = sx * dev_pixw / ((long)s->scale * o->pixw);
+    s->map = malloc(sizeof(BYTEMAP));
+    s->use_map = s->map && bytemap_make((BYTEMAP *)s->map, s->sw, s->dlo, s->pw);
+    s->y = 0;
+    return 1;
+}
+
+/* the next band: 1 more to come, 0 the page is done, -1 it failed */
+int prt_step(PRTPAGE *s)
+{
+    PRTOUT *o = s->o;
+    DOC *d = s->d;
+    long y = s->y, rows, sy0, sy1;
+    int pass;
+    if (y >= s->ph) return 0;
+    rows = s->ph - y < s->band ? s->ph - y : s->band;
+    /* the source rows whose printer rows fall in this band */
+    sy0 = y * o->pixh * s->scale / dev_pixh - 1;
+    sy1 = (y + rows) * o->pixh * s->scale / dev_pixh + 2;
+    if (sy0 < 0) sy0 = 0;
+    if (sy1 > s->sh) sy1 = s->sh;
+    if (sy1 - sy0 > s->sband) sy1 = sy0 + s->sband;
+    for (pass = 0; pass < s->npass; pass++) {
+        long sy, srb = s->srb, prb = s->prb;
+        unsigned char *src = s->src, *dst = s->dst, *tmp = s->tmp;
+        memset(dst, 0, prb * rows);
+        if (sy1 > sy0) {
+            memset(src, 0, srb * (sy1 - sy0));
+            if (!o->render(o->ctx, d, s->page, s->col[pass], sy0, sy1 - sy0, s->sw, src, srb)) return -1;
+            /* nothing in this colour here: no need to scale it or send it */
+            if (s->npass > 1) {
+                const unsigned char *q = src, *qe = src + srb * (sy1 - sy0);
+                while (q < qe && !*q) q++;
+                if (q == qe) continue;
             }
-            for (sy = sy0; sy < sy1; sy++) {
-                /* printer rows r0 .. r1-1 of this source row, at least one */
-                long r0 = sy * dev_pixh / ((long)scale * o->pixh) - y;
-                long r1 = (sy + 1) * dev_pixh / ((long)scale * o->pixh) - y, r;
-                if (r1 <= r0) r1 = r0 + 1;
-                if (r0 < 0) r0 = 0;
-                if (r1 > rows) r1 = rows;
-                if (r0 >= r1) continue;
-                if (r1 == r0 + 1) {                 /* straight into its printer row */
-                    if (use_map) bytemap_row(&map, src + (sy - sy0) * srb, dst + r0 * prb, prb);
-                    else expand_row(src + (sy - sy0) * srb, sw, dlo, pw, dst + r0 * prb);
-                    continue;
-                }
-                memset(tmp, 0, prb);
-                if (!(use_map ? bytemap_row(&map, src + (sy - sy0) * srb, tmp, prb)
-                              : expand_row(src + (sy - sy0) * srb, sw, dlo, pw, tmp))) continue;
-                for (r = r0; r < r1; r++) or_row(dst + r * prb, tmp, prb);
-            }
-            if (!o->out(o->ctx, col[pass], y, rows, pw, dst, prb)) ok = 0;
         }
-        if (o->progress) o->progress(o->ctx, (int)(y + rows), (int)ph);
+        for (sy = sy0; sy < sy1; sy++) {
+            /* printer rows r0 .. r1-1 of this source row, at least one */
+            long r0 = sy * dev_pixh / ((long)s->scale * o->pixh) - y;
+            long r1 = (sy + 1) * dev_pixh / ((long)s->scale * o->pixh) - y, r;
+            if (r1 <= r0) r1 = r0 + 1;
+            if (r0 < 0) r0 = 0;
+            if (r1 > rows) r1 = rows;
+            if (r0 >= r1) continue;
+            if (r1 == r0 + 1) {                 /* straight into its printer row */
+                if (s->use_map) bytemap_row((BYTEMAP *)s->map, src + (sy - sy0) * srb, dst + r0 * prb, prb);
+                else expand_row(src + (sy - sy0) * srb, s->sw, s->dlo, s->pw, dst + r0 * prb);
+                continue;
+            }
+            memset(tmp, 0, prb);
+            if (!(s->use_map ? bytemap_row((BYTEMAP *)s->map, src + (sy - sy0) * srb, tmp, prb)
+                             : expand_row(src + (sy - sy0) * srb, s->sw, s->dlo, s->pw, tmp))) continue;
+            for (r = r0; r < r1; r++) or_row(dst + r * prb, tmp, prb);
+        }
+        if (!o->out(o->ctx, s->col[pass], y, rows, s->pw, dst, prb)) return -1;
     }
-    if (use_map) bytemap_free(&map);
-    free(src); free(dst); free(tmp); free(dlo);
-    return ok;
+    if (o->progress) o->progress(o->ctx, (int)(y + rows), (int)s->ph);
+    s->y = y + rows;
+    return s->y < s->ph ? 1 : 0;
+}
+
+void prt_end(PRTPAGE *s)
+{
+    if (s->use_map) bytemap_free((BYTEMAP *)s->map);
+    free(s->map);
+    free(s->src); free(s->dst); free(s->tmp); free(s->dlo);
+    s->map = NULL; s->src = s->dst = s->tmp = NULL; s->dlo = NULL; s->use_map = 0;
+}
+
+int print_page(DOC *d, int page, PRTOUT *o)
+{
+    PRTPAGE s;
+    int r;
+    if (!prt_begin(&s, d, page, o)) return 0;
+    while ((r = prt_step(&s)) > 0) ;
+    prt_end(&s);
+    return r == 0;
 }

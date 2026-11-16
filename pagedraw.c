@@ -169,8 +169,9 @@ static void draw_hf(DOC *d, int page, BAND *b, int sc, GLYPHFN glyph, void *ctx,
 /* the tables' charts on this page */
 static void draw_charts(DOC *d, int page, int color, BAND *b, int sc, GLYPHFN glyph, void *ctx)
 {
-    static CHOP op[CH_MAXOPS];
+    CHOP *op = chart_buf();
     int t, n, i, k;
+    if (!op) return;
     for (t = 0; t < d->a.ntbl; t++) {
         const CHBOX *cb = &d->cbox[t];
         long ox, oy;

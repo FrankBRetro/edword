@@ -355,6 +355,9 @@ def dlg_prefs(L):
     for i, s in enumerate((b'150', b'300', b'600', b'1200')): g.radio(5, s, 'PDF%d' % (i + 2))
     g.nl(); g.label(L('S_DOCDIR'))
     g.edit(None, 40, None, anyc(40), b'', 'DOCDIR')
+    g.nl(); g.label(L('S_PRINTING_LBL')); g.check(L('S_BGPRINT'), 'BGPRINT')
+    g.nl(); g.label(L('S_FSEL_LBL'))
+    g.radio(12, L('S_FSEL_SYS'), 'FSSYS'); g.radio(12, L('S_FSEL_OWN'), 'FSOWN')
     g.button(L('S_CANCEL'), 'CANCEL')
     g.button(L('S_SAVE_BTN'), 'OK', DEFAULT)
     return g.build('PREFS')
@@ -480,7 +483,8 @@ def dlg_about(L):
     g.text(L('S_ABOUT_ATARI'), 'LINE1'); g.nl()
     g.text(L('S_ABOUT_EWR')); g.nl()
     g.text(L('S_ABOUT_LINE3')); g.nl()
-    g.text(L('S_ABOUT_THES'))
+    g.text(L('S_ABOUT_THES')); g.nl()
+    g.text(blank(62), 'MEMORY')
     g.button(L('S_BTN_OK'), 'OK', DEFAULT)
     return g.build('ABOUT')
 
@@ -702,13 +706,17 @@ def read_icons(path):
         layers.append((m.group(1), int(m.group(2)), [int(v, 16) for v in re.findall(r'0x([0-9A-Fa-f]{4})', m.group(3))]))
     return icons, layers
 
-TB = [('UNDO', 'C_UNDO'), ('REDO', 'C_REDO'), None,
+TB = [('UNDO', 'C_UNDO'), ('REDO', 'C_REDO'), ('PREVIEW', 'C_PREVIEW'), None,
       ('BOLD', 'C_BOLD'), ('ITALIC', 'C_ITALIC'), ('UNDER', 'C_UNDER'), None,
       ('LEFT', 'C_JLEFT'), ('CENTRE', 'C_JCENTRE'), ('RIGHT', 'C_JRIGHT'), ('JUSTIFY', 'C_JFULL'), None,
       ('BULLETS', 'C_BULLETS'), ('NUMBERS', 'C_NUMBERS'), ('TABLE', 'C_TBLINS'), ('PGBRK', 'C_PGBRK'), None,
       ('FONT', 'TB_FONT'), ('SIZE', 'TB_SIZE'), ('COLOUR', 'TB_COLOR'), None,
-      ('ZOOM', 'TB_ZOOM'), ('SPELL', 'C_SPELL'), ('CODES', 'C_SPLIT'), None,
+      ('ZOOM', 'TB_ZOOM'), ('SPELL', 'C_SPELL'), ('CODES', 'C_SPLIT'), ('SPLITWIN', 'C_SPLITWIN'), None,
       ('RULER', 'C_RULERS'), ('GUIDES', 'C_GUIDES')]
+# the print preview's bar: back to the document, pages, zoom, print, PDF, and
+# the page number (PAGE, set by EdWord)
+PVB = [('BACK', 'C_PREVIEW'), None, ('PREVPG', 'C_PVPREV'), ('NEXTPG', 'C_PVNEXT'), None,
+       ('PVZOOM', 'C_PVZOOM'), None, ('PRINT', 'C_PRINT'), ('PDF', 'C_PDF')]
 BTNW, POPW = 22, 30
 ARROW = [0xFE00, 0x7C00, 0x3800]                     # the popup mark, 7 x 3
 
@@ -716,19 +724,20 @@ def half(rows):
     """16 rows to 8: each pair OR-ed together"""
     return [rows[2 * r] | rows[2 * r + 1] for r in range(8)]
 
-def toolbar(icons, big):
+def toolbar(icons, big, buttons=None, name=None):
     """each button: a box holding its icon as images - the whole icon in black
     (IMG, for fewer than 16 colours), and for 16 colours and more the
     coloured layers (L0, L1) under the rest of the icon in black (IMGC) -
     and the popup mark (ARR). EdWord hides the ones the screen doesn't want."""
     icons, layers = icons
+    buttons = buttons or TB
     tbh = 24 if big else 15
     ih = 16 if big else 8
     bh = tbh - 5
     root = Obj(G_BOX, cp(0), cp(0), cp(80), cp(0, tbh), spec=0x00001100, name='ROOT')    # white (the AES's grey with 3D), no frame
     x = 4
     mono, colour, coloured = [], [], []
-    for t in TB:
+    for t in buttons:
         if t is None:
             x += 6; continue
         icon, cmd = t
@@ -757,10 +766,13 @@ def toolbar(icons, big):
             add(box, Obj(G_IMAGE, cp(0, w - 9), cp(0, bh // 2 - 1), cp(1), cp(0, 3),
                          spec=('img', dict(words=ARROW, wb=2, hl=3, color=1)), name=icon + 'ARR'))
         x += w + 2
+    if name:                                 # the preview's page number
+        add(root, Obj(G_STRING, cp(x // 8 + 1, x % 8), cp(0, (tbh - 1 - (16 if big else 8)) // 2), cp(24), cp(0, 16 if big else 8),
+                      spec=('str', b' ' * 24), name='PAGE'))
     add(root, Obj(G_BOX, cp(0), cp(0, tbh - 1), cp(80), cp(0, 1), spec=0x00001171, name='LINE'))
-    t = Tree('TOOLBAR' if big else 'TOOLBAR8', root)
+    t = Tree((name or 'TOOLBAR') + ('' if big else '8'), root)
     t.groups = dict(mono=mono, colour=colour, coloured=coloured)
-    return t, [t for t in TB if t]
+    return t, [t for t in buttons if t]
 
 # ---- popups ------------------------------------------------------------------------
 def popup(name, texts):
@@ -776,18 +788,20 @@ SEP = None
 def menus():
     """the menus as in gem.c: (title, [(text, key, cmd) | SEP | ('DYN', name, count, width)])"""
     m_desk = [('M_ABOUT', None, 'C_ABOUT'), SEP] + [('ACC', None, None)] * 6
-    m_file = [('M_NEW', '^N', 'C_NEW'), ('M_TEMPLATE', None, 'C_TEMPLATE'), ('M_OPEN', '^O', 'C_OPEN'),
+    m_file = [('M_NEW', '^N', 'C_NEW'), ('M_TEMPLATE', None, 'C_TEMPLATE'), ('M_CLONE', None, 'C_CLONE'), ('M_OPEN', '^O', 'C_OPEN'),
               ('M_IMPORT', None, 'C_IMPORT'), ('M_CLOSE', '^U', 'C_CLOSE'), SEP,
               ('M_SAVEDOC', '^S', 'C_SAVE'), ('M_SAVEAS', '^\x01S', 'C_SAVEAS'), ('M_EXPORT', None, 'C_EXPORT'), SEP,
               ('M_PAGE', None, 'C_PAGE'), ('M_HEADFOOT', None, 'C_HEADFOOT'), ('M_PREVIEW', '^\x01P', 'C_PREVIEW'),
               ('M_PRINT', '^P', 'C_PRINT'), SEP, ('M_QUIT', '^Q', 'C_QUIT')]
     m_edit = [('M_UNDO', 'Undo', 'C_UNDO'), ('M_REDO', '\x01Undo', 'C_REDO'), SEP,
-              ('M_CUT', '^X', 'C_CUT'), ('M_COPY', '^C', 'C_COPY'), ('M_PASTE', '^V', 'C_PASTE'), ('M_SELALL', '^A', 'C_SELALL'), SEP,
-              ('M_FIND', '^F', 'C_FIND'), ('M_FINDNEXT', '^G', 'C_FINDNEXT'), SEP,
-              ('M_PREVPAGE', '^\x01', 'C_PREVPAGE'), ('M_NEXTPAGE', '^\x02', 'C_NEXTPAGE'), ('M_GOTOPAGE', '^J', 'C_GOTOPAGE')]
+              ('M_CUT', '^X', 'C_CUT'), ('M_COPY', '^C', 'C_COPY'), ('M_PASTE', '^V', 'C_PASTE'),
+              ('M_CUTSLOT', '^\x01X', 'C_CUTSLOT'), ('M_COPYSLOT', '^\x01C', 'C_COPYSLOT'), ('M_PASTESLOT', '^\x01V', 'C_PASTESLOT'),
+              ('M_SELALL', '^A', 'C_SELALL'), ('M_COLSEL', '^\x01K', 'C_COLSEL'), SEP,
+              ('M_FIND', '^F', 'C_FIND'), ('M_FINDNEXT', '^G', 'C_FINDNEXT'), ('M_FINDPREV', '^\x01G', 'C_FINDPREV')]
     # rows, columns and deleting a table are in Table Settings
     m_insert = [('M_DATE', '^D', 'C_INSDATE'), ('M_TIME', None, 'C_INSTIME'), SEP,
-                ('M_PGBRK', '^Ret', 'C_PGBRK'), ('M_COLBRK', '^\x01Ret', 'C_COLBRK'), ('M_PAGENUM', None, 'C_PAGENUM'), SEP,
+                ('M_PGBRK', '^Ret', 'C_PGBRK'), ('M_COLBRK', '^\x01Ret', 'C_COLBRK'), ('M_PAGENUM', None, 'C_PAGENUM'),
+                ('M_INSBM', '^\x01M', 'C_INSBM'), SEP,
                 ('M_TBLINS', None, 'C_TBLINS'), ('M_TBLPROP', None, 'C_TBLPROP'), SEP,
                 ('M_CHART', None, 'C_CHART'), ('M_PICTURE', None, 'C_PICTURE'), ('M_DRAWING', None, 'C_DRAWING'),
                 ('M_TOC', None, 'C_TOC'), ('M_INSFILE', None, 'C_INSFILE')]
@@ -805,13 +819,17 @@ def menus():
               ('M_NUMBERS', 'F10', 'C_NUMBERS'), SEP,
               ('M_WRAPCOL', None, 'C_WRAPCOL')]
     m_tools = [('M_SPELL', '^K', 'C_SPELL'), ('M_LIVESPELL', None, 'C_LIVESPELL'), ('M_THES', '\x01F7', 'C_THES'),
-               ('M_SUMMARY', None, 'C_SUMMARY'), SEP, ('M_UDLOAD', None, 'C_UDLOAD'), ('M_UDNEW', None, 'C_UDNEW'), SEP,
-               ('DYN', 'UD', 4, 24, 'C_UD0'), SEP, ('M_PREFS', None, 'C_PREFS')]
-    m_view = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'), SEP,
+               ('M_SUMMARY', None, 'C_SUMMARY'), ('M_REPAG', 'F2', 'C_REPAG'), ('M_SLOTS', None, 'C_SLOTS'), ('M_CLEARSLOTS', None, 'C_CLEARSLOTS'), SEP,
+               ('M_UDLOAD', None, 'C_UDLOAD'), ('M_UDNEW', None, 'C_UDNEW'), SEP,
+               ('DYN', 'UD', 4, 24, 'C_UD0'), SEP, ('M_THEME', None, 'C_THEME'), ('M_PREFS', None, 'C_PREFS')]
+    # (the pages and bookmarks: here, with the rest of moving about the document)
+    m_view = [('M_VDOC', 'F4', 'C_VDOC'), ('M_SPLIT', '^Y', 'C_SPLIT'), ('M_VCODES', 'F6', 'C_VCODES'),
+              ('M_SPLITWIN', '^\x01Y', 'C_SPLITWIN'), SEP,
               ('M_ZOOMIN', 'F8', 'C_ZOOMIN'), ('M_ZOOMOUT', 'F7', 'C_ZOOMOUT'),
               ('M_ZOOMFIT', '\x01F8', 'C_ZOOMFIT'), ('M_ZOOMPAGE', None, 'C_ZOOMPAGE'), SEP,
               ('M_TOOLBAR', '^T', 'C_TOOLBAR'), ('M_RULERS', '^\x01R', 'C_RULERS'), ('M_GUIDES', None, 'C_GUIDES'), SEP,
-              ('M_REPAG', 'F2', 'C_REPAG'), ('M_THEME', None, 'C_THEME')]
+              ('M_PREVPAGE', '^\x01', 'C_PREVPAGE'), ('M_NEXTPAGE', '^\x02', 'C_NEXTPAGE'), ('M_GOTOPAGE', '^J', 'C_GOTOPAGE'),
+              ('M_GOTOBM', '^\x01B', 'C_GOTOBM')]
     m_window = [('M_TILEV', None, 'C_TILEV'), ('M_TILEH', None, 'C_TILEH'), ('M_CASCADE', None, 'C_CASCADE'), SEP,
                 ('M_ICONIFY', '^Z', 'C_ICONIFY'), ('M_ICONALL', None, 'C_ICONALL'), ('M_BOTTOM', None, 'C_BOTTOM'),
                 ('M_CYCLE', '^W', 'C_CYCLE'), SEP, ('DYN', 'WIN', 24, 24, 'C_WIN0'), ('M_WINMORE', None, 'C_WINMORE')]
@@ -988,7 +1006,9 @@ def main():
                  dlg_theme(L)]
         tb16, tbl = toolbar(icons, True)
         tb8, _ = toolbar(icons, False)
-        trees += [tb16, tb8,
+        pv16, pvl = toolbar(icons, True, PVB, 'PVBAR')
+        pv8, _ = toolbar(icons, False, PVB, 'PVBAR')
+        trees += [tb16, tb8, pv16, pv8,
                   popup('POPSIZE', [b'%d ' % s + L('S_POINT') for s in SIZES] + [L('M_SIZEOTHER')]),
                   popup('POPCOLOUR', [L(s) for s in COLOURS]),
                   popup('POPZOOM', [b'%d%%' % z for z in ZOOMS] + [L('M_ZOOMFIT'), L('M_ZOOMPAGE')]),
@@ -1003,6 +1023,7 @@ def main():
             names = nm
             idx = dict((id(f[0]), i) for i, f in enumerate(menu.flatten()))
             first_cmds, first_tb, first_tb16 = [(idx[id(o)], c) for o, c in cmds], tbl, tb16
+            first_pv, first_pv16 = pvl, pv16
         else:
             assert [[n for _, n in objs] for _, objs in nm] == [[n for _, n in objs] for _, objs in names], 'trees differ in ' + lg
             assert [len(t.flatten()) for t in trees] == [len(objs) for _, objs in names]
@@ -1019,7 +1040,7 @@ def main():
                'TBLPROP': 'DTP', 'PICPROPS': 'DPP', 'DRAWPROPS': 'DDP', 'SUMMARY': 'DSU', 'ABOUT': 'DAB',
                'TEXTIMP': 'DTXI', 'TEXTEXP': 'DTXE', 'GOTO': 'DGT', 'PAGENUM': 'DPN', 'TEMPLATE': 'DTM',
                'FIND': 'WFD', 'SPELL': 'WSP', 'THES': 'WTH', 'IMPORT': 'WIX', 'EXPORT': 'WEX', 'GAUGE': 'DGA', 'GAUGEC': 'DGC', 'THEME': 'DTH', 'POPTHEME': 'PT',
-               'TOOLBAR8': None, 'POPSIZE': 'PS', 'POPCOLOUR': 'PC', 'POPZOOM': 'PZ'}
+               'TOOLBAR8': None, 'PVBAR': 'PVB', 'PVBAR8': None, 'POPSIZE': 'PS', 'POPCOLOUR': 'PC', 'POPZOOM': 'PZ'}
         for tname, objs in names:
             p = pre[tname]
             if not p: continue
@@ -1032,12 +1053,15 @@ def main():
         f.write('/* toolbar buttons and their commands (TB_FONT... open popups) */\n#define RSC_TB_CMDS \\\n')
         f.write(', \\\n'.join('    { TBO_%s, %s }' % (ic, c) for ic, c in first_tb) + '\n')
         f.write('#define RSC_NTB %d\n\n' % len(first_tb))
-        idx = dict((id(fl[0]), i) for i, fl in enumerate(first_tb16.flatten()))
-        for key, what in (('mono', 'the whole icons in black: fewer than 16 colours'),
-                          ('colour', 'the coloured layers: 16 colours and more'),
-                          ('coloured', 'the rest of those icons, in black: 16 colours and more')):
-            f.write('/* toolbar images: %s */\n#define RSC_TB_%s ' % (what, key.upper()))
-            f.write(', '.join(str(idx[id(o)]) for o in first_tb16.groups[key]) + '\n')
+        f.write('/* the print preview bar */\n#define RSC_PV_CMDS \\\n')
+        f.write(', \\\n'.join('    { PVB_%s, %s }' % (ic, c) for ic, c in first_pv) + '\n\n')
+        for pfx, tree in (('TB', first_tb16), ('PV', first_pv16)):
+            idx = dict((id(fl[0]), i) for i, fl in enumerate(tree.flatten()))
+            for key, what in (('mono', 'the whole icons in black: fewer than 16 colours'),
+                              ('colour', 'the coloured layers: 16 colours and more'),
+                              ('coloured', 'the rest of those icons, in black: 16 colours and more')):
+                f.write('/* toolbar images: %s */\n#define RSC_%s_%s ' % (what, pfx, key.upper()))
+                f.write(', '.join(str(idx[id(o)]) for o in tree.groups[key]) + '\n')
         f.write('\n#endif\n')
 
 if __name__ == '__main__':

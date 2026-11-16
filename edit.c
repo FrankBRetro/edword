@@ -256,6 +256,137 @@ void doc_clip_free(void)
     if (clip) { doc_free(clip); free(clip); clip = NULL; }
 }
 
+/* ---- column (block) selection --------------------------------------------- */
+
+/* The block runs from the anchor's line to the caret's, between their x
+ * positions. In each line it takes the characters that start inside
+ * that, not the line's end. */
+int col_block(DOC *d, long *la, long *lb, long *x0, long *x1)
+{
+    long l1, l2, xa, xb;
+    if (d->anchor < 0 || d->anchor == d->cursor || !d->nlines) return 0;
+    l1 = doc_find_line(d, d->anchor);
+    l2 = doc_find_line(d, d->cursor);
+    xa = doc_x_of(d, l1, d->anchor);
+    xb = doc_x_of(d, l2, d->cursor);
+    if (l1 > l2) { long t = l1; l1 = l2; l2 = t; }
+    if (xa > xb) { long t = xa; xa = xb; xb = t; }
+    *la = l1; *lb = l2; *x0 = xa; *x1 = xb;
+    return xb > xa || l2 > l1;
+}
+
+/* the cells [a, b) of line li inside the block's x0..x1 */
+void col_span(DOC *d, long li, long x0, long x1, long *a, long *b)
+{
+    LINE *ln = &d->lines[li];
+    long e = ln->start + ln->len;
+    while (e > ln->start && ISEND(d->text[e - 1].ch)) e--;
+    *a = doc_pos_in_line(d, li, x0);
+    *b = doc_pos_in_line(d, li, x1);
+    if (*a > e) *a = e;
+    if (*b > e) *b = e;
+    if (*a < ln->start) *a = ln->start;
+    if (*b < *a) *b = *a;
+}
+
+/* a table in the block: blocks of tables aren't done */
+int col_has_table(DOC *d)
+{
+    long la, lb, x0, x1, li;
+    if (!col_block(d, &la, &lb, &x0, &x1)) return 0;
+    for (li = la; li <= lb; li++) if (d->lines[li].flags & LF_CELL) return 1;
+    return 0;
+}
+
+/* the block as a document: each line's part, then a Return */
+int col_copy(DOC *d, DOC *t)
+{
+    long la, lb, x0, x1, li, a, b;
+    CELL nl;
+    doc_init(t);
+    t->a = d->a;
+    t->a.nobj = 0; t->a.novr = 0; t->a.ntbl = 0;
+    if (!col_block(d, &la, &lb, &x0, &x1)) return 0;
+    for (li = la; li <= lb; li++) {
+        col_span(d, li, x0, x1, &a, &b);
+        if (b > a && !doc_insert(t, t->len, d->text + a, b - a)) { doc_free(t); return 0; }
+        nl = b > a ? d->text[b - 1] : d->text[d->lines[li].start < d->len ? d->lines[li].start : 0];
+        if (!d->len) nl = d->ins;
+        nl.ch = '\n';
+        if (li < lb && !doc_insert(t, t->len, &nl, 1)) { doc_free(t); return 0; }
+    }
+    {   /* no tables in the copy */
+        long k;
+        for (k = 0; k < t->len; k++) t->a.paras[t->text[k].para < t->a.npara ? t->text[k].para : 0].tbl = 0;
+    }
+    return 1;
+}
+
+/* delete the block (from the bottom up, so the lines above don't move);
+ * the caret goes to its top left corner */
+int col_delete(DOC *d)
+{
+    long la, lb, x0, x1, li, a, b, top = -1;
+    long *sp;
+    int n = 0, i;
+    if (!col_block(d, &la, &lb, &x0, &x1)) return 0;
+    sp = (long *)malloc((lb - la + 1) * 2 * sizeof(long));
+    if (!sp) return 0;
+    for (li = la; li <= lb; li++) {
+        col_span(d, li, x0, x1, &a, &b);
+        sp[2 * n] = a; sp[2 * n + 1] = b; n++;
+        if (top < 0) top = a;
+    }
+    for (i = n - 1; i >= 0; i--) if (sp[2 * i + 1] > sp[2 * i]) doc_delete(d, sp[2 * i], sp[2 * i + 1] - sp[2 * i]);
+    free(sp);
+    d->cursor = top < 0 ? d->cursor : top;
+    d->anchor = -1;
+    return 1;
+}
+
+/* paste src as a block: its first line at the caret, each next line at
+ * the same x in the line below (new lines at the end of the document) */
+int col_paste(DOC *d, DOC *src)
+{
+    long k = 0, li, x, pos = d->cursor, e;
+    CELL nl;
+    if (!src->len || !d->nlines) return 0;
+    li = doc_find_line(d, pos);
+    x = doc_x_of(d, li, pos);
+    while (k < src->len) {
+        CELL *c;
+        long n;
+        for (e = k; e < src->len && !ISBRK(src->text[e].ch); e++) ;
+        n = e - k;
+        if (n > 0) {
+            c = (CELL *)malloc(n * sizeof(CELL));
+            if (!c) return 0;
+            memcpy(c, src->text + k, n * sizeof(CELL));
+            for (e = 0; e < n; e++) { c[e].para = d->text[pos < d->len ? pos : (d->len ? d->len - 1 : 0)].para; if (ISEND(c[e].ch)) c[e].ch = ' '; }
+            if (!d->len) for (e = 0; e < n; e++) c[e].para = 0;
+            if (!doc_insert(d, pos, c, n)) { free(c); return 0; }
+            free(c);
+        }
+        k += n + 1;
+        if (k >= src->len) { d->cursor = pos + n; break; }
+        /* the next line: lay out what was inserted, then the line below */
+        doc_layout(d);
+        li = doc_find_line(d, pos + n);
+        while (li + 1 < d->nlines && d->lines[li + 1].start <= pos + n) li++;
+        if (li + 1 < d->nlines) {
+            li++;
+            pos = doc_pos_in_line(d, li, x);
+        } else {                            /* past the end: a new paragraph */
+            nl = d->len ? d->text[d->len - 1] : d->ins;
+            nl.ch = '\n';
+            if (!doc_insert(d, d->len, &nl, 1)) return 0;
+            pos = d->len;
+        }
+    }
+    d->anchor = -1;
+    return 1;
+}
+
 /* ---- tables --------------------------------------------------------------- */
 
 int doc_in_table(DOC *d, long pos, long *row_start, int *cell)

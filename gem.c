@@ -96,6 +96,9 @@ static void log_start(void)
 int pref_date = DT_SHORT, pref_toolbar = 1, pref_paper = P_A4, pref_land;
 int pref_autosave, pref_asmin = 5, pref_asmode, pref_display, pref_live;
 int pref_rulers, pref_guides = 1;
+DOC *ui_doc;                    /* the document the command running now is for */
+int pref_bgprint = 1;           /* with XGDOS, print in the background */
+int pref_fsel = -1;             /* file selector: 0 the system's, 1 EdWord's, -1 not chosen yet */
 char pref_docdir[128] = "C:\\DATA\\DOCPROC\\EDWORD";
 char tpl_name[48], tpl_addr[3][48], tpl_title[48];
 static int pref_lang = -1, pref_spell = -1;
@@ -132,6 +135,8 @@ static void load_prefs(void)
         else if (!strcmp(line, "spelllang") && v >= 0 && v < NLANG) pref_spell = v;
         else if (!strcmp(line, "rulers")) pref_rulers = v != 0;
         else if (!strcmp(line, "guides")) pref_guides = v != 0;
+        else if (!strcmp(line, "bgprint")) pref_bgprint = v != 0;
+        else if (!strcmp(line, "fsel") && v >= -1 && v <= 1) pref_fsel = v;
         else if (!strncmp(line, "theme", 5)) theme_load(line, val);
         else if (!strcmp(line, "keep") && v >= KEEP_ANY && v <= KEEP_TOGETHER) lay_keep = v;
         else if (!strcmp(line, "docdir")) { strncpy(pref_docdir, val, sizeof pref_docdir - 1); }
@@ -160,8 +165,28 @@ void save_prefs(void)
             pref_autosave, pref_asmin, pref_asmode, pref_display, ui_lang, pref_live, pref_rulers, pref_guides, spell_lang);
     fprintf(f, "keep=%d\ndocdir=%s\ntplname=%s\ntpladdr1=%s\ntpladdr2=%s\ntpladdr3=%s\ntpltitle=%s\n",
             lay_keep, pref_docdir, tpl_name, tpl_addr[0], tpl_addr[1], tpl_addr[2], tpl_title);
+    fprintf(f, "bgprint=%d\nfsel=%d\n", pref_bgprint, pref_fsel);
     theme_save(f);
     fclose(f);
+}
+
+/* XGDOS (the 'XGDS' cookie): each print job is a PDF file of its own,
+ * so documents can print at the same time, in the background */
+int xgdos_loaded(void)
+{
+    long v;
+    return Getcookie(0x58474453L, &v) == C_FOUND;
+}
+
+/* EdWord's own file selector, or the system's: as chosen in Preferences;
+ * until then the system's when a better one is installed (Selectric and
+ * others, 'FSEL'; MagiC's own), else EdWord's */
+int fsel_own(void)
+{
+    long v;
+    if (pref_fsel >= 0) return pref_fsel;
+    if (Getcookie(0x4653454CL, &v) == C_FOUND || Getcookie(0x4D616758L, &v) == C_FOUND) return 0;
+    return 1;
 }
 
 /* the language TOS is set to, from the _AKP cookie (or the ROM header) */
@@ -380,6 +405,8 @@ void update_menu(DOC *d)
     for (i = C_UNDO; i <= C_WRAPCOL; i++) enable(i, hasdoc);
     for (i = C_SAVE; i <= C_CLOSE; i++) enable(i, d != NULL);
     enable(C_SPELL, hasdoc); enable(C_THES, hasdoc); enable(C_SUMMARY, hasdoc);
+    for (i = C_CLONE; i <= C_PVZOOM; i++) enable(i, hasdoc);
+    enable(C_SLOTS, 1); enable(C_CLEARSLOTS, 1);
     enable(C_THEME, theme_possible());
     xfer_refresh();
     if (!d) return;
@@ -413,6 +440,9 @@ void update_menu(DOC *d)
         check(C_BODY, p->toc == 0);
     }
     check(C_VDOC, d->view == VIEW_DOC); check(C_SPLIT, d->view == VIEW_SPLIT); check(C_VCODES, d->view == VIEW_CODES);
+    check(C_PREVIEW, d->view == VIEW_PREVIEW);
+    check(C_SPLITWIN, d->split2);
+    check(C_COLSEL, d->colmode);
     check(C_TOOLBAR, d->toolbar);
     check(C_ZOOMFIT, d->fitw == FIT_WIDTH);
     check(C_ZOOMPAGE, d->fitw == FIT_PAGE);
@@ -479,7 +509,7 @@ void set_language(int lang)
 /*  Tool windows                                                      */
 /* ================================================================= */
 
-static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &preview_tool, &draw_tool, &prefs_tool, &theme_tool, NULL };
+static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &draw_tool, &prefs_tool, &theme_tool, NULL };
 
 int tool_owns(short wh)
 {
@@ -682,7 +712,6 @@ void close_pristine(DOC *keep)
  * text uses cs and join, or with ask asks how to read it. */
 int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
 {
-    static DOC tmp;
     DOC *d;
     int ok;
     unsigned char *b = NULL;
@@ -699,7 +728,8 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
         }
     }
     if (into) {
-        d = &tmp;
+        d = (DOC *)malloc(sizeof(DOC));       /* not kept: a DOC is large */
+        if (!d) { free(b); alert(1, 3, AL_NO_MEMORY, AB_OK); return 0; }
         doc_init(d);
         d->ins = into->ins;
     } else {
@@ -720,12 +750,13 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
     if (into || !ok) busy_end();
     if (!ok) {
         alert(1, 3, AL_CANT_READ, AB_OK);
-        if (into) doc_free(d); else release_doc(d);
+        if (into) { doc_free(d); free(d); } else release_doc(d);
         return 0;
     }
     if (into) {
         ok = d->len > 0 && insert_loaded(into, d);
         doc_free(d);
+        free(d);
         return ok;
     }
     base_name(d, path);
@@ -779,14 +810,170 @@ static int save_as(DOC *d)
 static int cmd_save(DOC *d, int ask)
 {
     int ok;
+    if (d->slotdoc && !ask) {                  /* the clipboard's slots: back to their files */
+        busy_ptr(1);
+        ok = slots_save(d);
+        busy_ptr(0);
+        if (!ok) { alert(1, 3, AL_CANT_SAVE, AB_OK); return 0; }
+        set_name(d);
+        set_info(d);
+        return 1;
+    }
     if (ask || !d->path[0]) if (!save_as(d)) return 0;
+    d->slotdoc = 0;
     busy_begin(L(S_SAVING));
     ok = rtf_export(d, d->path);
     busy_end();
     if (!ok) { alert(1, 3, AL_CANT_SAVE, AB_OK); return 0; }
     set_name(d);
+    set_info(d);
     update_winmenu();
     return 1;
+}
+
+/* File > Clone Document: a copy in a new window, NewDoc01, NewDoc02... */
+static int clone_no;
+static void cmd_clone(DOC *src)
+{
+    DOC *d;
+    if (src->view != VIEW_DOC && src->view != VIEW_PREVIEW && src->cv.dirty) apply_codes(src);
+    if ((d = new_doc()) == NULL) return;
+    busy_ptr(1);
+    if (!doc_clone(d, src)) {
+        busy_ptr(0);
+        alert(1, 3, AL_NO_MEMORY, AB_OK);
+        release_doc(d);
+        return;
+    }
+    busy_ptr(0);
+    sprintf(d->base, "NewDoc%02d", ++clone_no % 100);
+    doc_loaded(d);
+    d->cursor = src->cursor <= d->len ? src->cursor : d->len;
+    d->dirty = 1;
+    open_window(d);
+}
+
+/* ---- bookmarks and the clipboard's slots ----------------------------------- */
+
+/* a popup of the ten bookmarks or slots at the mouse; 0-9, or -1 */
+static int ten_popup(DOC *d, int slots, int remove_item)
+{
+    static char txt[11][48];
+    const char *items[11];
+    short mx, my, mb, ks;
+    int i, n = 10;
+    for (i = 0; i < 10; i++) {
+        char peek[28];
+        if (slots) {
+            sprintf(txt[i], L(S_SLOT_N), (i + 1) % 10);
+            slot_peek(i, peek, sizeof peek);
+            sprintf(txt[i] + strlen(txt[i]), ": %s", peek[0] ? peek : L(S_SLOT_EMPTY));
+        } else {
+            sprintf(txt[i], L(S_BMARK_N), (i + 1) % 10);
+            if (d->bmark[i] < 0) sprintf(txt[i] + strlen(txt[i]), "  %s", L(S_BM_UNSET));
+            else {
+                long k, j = 0;
+                for (k = d->bmark[i]; k < d->len && j < 20 && !ISEND(d->text[k].ch); k++) peek[j++] = (char)d->text[k].ch;
+                peek[j] = 0;
+                sprintf(txt[i] + strlen(txt[i]), ": %s", peek);
+            }
+        }
+        items[i] = txt[i];
+    }
+    if (remove_item) { strcpy(txt[10], L(S_BM_REMOVE)); items[n++] = txt[10]; }
+    graf_mkstate(&mx, &my, &mb, &ks);
+    i = popup(items, n, -1, mx, my);
+    return i;
+}
+
+static void bm_goto(DOC *d, int n)
+{
+    long oc = d->cursor, oa = d->anchor;
+    if (n < 0 || n >= NBMARK) return;
+    if (d->bmark[n] < 0) { alert(1, 1, AL_NO_BMARK, AB_OK, (n + 1) % 10); return; }
+    if (d->view == VIEW_PREVIEW) set_view(d, VIEW_DOC);
+    d->colsel = 0;
+    d->anchor = -1;
+    d->cursor = d->bmark[n] <= d->len ? d->bmark[n] : d->len;
+    d->want_x = -1;
+    after_move(d, oc, oa);
+}
+
+/* bookmark n at the caret; again at the same place takes it away */
+static void bm_set(DOC *d, int n)
+{
+    if (n < 0 || n >= NBMARK) return;
+    d->bmark[n] = d->bmark[n] == d->cursor ? -1 : d->cursor;
+    d->dirty = 1;
+    if (d->view != VIEW_DOC) d->codes_stale = 1;
+    set_name(d);
+    set_info(d);
+    if (pref_guides) refresh_text(d);
+}
+
+static void cmd_insbm(DOC *d)
+{
+    int i, here = 0;
+    for (i = 0; i < NBMARK; i++) if (d->bmark[i] == d->cursor) here = 1;
+    i = ten_popup(d, 0, here);
+    if (i == 10) { for (i = 0; i < NBMARK; i++) if (d->bmark[i] == d->cursor) bm_set(d, i); }
+    else if (i >= 0) { if (d->bmark[i] != d->cursor) bm_set(d, i); }
+}
+
+static void cmd_slot(DOC *d, int cmd)
+{
+    long a, b;
+    int n;
+    if (cmd != C_PASTESLOT && d->selobj < 0 && !(d->colsel && d->anchor >= 0) && !doc_sel(d, &a, &b)) return;
+    if ((n = ten_popup(d, 1, 0)) < 0) return;
+    if (cmd == C_PASTESLOT) { slot_paste(d, n); return; }
+    if (!slot_copy(d, n) || cmd != C_CUTSLOT) return;
+    if (d->selobj >= 0) do_cmd(C_OBJDEL);
+    else if (d->colsel && d->anchor >= 0) block_delete(d);
+    else if (doc_sel(d, &a, &b)) { doc_delete_sel(d); after_edit(d, a); }
+}
+
+/* Tools > Clipboard Slots: the ten slots in a document; Save writes them.
+ * top: the window to the front (else just brought up to date) */
+static void slots_window(int top)
+{
+    DOC *d;
+    int i;
+    for (i = 0; i < MAX_DOCS; i++)
+        if (DOC_USED(i) && docs[i]->slotdoc) {
+            d = docs[i];
+            if (!d->dirty) {                    /* as the slots are now */
+                long k = d->len;
+                int j;
+                doc_delete(d, 0, k);
+                img_cache_free(d);
+                for (j = 0; j < d->nimg; j++) img_free(&d->imgs[j]);   /* the pictures come again */
+                d->nimg = 0;
+                d->a.nobj = 0;
+                d->selobj = -1;
+                slots_fill(d);
+                doc_changed(d);
+                d->dirty = 0;
+                set_name(d);
+            }
+            if (!top) return;
+            if (d->iconified) uniconify(d, NULL);
+            wind_set(d->wh, WF_TOP, 0, 0, 0, 0);
+            return;
+        }
+    if (!top) return;
+    if ((d = new_doc()) == NULL) return;
+    doc_prefs(d);
+    strcpy(d->base, L(S_SLOTS_TITLE));
+    d->base[sizeof d->base - 1] = 0;
+    d->slotdoc = 1;
+    busy_ptr(1);
+    i = slots_fill(d);
+    busy_ptr(0);
+    if (!i) { alert(1, 3, AL_NO_MEMORY, AB_OK); release_doc(d); return; }
+    doc_loaded(d);
+    d->dirty = 0;
+    open_window(d);
 }
 
 void cmd_pdf(DOC *d)
@@ -802,7 +989,7 @@ void cmd_pdf(DOC *d)
     pump_redraws();                    /* let the file selector's area redraw first */
     {
         GRECT over;
-        gauge_open(L(S_EXPORTING_PDF), preview_area(&over) ? &over : NULL);
+        gauge_open(L(S_EXPORTING_PDF), doc_area(d, &over) ? &over : NULL);
     }
     ok = export_pdf(d, path, gauge_set);
     gauge_close();
@@ -839,7 +1026,7 @@ int export_doc(DOC *d, int fmt, int crlf, int cs, char *written)
     pump_redraws();
     if (fmt == FT_PDF) {
         GRECT over;
-        gauge_open(L(S_EXPORTING_PDF), preview_area(&over) ? &over : NULL);
+        gauge_open(L(S_EXPORTING_PDF), doc_area(d, &over) ? &over : NULL);
         ok = export_pdf(d, path, gauge_set);
         gauge_close();
         return ok;
@@ -868,8 +1055,11 @@ void cmd_print(DOC *d)
     if (!printer_name(name)) { alert(1, 3, AL_NO_PRINTER, AB_OK); return; }
     sel = (unsigned char *)malloc((size_t)doc_npages(d) + 1);
     if (!sel) { alert(1, 3, AL_NO_MEMORY, AB_OK); return; }
-    if (dlg_print(d, name, sel, &copies, &colour) && d->used && !print_doc(d, sel, copies, colour))   /* -1: cancelled */
-        alert(1, 3, AL_PRINT_FAILED, AB_OK);
+    if (dlg_print(d, name, sel, &copies, &colour) && d->used) {
+        /* with XGDOS each job is a file of its own: in the background */
+        int r = pref_bgprint && xgdos_loaded() ? bgprint_start(d, sel, copies, colour) : print_doc(d, sel, copies, colour);
+        if (!r) alert(1, 3, AL_PRINT_FAILED, AB_OK);      /* -1: cancelled */
+    }
     free(sel);
 }
 
@@ -900,7 +1090,7 @@ static void cmd_exptxt(DOC *d)
 int close_doc(DOC *d)
 {
     int i;
-    if (dlg_busy) { dlg_front(); return 0; }       /* finish the dialog first */
+    if (dlg_open_for(d)) return 0;                  /* finish its dialog first */
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
     if (d->dirty) {
         int r = alert(1, 2, AL_SAVE_CHANGES, AB_SAVE_DISCARD, d->base);
@@ -908,6 +1098,7 @@ int close_doc(DOC *d)
         if (r == 1 && !cmd_save(d, 0)) return 0;
     }
     for (i = 0; tools[i]; i++) tools[i]->doc_closed(d);
+    bgprint_doc_closed(d);
     if (last_doc == d) last_doc = NULL;
     close_window(d);
     img_cache_free(d);
@@ -920,7 +1111,7 @@ int close_doc(DOC *d)
 static void cmd_quit(void)
 {
     int i;
-    if (dlg_busy) { dlg_front(); return; }
+    if (dlg_open_for(NULL)) return;                 /* answer the dialogs first */
     for (i = 0; i < MAX_DOCS; i++)
         if (DOC_USED(i) && !close_doc(docs[i])) return;
     quit_now = 1;
@@ -1176,10 +1367,16 @@ void do_cmd(int cmd)
     long a, b;
     char path[256];
 
+    ui_doc = d;                 /* its dialogs and gauges go over its window */
+
     switch (cmd) {
-    case C_ABOUT:  dlg_about(); return;
+    case C_ABOUT:  ui_doc = NULL; dlg_about(); return;     /* not any document's */
     case C_NEW:    cmd_new(); return;
     case C_TEMPLATE: cmd_template(); return;
+    case C_SLOTS:  slots_window(1); return;
+    case C_CLEARSLOTS:
+        if (alert(2, 2, AL_CLEAR_SLOTS, AB_CLEAR_CANCEL) == 1) { slots_clear(); slots_window(0); }
+        return;
     case C_OPEN:   if (ask_file(L(S_FS_OPEN), "*.EWR", NULL, path)) open_path(path, 0); return;
     case C_IMPORT: import_open(); return;
     case C_EXPORT: export_open(); return;
@@ -1256,6 +1453,7 @@ void do_cmd(int cmd)
         return;
     }
     if (!d) return;
+    if (fsel_for(d)) { fsel_top(d); return; }       /* waiting for its file selector */
 
     /* window commands work on iconified windows too */
     switch (cmd) {
@@ -1264,7 +1462,11 @@ void do_cmd(int cmd)
     case C_BOTTOM:  send_to_back(d); return;
     case C_SAVE:    if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d); cmd_save(d, 0); return;
     case C_SAVEAS:  if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d); cmd_save(d, 1); return;
-    case C_PREVIEW: preview_open(d); return;
+    case C_PREVIEW: set_view(d, d->view == VIEW_PREVIEW ? VIEW_DOC : VIEW_PREVIEW); return;
+    case C_CLONE:   cmd_clone(d); return;
+    case C_PVPREV:  preview_goto(d, d->pv_page - 1); return;
+    case C_PVNEXT:  preview_goto(d, d->pv_page + 1); return;
+    case C_PVZOOM:  preview_zoom(d, 0, 0, NULL); return;
     case C_PRINT:   cmd_print(d); return;
     }
     if (d->iconified) return;
@@ -1343,6 +1545,7 @@ void do_cmd(int cmd)
     case C_COPY:   clip_copy(d); break;
     case C_CUT:
         if (d->selobj >= 0) { if (clip_copy(d)) do_cmd(C_OBJDEL); }
+        else if (d->colsel && d->anchor >= 0) { if (clip_copy(d)) block_delete(d); }
         else if (doc_sel(d, &a, &b)) { clip_copy(d); doc_delete_sel(d); after_edit(d, a); }
         else if (!doc_in_table(d, d->cursor, NULL, NULL)) {
             /* nothing selected: the whole line (paragraph) and its
@@ -1365,6 +1568,28 @@ void do_cmd(int cmd)
         break;
     case C_FIND:     find_open(d); break;
     case C_FINDNEXT: find_again(d); break;
+    case C_FINDPREV: find_again_dir(d, 1); break;
+    case C_GOTOBM:   { int n = ten_popup(d, 0, 0); if (n >= 0) bm_goto(d, n); } break;
+    case C_INSBM:    cmd_insbm(d); break;
+    case C_CUTSLOT: case C_COPYSLOT: case C_PASTESLOT: cmd_slot(d, cmd); break;
+    case C_COLSEL:
+        d->colmode = !d->colmode;
+        if (d->anchor >= 0) select_range(d, -1, d->cursor);
+        d->colsel = 0;
+        update_menu(d);
+        set_info(d);
+        break;
+    case C_SPLITWIN:
+        if (d->view == VIEW_PREVIEW) set_view(d, VIEW_DOC);
+        if (d->split2 && d->pane2) pane_swap_doc(d);   /* the top pane goes on */
+        d->split2 = !d->split2;
+        if (d->split2) { d->scroll2_x = d->scroll_x; d->scroll2_y = d->scroll_y; d->cv_top2 = d->cv.top; }
+        d->vsz = d->vpos = d->hsz = d->hpos = -1;
+        clamp_scroll(d);
+        refresh_all(d);
+        set_sliders(d);
+        update_menu(d);
+        break;
     case C_PLAIN:   apply_style(d, AP_PLAIN, 0); break;
     case C_BOLD:    apply_style(d, AP_TOGGLE, A_BOLD); break;
     case C_ITALIC:  apply_style(d, AP_TOGGLE, A_ITALIC); break;
@@ -1736,6 +1961,7 @@ static int special_key(short ks, short key)
     case 0x43: do_cmd(C_BULLETS); return 1;                         /* F9 */
     case 0x44: do_cmd(C_NUMBERS); return 1;                         /* F10 */
     case 0x5A: do_cmd(C_THES); return 1;                            /* Shift F7 */
+    case 0x56: do_cmd(C_FINDPREV); return 1;                        /* Shift F3 */
     case 0x5B: do_cmd(C_ZOOMFIT); return 1;                         /* Shift F8 */
     }
     return 0;
@@ -1753,6 +1979,12 @@ void handle_key(short ks, short key)
     edlog("key %04x shift %x: top window %d (owner %d), document %d", (unsigned short)key, ks, h, d1, d ? d->wh : -1);
     if (!(ks & 4) && tool_route_key(h, ks, key)) return;
     if (!(ks & 4) && special_key(ks, key)) return;
+    if ((ks & 8) && scan >= 0x78 && scan <= 0x81 && d && !d->iconified) {
+        /* Alternate 1-0: to that bookmark; with Shift, set it here */
+        int n = scan - 0x78;
+        if (shift) bm_set(d, n); else bm_goto(d, n);
+        return;
+    }
     if (ks & 4) {                               /* Control */
         if (scan == 0x0F) { do_cmd(C_CYCLE); return; }
         if (scan == 0x1C || scan == 0x72) { do_cmd(shift ? C_COLBRK : C_PGBRK); return; }
@@ -1760,7 +1992,7 @@ void handle_key(short ks, short key)
         if (scan == 0x48) { do_cmd(C_PREVPAGE); return; }           /* Control + up / down */
         if (scan == 0x50) { do_cmd(C_NEXTPAGE); return; }
         if (scan == 0x4B || scan == 0x4D || scan == 0x47) {      /* words, document ends */
-            if (d) win_key(d, ks, key);
+            if (d && !fsel_for(d)) win_key(d, ks, key);
             return;
         }
         if (shift) {
@@ -1768,6 +2000,11 @@ void handle_key(short ks, short key)
             case 0x13: do_cmd(C_SAVEAS); break;    case 0x10: do_cmd(C_PREVIEW); break;
             case 0x15: do_cmd(C_UNDER); break;     case 0x06: do_cmd(C_FONTSEL); break;
             case 0x0A: do_cmd(C_JFULL); break;     case 0x12: do_cmd(C_RULERS); break;
+            case 0x07: do_cmd(C_FINDPREV); break;  case 0x0B: do_cmd(C_COLSEL); break;
+            case 0x02: do_cmd(C_GOTOBM); break;    case 0x0D: do_cmd(C_INSBM); break;
+            case 0x19: do_cmd(C_SPLITWIN); break;
+            case 0x18: do_cmd(C_CUTSLOT); break;   case 0x03: do_cmd(C_COPYSLOT); break;
+            case 0x16: do_cmd(C_PASTESLOT); break;
             }
             return;
         }
@@ -1788,7 +2025,7 @@ void handle_key(short ks, short key)
         }
         return;
     }
-    if (d) win_key(d, ks, key);
+    if (d && !fsel_for(d)) win_key(d, ks, key);
 }
 
 void handle_click(short mx, short my, short ks, short clicks)
@@ -1797,6 +2034,7 @@ void handle_click(short mx, short my, short ks, short clicks)
     short wh = wind_find(mx, my);
     if (tool_route_click(wh, mx, my, clicks)) return;
     if (!d || wh != d->wh) return;
+    if (fsel_for(d)) { fsel_top(d); return; }       /* greyed, waiting for its file selector */
     win_click(d, mx, my, ks, clicks);
 }
 
@@ -1811,6 +2049,7 @@ static void handle_rclick(short mx, short my)
             /* a window behind: brought to the front first (the commands
              * act on the top one) */
             if (d != top_doc()) wind_set(d->wh, WF_TOP, 0, 0, 0, 0);
+            else if (fsel_for(d)) fsel_top(d);
             else win_rclick(d, mx, my);
             break;
         }
@@ -1971,6 +2210,7 @@ int main(int argc, char *argv[])
     if (pref_live) spell_ensure(1);
     if (!top_doc() && !demo_on) cmd_new();
     av_init();                  /* the desktop: files dropped on our windows */
+    slots_clear();              /* the clipboard's slots last while EdWord runs */
     edlog("first window open, entering the event loop");
 
     while (!quit_now) {
@@ -1978,6 +2218,7 @@ int main(int argc, char *argv[])
         long tmo = need ? (demo_on ? 50L : 400L) : 5000L, bl = blink_wait(), since;
         if (demo_on) need = timer = 1;
         if (bl >= 0) { timer = 1; if (bl < tmo) tmo = bl; }
+        if (bgprint_active()) { timer = 1; tmo = 10; }       /* printing in the background */
         /* (0x102, 3, 0: either button pressed, with double clicks) */
         ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON | (timer ? MU_TIMER : 0), 0x102, 3, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1993,6 +2234,7 @@ int main(int argc, char *argv[])
         since = (long)(clock() - last_input) * 1000L / CLOCKS_PER_SEC;
         if ((ev & MU_TIMER) && need && (demo_on || since >= 380)) idle_work(1);
         if ((ev & MU_TIMER) && !quit_now) blink_tick();
+        if ((ev & MU_TIMER) && bgprint_active()) bgprint_idle(since >= 300 ? 150 : 40);
 #ifdef EDDEMO
         if (demo_on && (ev & MU_TIMER) && !(ev & MU_MESAG)) if (!demo_tick()) quit_now = 1;
 #endif
@@ -2000,6 +2242,8 @@ int main(int argc, char *argv[])
     }
 
     edlog("quitting");
+    bgprint_finish();
+    slots_clear();
     av_exit();
     tools_close_all();
     theme_exit();

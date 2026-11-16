@@ -12,7 +12,8 @@
  *   [Table 120 120 120 Border] ... [Row] text [Cell] text ... [/Table]
  *   with a chart of its numbers: [Table 120 120 Pie|Bar|Pie3D|Bar3D
  *   Above|Below|Left|Right]
- * and [Tab] [Page] [Column], with "[[" for a literal "[". Codes are
+ * and [Tab] [Page] [Column], bookmarks [Mark 1]...[Mark 0], with "[[" for
+ * a literal "[". Codes are
  * switches: each lasts until the next code of its kind. A bracket that
  * isn't a known code is kept as ordinary text.
  */
@@ -141,6 +142,11 @@ int codes_build(DOC *d)
         CELL *c;
         if (k == d->cursor) cpos = cv->len;
         if (k == d->anchor) apos = cv->len;
+        {
+            int b;
+            for (b = 0; b < NBMARK; b++)
+                if (d->bmark[b] == k) { sprintf(tmp, "[Mark %d]", (b + 1) % 10); put(cv, tmp); }
+        }
         if (k == d->len) break;
         c = &d->text[k];
         if (k == 0 || ISBRK(d->text[k - 1].ch)) {
@@ -215,7 +221,8 @@ static int find_font(const char *s, int n)
     return -1;
 }
 
-enum { R_NONE, R_OK, R_TAB, R_PAGE, R_CELL, R_COLUMN };
+enum { R_NONE, R_OK, R_TAB, R_PAGE, R_CELL, R_COLUMN, R_MARK };
+static int mark_no;
 
 /* a [Table ...] code: column widths and "Border" */
 static int table_code(DOC *d, PARA *pst, const char *arg, int an)
@@ -294,7 +301,7 @@ static int do_code(DOC *d, CELL *st, PARA *pst, const char *s, int n)
     }
     if (ieq(s, "Size", wn)) {
         int v = atoi(arg);
-        if (v < 4 || v > 120) return R_NONE;
+        if (v < 4 || v > 150) return R_NONE;
         st->size = (unsigned char)v;
         return R_OK;
     }
@@ -328,6 +335,10 @@ static int do_code(DOC *d, CELL *st, PARA *pst, const char *s, int n)
         pst->toc = (unsigned char)v;
         return R_OK;
     }
+    if (ieq(s, "Mark", wn) && an == 1 && *arg >= '0' && *arg <= '9') {
+        mark_no = (*arg - '0' + 9) % 10;          /* 1-9 then 0 */
+        return R_MARK;
+    }
     if (ieq(s, "Contents", wn) && ieq(arg, "Title", an)) { pst->tocent = TOCE_TITLE; return R_OK; }
     if (ieq(s, "Table", wn)) return table_code(d, pst, arg, an);
     return R_NONE;
@@ -345,6 +356,8 @@ int codes_apply(DOC *d)
     d->a.npara = 1;
     para_default(&d->a.paras[0]);
     d->a.ntbl = 0;
+    for (pidx = 0; pidx < NBMARK; pidx++) d->bmark[pidx] = -1;   /* as the codes say */
+    pidx = 0;
     memset(&st, 0, sizeof st);
     st.font = (unsigned char)default_font();
     st.size = (unsigned char)default_size();
@@ -375,6 +388,7 @@ int codes_apply(DOC *d)
                 r = do_code(d, &st, &pst, cv->t + p + 1, (int)(e - p - 1));
             if (r != R_NONE) {
                 if (cv->cursor > p && cv->cursor <= e && newcur < 0) newcur = n;
+                if (r == R_MARK) d->bmark[mark_no] = n;
                 if (r == R_TAB) EMIT('\t');
                 if (r == R_CELL) EMIT(CH_CELL);
                 if (r == R_PAGE || r == R_COLUMN) {

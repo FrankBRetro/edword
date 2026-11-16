@@ -8,7 +8,7 @@
  * indents, bullet and numbered lists (Word 6 and Word 97 styles), outline
  * levels (TOC headings), tables, columns and the page set-up.
  * EdWord's own settings live in ignorable {\*\ed...} groups:
- *   {\*\edwrapcol N}  {\*\edhf0|1 ...}  {\*\edlist N}  {\*\edtoc N}
+ *   {\*\edmark N} (bookmark N, 0-9, here)  {\*\edwrapcol N}  {\*\edhf0|1 ...}  {\*\edlist N}  {\*\edtoc N}
  *   {\*\edpage\edpg..\edfol..\edml..\edmr..\edmt..\edmb..\edcols..\edgap..}
  *   {\*\edobj\edot..\edop..\edox..\edoy..\edow..\edoh..\edowr..\edobr..
  *      {\*\edsh\edst..\edsf..\edsc..\edsl..\edsxa..\edsya..\edsxb..\edsyb..}
@@ -347,6 +347,7 @@ static int ed_control(DOC *d, RSTATE *s, const char *w, int hasp, long p)
         else if (!strcmp(w, "edch")) rowchart[3] = clampi(p, 0, 2000);
         return 1;
     }
+    if (!strcmp(w, "edmark") && hasp && p >= 0 && p < NBMARK) { d->bmark[p] = d->len; return 1; }
     if (!strcmp(w, "edwrapcol") && hasp) { PS(d).wrapcol = (short)clampi(p, 0, 250); return 1; }
     if (!strcmp(w, "edhf") && hasp && (p == 0 || p == 1)) {
         s->dest = D_HF0 + (int)p;
@@ -980,6 +981,17 @@ static void row_def(FILE *f, DOC *d, const PARA *p)
     fputs("\r\n", f);
 }
 
+/* the bookmarks at k: EdWord's own, and for other programs RTF's */
+static void write_marks(FILE *f, DOC *d, long k)
+{
+    int b;
+    for (b = 0; b < NBMARK; b++)
+        if (d->bmark[b] == k) {
+            if (std_rtf) fprintf(f, "{\\*\\bkmkstart Mark%d}{\\*\\bkmkend Mark%d}", (b + 1) % 10, (b + 1) % 10);
+            else fprintf(f, "{\\*\\edmark%d}", b);
+        }
+}
+
 static int rtf_write(DOC *d, const char *path)
 {
     FILE *f = fopen(path, "wb");
@@ -1042,6 +1054,7 @@ static int rtf_write(DOC *d, const char *path)
                     c->attr & A_UNDER ? "\\ul" : "");
             pf = c->font; ps = c->size; pa = c->attr; pc = c->color;
         }
+        write_marks(f, d, k);
         switch (c->ch) {
         case '\n':
             if (PARA_OF(d, c)->tbl && PARA_OF(d, c)->tbl <= d->a.ntbl) fputs("\\cell\\row\r\n", f);
@@ -1057,6 +1070,7 @@ static int rtf_write(DOC *d, const char *path)
             else fputc(c->ch, f);
         }
     }
+    write_marks(f, d, d->len);
     /* a table at the very end still needs its row closed */
     if (d->len > 0 && !ISBRK(d->text[d->len - 1].ch) && PARA_OF(d, &d->text[d->len - 1])->tbl)
         fputs("\\cell\\row\r\n", f);
@@ -1069,6 +1083,7 @@ static int rtf_write(DOC *d, const char *path)
 }
 
 /* EdWord's own file: everything, readable by any version of EdWord */
+
 int rtf_export(DOC *d, const char *path)
 {
     std_rtf = 0;

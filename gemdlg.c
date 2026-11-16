@@ -144,6 +144,7 @@ int dlg_tree(DLG *g, int tree)
     g->edit1 = -1;
     memcpy(g->o, t, sizeof(OBJECT) * (size_t)n);
     g->n = g->nit = n;
+    g->tree = (short)(tree + 1);
     for (i = 0; i < n; i++) {
         OBJECT *o = &g->o[i];
         DITEM *it = &g->it[i];
@@ -354,43 +355,98 @@ void field_cursor(OBJECT *tree, short obj, short *idx, short pos)
 
 /* Dialogs open in windows of their own, so the documents and the other
  * windows stay usable while a dialog is open; menus and documents work
- * as usual. One dialog is open at a time: asking for another brings the
- * open one to the front. Without a free window the dialog runs the old
- * way, with form_do. */
-static DLG  *open_dlg;
-static short dlg_wh = -1;
-int dlg_busy;
-/* how dlg_run changed the tree for its window, to put it back */
-static short s_title = -1, s_dy;
-static short s_st0;
-static long  s_sp0;
-static char  wtitle[60];
+ * as usual, and other dialogs can be open at the same time (each
+ * dialog's own, though: asking for one that is open brings it to the
+ * front). A dialog for a document opens over its window, its name in
+ * the title. Each dlg_run() waits for its own dialog's answer; while it
+ * waits, every other window - the other dialogs too - works as usual.
+ * A dialog answered while a later one is still open closes at once; its
+ * caller goes on when the later one has been answered. Without a free
+ * window the dialog runs the old way, with form_do. */
+typedef struct {
+    DLG  *g;
+    short wh, edit, idx, title, dy, st0, ex;
+    long  sp0;
+    int   cur_on, done, force;
+    DOC  *owner;
+    char  wtitle[80], key[60];
+} DLGWIN;
+#define MAXDLGWIN 4             /* each waits on the stack (a DLG is 6 KB): enough at once */
+static DLGWIN dws[MAXDLGWIN];
+int dlg_busy;                   /* dialogs open */
 
-/* the dialog's window closed and its tree as it was, so the dialog can
- * be shown again (Print after an alert) */
-static void dlg_shut(DLG *g)
+static DLGWIN *dw_of_wh(short wh)
 {
+    int i;
+    if (wh <= 0) return NULL;
+    for (i = 0; i < MAXDLGWIN; i++) if (dws[i].g && dws[i].wh == wh) return &dws[i];
+    return NULL;
+}
+
+static DLGWIN *dw_of(DLG *g)
+{
+    int i;
+    for (i = 0; i < MAXDLGWIN; i++) if (dws[i].g == g) return &dws[i];
+    return NULL;
+}
+
+static int dw_top(DLGWIN *e)
+{
+    short h, d1, d2, d3;
+    wind_get(0, WF_TOP, &h, &d1, &d2, &d3);
+    return e->wh > 0 && h == e->wh;
+}
+
+/* the window closed and the tree put back as it was (its values kept) */
+static void dw_shut(DLGWIN *e)
+{
+    DLG *g = e->g;
     short i;
-    if (open_dlg != g || dlg_wh < 0) return;
-    winpos_save(wtitle, dlg_wh);
-    wind_close(dlg_wh);
-    wind_delete(dlg_wh);
-    dlg_wh = -1;
-    open_dlg = NULL;
-    dlg_busy = 0;
+    if (!g || e->wh <= 0) return;
+    if (e->edit && e->cur_on && dw_top(e)) objc_edit(g->o, e->edit, 0, &e->idx, ED_END);
+    winpos_save(e->key, e->wh);
+    wind_close(e->wh);
+    wind_delete(e->wh);
+    e->wh = 0;
     for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
     g->o[0].ob_height -= hchar / 2 + hchar / 4;
-    if (s_title > 0) {
-        g->o[s_title].ob_flags &= ~OF_HIDETREE;
-        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != s_title) g->o[i].ob_y += s_dy;
-        g->o[0].ob_height += s_dy;
+    if (e->title > 0) {
+        g->o[e->title].ob_flags &= ~OF_HIDETREE;
+        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != e->title) g->o[i].ob_y += e->dy;
+        g->o[0].ob_height += e->dy;
     }
-    g->o[0].ob_state = s_st0; g->o[0].ob_spec.index = s_sp0;
+    g->o[0].ob_state = e->st0; g->o[0].ob_spec.index = e->sp0;
+}
+
+static void dlg_shut(DLG *g)
+{
+    DLGWIN *e = dw_of(g);
+    if (!e) return;
+    dw_shut(e);
+    e->g = NULL;
+    dlg_busy--;
 }
 
 void dlg_close(DLG *g) { dlg_shut(g); }
 
-void dlg_front(void) { if (dlg_busy && dlg_wh >= 0) wind_set(dlg_wh, WF_TOP, 0, 0, 0, 0); }
+/* the newest dialog to the front (a document can't close under it) */
+void dlg_front(void)
+{
+    int i;
+    for (i = MAXDLGWIN - 1; i >= 0; i--) if (dws[i].g && dws[i].wh > 0) { wind_set(dws[i].wh, WF_TOP, 0, 0, 0, 0); return; }
+}
+
+/* a dialog open for document d (it can't close yet): brought to the front */
+int dlg_open_for(DOC *d)
+{
+    int i;
+    for (i = 0; i < MAXDLGWIN; i++)
+        if (dws[i].g && (dws[i].owner == d || !d)) {
+            if (dws[i].wh > 0) wind_set(dws[i].wh, WF_TOP, 0, 0, 0, 0);
+            return 1;
+        }
+    return 0;
+}
 
 static short dlg_finish(DLG *g, short ex)
 {
@@ -418,36 +474,24 @@ static short dlg_modal(DLG *g)
     return dlg_finish(g, ex);
 }
 
-static int dlg_is_top(void)
-{
-    short h, d1, d2, d3;
-    wind_get(0, WF_TOP, &h, &d1, &d2, &d3);
-    return h == dlg_wh;
-}
-
-static void dlg_redraw(DLG *g, const GRECT *area, short edit, short idx, int cursor)
+static void dw_redraw(DLGWIN *e, const GRECT *area)
 {
     GRECT r, a = *area;
+    DLG *g = e->g;
     short x1, y1, x2, y2;
-    (void)idx;
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
-    wind_get(dlg_wh, WF_FIRSTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
+    wind_get(e->wh, WF_FIRSTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     while (r.g_w && r.g_h) {
         x1 = r.g_x > a.g_x ? r.g_x : a.g_x;
         y1 = r.g_y > a.g_y ? r.g_y : a.g_y;
         x2 = r.g_x + r.g_w < a.g_x + a.g_w ? r.g_x + r.g_w : a.g_x + a.g_w;
         y2 = r.g_y + r.g_h < a.g_y + a.g_h ? r.g_y + r.g_h : a.g_y + a.g_h;
-        if (x2 > x1 && y2 > y1) {
-            eddiag("  objc_draw %d,%d %dx%d", x1, y1, x2 - x1, y2 - y1);
-            objc_draw(g->o, 0, 8, x1, y1, x2 - x1, y2 - y1);
-            eddiag("  drawn");
-        }
-        wind_get(dlg_wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
+        if (x2 > x1 && y2 > y1) objc_draw(g->o, 0, 8, x1, y1, x2 - x1, y2 - y1);
+        wind_get(e->wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     }
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
-    (void)edit; (void)cursor;
 }
 
 /* the item with this shortcut letter */
@@ -480,44 +524,180 @@ static int alt_letter(short key)
     return ((unsigned char *)kt->unshift)[scan];
 }
 
+/* answered: its window goes now (its caller goes on when it can) */
+static void dw_answer(DLGWIN *e, short ex, int force)
+{
+    e->ex = ex;
+    e->done = 1;
+    e->force = force;
+    if (!e->g->stay || force) dw_shut(e);
+}
+
+static void dw_msg(DLGWIN *e, short *msg)
+{
+    GRECT a;
+    short w, h;
+    DLG *g = e->g;
+    switch (msg[0]) {
+    case WM_REDRAW:
+        a.g_x = msg[4]; a.g_y = msg[5]; a.g_w = msg[6]; a.g_h = msg[7];
+        /* the text cursor is drawn by XOR: take it off first */
+        if (e->edit && e->cur_on && dw_top(e)) { objc_edit(g->o, e->edit, 0, &e->idx, ED_END); e->cur_on = 0; }
+        dw_redraw(e, &a);
+        if (e->edit && dw_top(e)) { objc_edit(g->o, e->edit, 0, &e->idx, ED_END); e->cur_on = 1; }
+        else e->cur_on = 0;
+        break;
+    case WM_TOPPED:
+        wind_set(e->wh, WF_TOP, 0, 0, 0, 0);
+        if (e->edit && !e->cur_on) { objc_edit(g->o, e->edit, 0, &e->idx, ED_END); e->cur_on = 1; }
+        break;
+    case WM_CLOSED: {
+        short ex = dlg_cancel_obj(g);
+        dw_answer(e, ex < 0 ? 0 : ex, 1);
+        break;
+    }
+    case WM_MOVED:
+        winpos_clamp(&msg[4], &msg[5], msg[6], msg[7]);
+        wind_set(e->wh, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+        wind_get(e->wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
+        g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
+        break;
+    case WM_BOTTOMED:
+        wind_set(e->wh, WF_BOTTOM, 0, 0, 0, 0);
+        break;
+    }
+}
+
+static void dw_key(DLGWIN *e, short ks, short key)
+{
+    DLG *g = e->g;
+    short scan = (key >> 8) & 0xff, o, next = e->edit;
+    int cont;
+    if (scan == 0x61 || (scan == 0x01 && !e->edit)) {         /* Undo, or Esc: Cancel */
+        o = dlg_cancel_obj(g);
+        if (o > 0) { dw_answer(e, o, 0); return; }
+    }
+    if ((ks & 8) && (o = dlg_shortcut(g, alt_letter(key))) > 0) {   /* Alternate + letter */
+        cont = form_button(g->o, o, 1, &next);
+        if (!cont) dw_answer(e, next, 0);
+        return;
+    }
+    if (e->edit && !e->cur_on) { objc_edit(g->o, e->edit, 0, &e->idx, ED_END); e->cur_on = 1; }
+    {
+        short np = e->idx;
+        if (e->edit && scan != 0x1C && scan != 0x72 && scan != 0x0F && field_edit(g->o, e->edit, key, &np)) {
+            GRECT fr;
+            objc_edit(g->o, e->edit, 0, &e->idx, ED_END);
+            objc_offset(g->o, e->edit, &fr.g_x, &fr.g_y);
+            fr.g_w = g->o[e->edit].ob_width; fr.g_h = g->o[e->edit].ob_height;
+            dw_redraw(e, &fr);
+            field_cursor(g->o, e->edit, &e->idx, np);
+            return;
+        }
+    }
+    cont = form_keybd(g->o, e->edit, next, key, &next, &key);
+    if (key && e->edit) objc_edit(g->o, e->edit, key, &e->idx, ED_CHAR);
+    if (!cont) { dw_answer(e, next, 0); return; }
+    if (next && next != e->edit && (g->o[next].ob_flags & OF_EDITABLE)) {
+        objc_edit(g->o, e->edit, 0, &e->idx, ED_END);
+        e->edit = next;
+        objc_edit(g->o, e->edit, 0, &e->idx, ED_INIT);
+    }
+}
+
+static void dw_click(DLGWIN *e, short mx, short my, short br)
+{
+    DLG *g = e->g;
+    short next;
+    int cont;
+    if (!dw_top(e)) {
+        wind_set(e->wh, WF_TOP, 0, 0, 0, 0);
+        if (e->edit && !e->cur_on) { objc_edit(g->o, e->edit, 0, &e->idx, ED_END); e->cur_on = 1; }
+    }
+    next = objc_find(g->o, 0, 8, mx, my);
+    if (next < 0) return;
+    cont = form_button(g->o, next, br, &next);
+    if (!cont) { dw_answer(e, next, 0); return; }
+    if (next > 0 && next != e->edit && (g->o[next].ob_flags & OF_EDITABLE)) {
+        if (e->edit && e->cur_on) objc_edit(g->o, e->edit, 0, &e->idx, ED_END);
+        e->edit = next;
+        objc_edit(g->o, e->edit, 0, &e->idx, ED_INIT);
+        e->cur_on = 1;
+    }
+}
+
+/* The event loops of dialogs (and EdWord's file selector): what isn't
+ * for the window being waited on goes where it belongs - another open
+ * dialog, a document, a tool window. */
+int dlg_dispatch_msg(short *msg)
+{
+    DLGWIN *e = msg[0] >= 20 && msg[0] < 40 ? dw_of_wh(msg[3]) : NULL;
+    if (!e) return 0;
+    if (!e->done) dw_msg(e, msg);
+    return 1;
+}
+
+int dlg_dispatch_key(short ks, short key)
+{
+    short h, d1, d2, d3;
+    DLGWIN *e;
+    wind_get(0, WF_TOP, &h, &d1, &d2, &d3);
+    e = dw_of_wh(h);
+    if (!e || e->done) return 0;
+    dw_key(e, ks, key);
+    return 1;
+}
+
+int dlg_dispatch_click(short mx, short my, short br)
+{
+    DLGWIN *e = dw_of_wh(wind_find(mx, my));
+    if (!e || e->done) return 0;
+    dw_click(e, mx, my, br);
+    return 1;
+}
+
 short dlg_run(DLG *g)
 {
-    short x, y, w, h, wx, wy, ww, wh, ex = -1, edit, idx = 0, next, cont, kind = NAME | MOVER | CLOSER;
-    short msg[8], mx, my, mb, ks, key, br, ev, title = -1, i, dy = 0, st0;
-    long sp0;
-    int cur_on = 0;
+    short x, y, w, h, wx, wy, ww, wh, kind;
+    short msg[8], mx, my, mb, ks, key, br, ev, i, k;
     const char *tname = NULL;
-    int force = 0;
+    DLGWIN *e;
 
-    eddiag("dlg_run: busy %d, windows %d, 3D %d, MagiC %d, %d objects, %d items, root %d,%d %dx%d",
-           dlg_busy, win_dialogs, aes_3d, aes_magic, g->n, g->nit, g->o[0].ob_x, g->o[0].ob_y, g->o[0].ob_width, g->o[0].ob_height);
-#ifdef EDDIAG
-    for (i = 0; i < g->n; i++)
-        eddiag("  obj %d: type %x flags %x state %x spec %lx next %d head %d tail %d at %d,%d %dx%d", i, g->o[i].ob_type,
-               g->o[i].ob_flags, g->o[i].ob_state, (long)g->o[i].ob_spec.index, g->o[i].ob_next, g->o[i].ob_head, g->o[i].ob_tail,
-               g->o[i].ob_x, g->o[i].ob_y, g->o[i].ob_width, g->o[i].ob_height);
-#endif
-    if (open_dlg == g && dlg_wh >= 0) {
+    eddiag("dlg_run: open %d, windows %d, 3D %d, MagiC %d, %d objects, %d items",
+           dlg_busy, win_dialogs, aes_3d, aes_magic, g->n, g->nit);
+    e = dw_of(g);
+    if (e && e->wh > 0) {
         /* still open (stay): on with the same window, drawn again with
          * what the caller changed */
         GRECT a;
-        wind_get(dlg_wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
+        wind_get(e->wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
         g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
         a.g_x = g->x; a.g_y = g->y; a.g_w = w; a.g_h = h;
-        dlg_redraw(g, &a, 0, 0, 0);
-        title = s_title; dy = s_dy;
+        e->done = 0;
+        dw_redraw(e, &a);
         goto run;
     }
-    if (dlg_busy) { dlg_front(); return -1; }
-    if (!win_dialogs) return dlg_modal(g);
-    st0 = g->o[0].ob_state; sp0 = g->o[0].ob_spec.index;
+    /* the same dialog is open already (for another document, say): to the front */
+    for (k = 0; k < MAXDLGWIN; k++)
+        if (dws[k].g && g->tree && dws[k].g->tree == g->tree) {
+            if (dws[k].wh > 0) wind_set(dws[k].wh, WF_TOP, 0, 0, 0, 0);
+            return -1;
+        }
+    for (k = 0; k < MAXDLGWIN && dws[k].g; k++) ;
+    if (!win_dialogs || k == MAXDLGWIN) return dlg_modal(g);
+    e = &dws[k];
+    memset(e, 0, sizeof *e);
+    e->st0 = g->o[0].ob_state; e->sp0 = g->o[0].ob_spec.index;
+    e->title = -1;
+    e->owner = ui_doc && ui_doc->used && ui_doc->wh > 0 && !ui_doc->iconified ? ui_doc : NULL;
+    kind = NAME | MOVER | CLOSER;
     /* the title goes into the window's title bar */
-    for (i = 0; i < g->nit; i++) if (g->it[i].type == T_TITLE) { title = g->it[i].obj; tname = g->it[i].s; }
-    if (title > 0) {
-        dy = (short)(hchar + hchar / 2);
-        g->o[title].ob_flags |= OF_HIDETREE;
-        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != title) g->o[i].ob_y -= dy;
-        g->o[0].ob_height -= dy;
+    for (i = 0; i < g->nit; i++) if (g->it[i].type == T_TITLE) { e->title = g->it[i].obj; tname = g->it[i].s; }
+    if (e->title > 0) {
+        e->dy = (short)(hchar + hchar / 2);
+        g->o[e->title].ob_flags |= OF_HIDETREE;
+        for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != e->title) g->o[i].ob_y -= e->dy;
+        g->o[0].ob_height -= e->dy;
     }
     g->o[0].ob_state &= ~OS_OUTLINED;
     g->o[0].ob_spec.index &= ~0x00FF0000L;            /* no frame: the window has one */
@@ -525,160 +705,182 @@ short dlg_run(DLG *g)
     for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y += hchar / 4;
     g->o[0].ob_height += hchar / 2 + hchar / 4;
     w = g->o[0].ob_width; h = g->o[0].ob_height;
-    eddiag("dlg_run: title %d, work %dx%d; wind_calc ...", title, w, h);
     wind_calc(WC_BORDER, kind, 0, 0, w, h, &wx, &wy, &ww, &wh);
-    eddiag("dlg_run: ... border %d,%d %dx%d", wx, wy, ww, wh);
-    sprintf(wtitle, " %.50s ", tname ? tname : "EdWord");
-    if (!winpos_get(wtitle, &x, &y, NULL, NULL)) {
-        x = (short)(desk.g_x + (desk.g_w - ww) / 2);
-        y = (short)(desk.g_y + (desk.g_h - wh) / 2);
+    sprintf(e->key, " %.50s ", tname ? tname : "EdWord");
+    /* a document's dialog: its name in the title, over its window */
+    if (e->owner) sprintf(e->wtitle, " %.40s - %.30s ", tname ? tname : "EdWord", e->owner->base);
+    else strcpy(e->wtitle, e->key);
+    {
+        GRECT o;
+        if (e->owner && doc_area(e->owner, &o)) {       /* over its document's window */
+            x = (short)(o.g_x + (o.g_w - ww) / 2);
+            y = (short)(o.g_y + (o.g_h - wh) / 3);
+        } else if (!winpos_get(e->key, &x, &y, NULL, NULL)) {
+            x = (short)(desk.g_x + (desk.g_w - ww) / 2);
+            y = (short)(desk.g_y + (desk.g_h - wh) / 2);
+        }
     }
     winpos_clamp(&x, &y, ww, wh);
-    eddiag("dlg_run: at %d,%d (desk %d,%d %dx%d); wind_create ...", x, y, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
-    dlg_wh = wind_create(kind, x, y, ww, wh);
-    eddiag("dlg_run: wind_create %d at %d,%d %dx%d", dlg_wh, x, y, ww, wh);
-    if (dlg_wh < 0) {                                  /* no window to spare */
+    e->wh = wind_create(kind, x, y, ww, wh);
+    if (e->wh <= 0) {                                  /* no window to spare */
+        e->wh = 0;
         for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) g->o[i].ob_y -= hchar / 4;
         g->o[0].ob_height -= hchar / 2 + hchar / 4;
-        if (title > 0) {
-            g->o[title].ob_flags &= ~OF_HIDETREE;
-            for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != title) g->o[i].ob_y += dy;
-            g->o[0].ob_height += dy;
+        if (e->title > 0) {
+            g->o[e->title].ob_flags &= ~OF_HIDETREE;
+            for (i = g->o[0].ob_head; i > 0; i = g->o[i].ob_next) if (i != e->title) g->o[i].ob_y += e->dy;
+            g->o[0].ob_height += e->dy;
         }
         g->o[0].ob_state |= OS_OUTLINED;
         g->o[0].ob_spec.index |= 0x00020000L;
         return dlg_modal(g);
     }
-    wind_set_str(dlg_wh, WF_NAME, wtitle);
-    wind_open(dlg_wh, x, y, ww, wh);
-    eddiag("dlg_run: opened");
-    wind_get(dlg_wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
+    e->g = g;
+    dlg_busy++;
+    wind_set_str(e->wh, WF_NAME, e->wtitle);
+    wind_open(e->wh, x, y, ww, wh);
+    wind_get(e->wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
     g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
-    open_dlg = g;
-    dlg_busy = 1;
-    s_title = title; s_dy = dy; s_st0 = st0; s_sp0 = sp0;
 run:
-    edit = g->edit1 > 0 && (g->o[g->edit1].ob_flags & OF_EDITABLE) ? g->edit1 : 0;
+    e->edit = g->edit1 > 0 && (g->o[g->edit1].ob_flags & OF_EDITABLE) ? g->edit1 : 0;
 #ifdef EDDEMO
     if (demo_on) {
         GRECT a;
         a.g_x = g->x; a.g_y = g->y; a.g_w = w; a.g_h = h;
-        dlg_redraw(g, &a, 0, 0, 0);
+        dw_redraw(e, &a);
         pump_redraws();
-        ex = (short)demo_dialog(g->o, g->x, g->y, w, h);
-        if (ex >= 0) goto done;
+        k = (short)demo_dialog(g->o, g->x, g->y, w, h);
+        if (k >= 0) dw_answer(e, k, 0);
     }
 #endif
-    if (edit) { objc_edit(g->o, edit, 0, &idx, ED_INIT); cur_on = 1; }
-    next = edit;
-    for (;;) {
-        eddiag("dlg_run: waiting");
-        ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        msg, 0L, &mx, &my, &mb, &ks, &key, &br);
-        eddiag("dlg_run: event %x, message %d for %d", ev, msg[0], msg[3]);
+    if (e->edit && !e->done) { objc_edit(g->o, e->edit, 0, &e->idx, ED_INIT); e->cur_on = 1; }
+    while (!e->done) {
+        ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        msg, bgprint_active() ? 20L : 500L, &mx, &my, &mb, &ks, &key, &br);
         if (ev & MU_MESAG) {
-            if (msg[3] == dlg_wh && msg[0] >= 20 && msg[0] < 40) {
-                GRECT a;
-                switch (msg[0]) {
-                case WM_REDRAW:
-                    a.g_x = msg[4]; a.g_y = msg[5]; a.g_w = msg[6]; a.g_h = msg[7];
-                    eddiag("dlg_run: redraw %d,%d %dx%d", a.g_x, a.g_y, a.g_w, a.g_h);
-                    /* the text cursor is drawn by XOR: take it off first */
-                    if (edit && cur_on && dlg_is_top()) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 0; }
-                    dlg_redraw(g, &a, edit, idx, 1);
-                    if (edit && dlg_is_top()) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 1; }
-                    else cur_on = 0;
-                    break;
-                case WM_TOPPED:
-                    wind_set(dlg_wh, WF_TOP, 0, 0, 0, 0);
-                    if (edit && !cur_on) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 1; }
-                    break;
-                case WM_CLOSED:
-                    ex = dlg_cancel_obj(g);
-                    if (ex < 0) ex = 0;
-                    force = 1;
-                    goto done;
-                case WM_MOVED:
-                    winpos_clamp(&msg[4], &msg[5], msg[6], msg[7]);
-                    wind_set(dlg_wh, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
-                    wind_get(dlg_wh, WF_WORKXYWH, &g->o[0].ob_x, &g->o[0].ob_y, &w, &h);
-                    g->x = g->o[0].ob_x; g->y = g->o[0].ob_y;
-                    break;
-                }
-            } else handle_msg(msg);
-            if (quit_now) { ex = dlg_cancel_obj(g); force = 1; goto done; }
+            if (!dlg_dispatch_msg(msg)) handle_msg(msg);
+            if (quit_now && !e->done) { short c = dlg_cancel_obj(g); dw_answer(e, c < 0 ? 0 : c, 1); }
         }
-        if ((ev & MU_KEYBD) && dlg_is_top()) {
-            short scan = (key >> 8) & 0xff, o;
-            if (scan == 0x61 || (scan == 0x01 && !edit)) {         /* Undo, or Esc: Cancel */
-                o = dlg_cancel_obj(g);
-                if (o > 0) { ex = o; goto done; }
-            }
-            if ((ks & 8) && (o = dlg_shortcut(g, alt_letter(key))) > 0) {   /* Alternate + letter */
-                cont = form_button(g->o, o, 1, &next);
-                if (!cont) { ex = next; goto done; }
-                continue;
-            }
-            if (edit && !cur_on) { objc_edit(g->o, edit, 0, &idx, ED_END); cur_on = 1; }
-            {
-                short np = idx;
-                if (edit && scan != 0x1C && scan != 0x72 && scan != 0x0F && field_edit(g->o, edit, key, &np)) {
-                    GRECT fr;
-                    objc_edit(g->o, edit, 0, &idx, ED_END);
-                    objc_offset(g->o, edit, &fr.g_x, &fr.g_y);
-                    fr.g_w = g->o[edit].ob_width; fr.g_h = g->o[edit].ob_height;
-                    dlg_redraw(g, &fr, 0, 0, 0);
-                    field_cursor(g->o, edit, &idx, np);
-                    continue;
-                }
-            }
-            cont = form_keybd(g->o, edit, next, key, &next, &key);
-            if (key && edit) objc_edit(g->o, edit, key, &idx, ED_CHAR);
-            if (!cont) { ex = next; goto done; }
-            if (next && next != edit && (g->o[next].ob_flags & OF_EDITABLE)) {
-                objc_edit(g->o, edit, 0, &idx, ED_END);
-                edit = next;
-                objc_edit(g->o, edit, 0, &idx, ED_INIT);
-            }
-        } else if (ev & MU_KEYBD) handle_key(ks, key);
-        if (ev & MU_BUTTON) {
-            if (wind_find(mx, my) != dlg_wh) { handle_click(mx, my, ks, br); continue; }
-            if (!dlg_is_top()) { wind_set(dlg_wh, WF_TOP, 0, 0, 0, 0); continue; }
-            next = objc_find(g->o, 0, 8, mx, my);
-            if (next < 0) continue;
-            cont = form_button(g->o, next, br, &next);
-            if (!cont) { ex = next; goto done; }
-            if (next > 0 && next != edit && (g->o[next].ob_flags & OF_EDITABLE)) {
-                if (edit && cur_on) objc_edit(g->o, edit, 0, &idx, ED_END);
-                edit = next;
-                objc_edit(g->o, edit, 0, &idx, ED_INIT);
-                cur_on = 1;
-            }
-        }
+        if ((ev & MU_KEYBD) && !dlg_dispatch_key(ks, key)) handle_key(ks, key);
+        if ((ev & MU_BUTTON) && !dlg_dispatch_click(mx, my, br)) handle_click(mx, my, ks, br);
+        if ((ev & MU_TIMER) && bgprint_active()) bgprint_idle(60);
     }
-done:
-    if (edit && cur_on && dlg_is_top()) objc_edit(g->o, edit, 0, &idx, ED_END);
+    k = e->ex;
     /* stay: the window stays for the caller's next dlg_run (or dlg_close),
      * unless it was closed or EdWord is quitting */
-    if (!g->stay || force) dlg_shut(g);
-    return dlg_finish(g, ex & 0x7fff);
+    if (!g->stay || e->force) { dw_shut(e); e->g = NULL; dlg_busy--; }
+    return dlg_finish(g, k & 0x7fff);
 }
 
 /* ================================================================= */
 /*  Alerts                                                            */
 /* ================================================================= */
 
+/* An alert in a window of its own, like the dialogs: the documents and
+ * the other windows go on working while it waits. Laid out as the AES's:
+ * its sign on the left, up to five lines, the buttons under them. Where
+ * there's no window to spare (or none yet) the AES's own alert. */
+static int alert_run(DLG *gp, int def, int icon, int nl, int nb, int w, int bw, char lines[5][34], char btn[3][12]);
+
+static int alert_win(int def, int icon, const char *t, const char *b)
+{
+    static int busy;                    /* one alert of ours at a time */
+    static char lines[5][34], btn[3][12];
+    DLG *gp;
+    int r;
+    int nl = 0, nb = 0, w = 0, bw = 0;
+    const char *p;
+    if (!win_dialogs || busy) return -1;
+    for (p = t; *p && nl < 5; nl++) {
+        int k = 0;
+        while (*p && *p != '|' && k < 33) lines[nl][k++] = *p++;
+        lines[nl][k] = 0;
+        if (*p == '|') p++;
+        if (k > w) w = k;
+    }
+    for (p = b; *p && nb < 3; nb++) {
+        int k = 0;
+        while (*p && *p != '|' && k < 11) btn[nb][k++] = *p++;
+        btn[nb][k] = 0;
+        if (*p == '|') p++;
+        if (k + 2 > bw) bw = k + 2;
+    }
+    if (!nb) return -1;
+    /* (its dialog is big: in memory only while it is shown) */
+    if ((gp = (DLG *)calloc(1, sizeof(DLG))) == NULL) return -1;
+    busy = 1;
+    r = alert_run(gp, def, icon, nl, nb, w, bw, lines, btn);
+    busy = 0;
+    free(gp);
+    return r;
+}
+
+static int alert_run(DLG *gp, int def, int icon, int nl, int nb, int w, int bw, char lines[5][34], char btn[3][12])
+{
+#define g (*gp)
+    int i, x;
+    short ex;
+    g.framed = 1;
+    g.edit1 = -1;
+    /* the box, the sign, the lines, the buttons */
+    {
+        int cw = w + 7 > nb * (bw + 2) + 6 ? w + 7 : nb * (bw + 2) + 6, ch = nl + 4, n = 0;
+        OBJECT *o = g.o;
+        o[0].ob_next = -1; o[0].ob_head = 1; o[0].ob_type = G_BOX; o[0].ob_spec.index = 0x00021100L;
+        o[0].ob_width = (short)(cw * wchar); o[0].ob_height = (short)(ch * hchar);
+        g.it[0].obj = 0; g.it[0].type = T_TEXT; g.it[0].s = ""; g.it[0].ul = -1;
+        n = 1;
+        if (icon >= 1 && icon <= 3) {
+            static const char sign[4] = { 0, '!', '?', 'X' };
+            o[n].ob_type = G_BOXCHAR;
+            o[n].ob_spec.index = ((long)(unsigned char)sign[icon] << 24) | 0x00FF1100L;
+            o[n].ob_x = (short)wchar; o[n].ob_y = (short)hchar;
+            o[n].ob_width = (short)(3 * wchar); o[n].ob_height = (short)(2 * hchar);
+            g.it[n].obj = n; g.it[n].type = T_TEXT; g.it[n].s = ""; g.it[n].ul = -1;
+            n++;
+        }
+        for (i = 0; i < nl; i++, n++) {
+            o[n].ob_type = G_STRING; o[n].ob_spec.free_string = lines[i];
+            o[n].ob_x = (short)(5 * wchar); o[n].ob_y = (short)((1 + i) * hchar);
+            o[n].ob_width = (short)(strlen(lines[i]) * wchar); o[n].ob_height = hchar;
+            g.it[n].obj = n; g.it[n].type = T_TEXT; g.it[n].s = lines[i]; g.it[n].ul = -1;
+        }
+        x = cw - nb * (bw + 2);
+        for (i = 0; i < nb; i++, n++) {
+            o[n].ob_type = G_BUTTON; o[n].ob_spec.free_string = btn[i];
+            o[n].ob_flags = (short)(OF_SELECTABLE | OF_EXIT | (i + 1 == def ? OF_DEFAULT : 0));
+            o[n].ob_x = (short)((x + i * (bw + 2)) * wchar); o[n].ob_y = (short)((nl + 2) * hchar);
+            o[n].ob_width = (short)(bw * wchar); o[n].ob_height = hchar;
+            g.it[n].obj = n; g.it[n].type = T_BUTTON; g.it[n].s = btn[i]; g.it[n].ul = -1;
+        }
+        for (i = 1; i < n; i++) { o[i].ob_next = (short)(i + 1); o[i].ob_head = o[i].ob_tail = -1; }
+        o[n - 1].ob_next = 0;
+        o[n - 1].ob_flags |= OF_LASTOB;
+        o[0].ob_tail = (short)(n - 1);
+        g.n = g.nit = (short)n;
+        g.cancel = (short)(def == nb && nb > 1 ? n - nb : n - 1);     /* Esc: the last button, or the first */
+        dlg_tree_end(&g);
+        ex = dlg_run(&g);
+        if (ex < 0) return -1;
+        ex = (short)(g.it[ex].obj - (n - nb) + 1);
+        return ex >= 1 && ex <= nb ? ex : def;
+    }
+#undef g
+}
+
 int alert(int def, int icon, int text, int buttons, ...)
 {
     char t[300], a[400];
     va_list ap;
+    int r;
     va_start(ap, buttons);
     vsprintf(t, L(text), ap);
     va_end(ap);
-    sprintf(a, "[%d][%s][%s]", icon, t, L(buttons));
 #ifdef EDDEMO
     if (demo_on) return demo_alert() ? def : def;
 #endif
+    if ((r = alert_win(def, icon, t, L(buttons))) > 0) return r;
+    sprintf(a, "[%d][%s][%s]", icon, t, L(buttons));
     return form_alert(def, a);
 }
 
@@ -932,8 +1134,12 @@ int ask_file(const char *title, const char *pattern, const char *defname, char *
     if (s) strcpy(s + 1, pattern);
     strncpy(name, defname ? defname : "", sizeof name - 1);
     name[sizeof name - 1] = 0;
-    if (aes_global[0] >= 0x0140) ok = fsel_exinput(seldir, name, &btn, title);
-    else ok = fsel_input(seldir, name, &btn);
+    ok = -1;
+    if (fsel_own()) { ok = (short)fsel_window(seldir, name, title); btn = 1; }   /* EdWord's own, in a window */
+    if (ok < 0) {
+        if (aes_global[0] >= 0x0140) ok = fsel_exinput(seldir, name, &btn, title);
+        else ok = fsel_input(seldir, name, &btn);
+    }
     /* the windows under the selector are drawn again now, before a long
      * load or save starts, so the selector isn't left on the screen */
     pump_redraws();
@@ -1057,13 +1263,14 @@ int dlg_size(int *size)
 /*  Progress gauge                                                    */
 /* ================================================================= */
 
-static DLG   gg;
+static DLG  *ggp;                     /* while the gauge is up */
+#define gg (*ggp)
 static short g_bar, g_fill, g_txt, g_open, g_btn = -1, g_want_cancel, g_stop;
 static int   g_last;
 static char  g_text[32];
 
 static short g_wh = -1;
-static char  g_title[60];
+static char  g_title[80];
 
 static void gauge_draw(const GRECT *area)
 {
@@ -1115,6 +1322,7 @@ void gauge_open(const char *title, const GRECT *over)
 {
     short x, y, w, h, root, wx, wy, ww, wh;
     root = 0;
+    if (!ggp && (ggp = (DLG *)calloc(1, sizeof(DLG))) == NULL) { g_want_cancel = 0; return; }
     if (!dlg_load(&gg, g_want_cancel ? RT_GAUGEC : RT_GAUGE)) { g_want_cancel = 0; return; }
     /* the tree: the bar (a white box), its black fill, the percentage, Cancel */
     g_bar = DGA_BAR; g_fill = DGA_FILL; g_txt = DGA_PCT;
@@ -1131,12 +1339,17 @@ void gauge_open(const char *title, const GRECT *over)
     (void)root;
     g_last = -1;
     g_open = 1;
-    sprintf(g_title, " %.50s ", title);
+    /* a long job for a document: its name in the title, over its window */
+    if (ui_doc && ui_doc->used && ui_doc->wh > 0) {
+        static GRECT dov;
+        sprintf(g_title, " %.30s - %.30s ", title, ui_doc->base);
+        if (!over && doc_area(ui_doc, &dov)) over = &dov;
+    } else sprintf(g_title, " %.50s ", title);
     gg.o[0].ob_state &= ~OS_OUTLINED;
     gg.o[0].ob_spec.index &= ~0x00FF0000L;
     w = gg.o[0].ob_width; h = gg.o[0].ob_height;
     wind_calc(WC_BORDER, NAME | MOVER, 0, 0, w, h, &wx, &wy, &ww, &wh);
-    if (!winpos_get(" progress ", &x, &y, NULL, NULL)) {
+    if (over || !winpos_get(" progress ", &x, &y, NULL, NULL)) {
         x = (short)(desk.g_x + (desk.g_w - ww) / 2);
         y = (short)(desk.g_y + (desk.g_h - wh) / 2);
         if (over && over->g_w > ww && over->g_h > wh) {
@@ -1251,6 +1464,8 @@ void gauge_close(void)
         form_dial(FMD_FINISH, 0, 0, 0, 0, gg.x, gg.y, gg.w, gg.h);
         wind_update(END_UPDATE);
     }
+    free(ggp);
+    ggp = NULL;
     edlog("gauge: closed");
 }
 
@@ -1548,6 +1763,23 @@ void dlg_about(void)
 #endif
     dlg_str(&g, DAB_VERSION, vline);
     if (ED_ABOUT[0]) dlg_str(&g, DAB_LINE1, (char *)ED_ABOUT);
+    {   /* the memory free now: the biggest blocks of ST RAM and of Fast RAM */
+        static char mline[90];
+#ifndef PCGEM
+        long st, fast = 0;
+        if (Sversion() >= 0x1900) {          /* GEMDOS 0.19 and later: Mxalloc */
+            st = (long)Mxalloc(-1L, 0);
+            fast = (long)Mxalloc(-1L, 1);
+            if (fast < 0) fast = 0;
+        } else st = (long)Malloc(-1L);
+        if (st < 0) st = 0;
+        if (fast > 0) sprintf(mline, L(S_FREE_RAM2), (st + fast) / 1024, st / 1024, fast / 1024);
+        else sprintf(mline, L(S_FREE_RAM), st / 1024);
+#else
+        mline[0] = 0;
+#endif
+        dlg_str(&g, DAB_MEMORY, mline);
+    }
     g.cancel = DAB_OK;
     dlg_tree_end(&g);
     dlg_run(&g);
@@ -1624,7 +1856,7 @@ int dlg_goto(DOC *d, int *page)
 /* pages from..to (1-based, inclusive) and copies */
 int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour)
 {
-    static DLG g;
+    DLG g;
     static char fb[5], tb[5], lb[41], cb[3], pr[60], cur[40];
     int np = doc_npages(d), a, b, c, k, page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0;
     sprintf(fb, "%d", 1);
@@ -1670,7 +1902,7 @@ int dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int 
 /* Insert > Page Numbers: a page number in the header or footer */
 int dlg_pagenum(DOC *d)
 {
-    static DLG g;
+    DLG g;
     static char pw[34], ow[24];
     short r;
     int where = 1, style = 1, just = 1, i;

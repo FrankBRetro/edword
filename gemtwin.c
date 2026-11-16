@@ -21,7 +21,7 @@
 typedef struct {
     int    open, curs;
     short  wh, ed, idx, def;            /* window, edit field with the cursor */
-    DLG    g;
+    DLG   *gp;                          /* allocated when first opened, then kept */
     char   name[48];
     void (*act)(short item, int clicks);
     int  (*build)(void);
@@ -41,8 +41,8 @@ static void tw_place(TWIN *t)
 {
     GRECT w;
     wind_get(t->wh, WF_WORKXYWH, &w.g_x, &w.g_y, &w.g_w, &w.g_h);
-    t->g.o[0].ob_x = w.g_x;
-    t->g.o[0].ob_y = w.g_y;
+    t->gp->o[0].ob_x = w.g_x;
+    t->gp->o[0].ob_y = w.g_y;
 }
 
 static void tw_cursor(TWIN *t, int on)
@@ -50,8 +50,8 @@ static void tw_cursor(TWIN *t, int on)
     if (t->ed < 0 || !tw_top(t) || on == t->curs) return;
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
-    if (on) objc_edit(t->g.o, t->ed, 0, &t->idx, ED_INIT);
-    else objc_edit(t->g.o, t->ed, 0, &t->idx, ED_END);
+    if (on) objc_edit(t->gp->o, t->ed, 0, &t->idx, ED_INIT);
+    else objc_edit(t->gp->o, t->ed, 0, &t->idx, ED_END);
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
     t->curs = on;
@@ -67,7 +67,7 @@ static void tw_draw(TWIN *t, GRECT *area)
         short x1 = r.g_x > a.g_x ? r.g_x : a.g_x, y1 = r.g_y > a.g_y ? r.g_y : a.g_y;
         short x2 = (r.g_x + r.g_w < a.g_x + a.g_w) ? r.g_x + r.g_w : a.g_x + a.g_w;
         short y2 = (r.g_y + r.g_h < a.g_y + a.g_h) ? r.g_y + r.g_h : a.g_y + a.g_h;
-        if (x2 > x1 && y2 > y1) objc_draw(t->g.o, 0, 8, x1, y1, x2 - x1, y2 - y1);
+        if (x2 > x1 && y2 > y1) objc_draw(t->gp->o, 0, 8, x1, y1, x2 - x1, y2 - y1);
         wind_get(t->wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     }
     graf_mouse(M_ON, NULL);
@@ -103,7 +103,7 @@ static int tw_open(TWIN *t, int title, int at_bottom)
     if (t->open) { wind_set(t->wh, WF_TOP, 0, 0, 0, 0); return 1; }
     if (!t->build()) return 0;
     tw_place(t);
-    wind_calc(WC_BORDER, TWKIND, 0, 0, t->g.w, t->g.h, &x, &y, &w, &h);
+    wind_calc(WC_BORDER, TWKIND, 0, 0, t->gp->w, t->gp->h, &x, &y, &w, &h);
     /* at the mouse pointer, where the user is working (on a big screen
      * the desk's edges can be a long way from the document); kept on
      * the desk */
@@ -122,7 +122,7 @@ static int tw_open(TWIN *t, int title, int at_bottom)
     wind_set_str(t->wh, WF_NAME, t->name);
     t->open = 1;
     t->curs = 0;
-    t->ed = t->g.edit1;
+    t->ed = t->gp->edit1;
     t->idx = 0;
     wind_open(t->wh, x, y, w, h);
     tw_place(t);
@@ -158,14 +158,14 @@ static void tw_msg(TWIN *t, short *msg)
 static short item_of(TWIN *t, short obj)
 {
     short i;
-    for (i = 0; i < t->g.nit; i++) if (t->g.it[i].obj == obj) return i;
+    for (i = 0; i < t->gp->nit; i++) if (t->gp->it[i].obj == obj) return i;
     return -1;
 }
 
 static void tw_click(TWIN *t, short mx, short my, short clicks)
 {
     short o, mb, ks, x, y;
-    OBJECT *tr = t->g.o;
+    OBJECT *tr = t->gp->o;
     if (!t->open) return;
     /* a window behind: to the front, and the click counts too */
     if (!tw_top(t)) { wind_set(t->wh, WF_TOP, 0, 0, 0, 0); if (t->topped) t->topped(); tw_cursor(t, 1); }
@@ -216,8 +216,8 @@ static void tw_key(TWIN *t, short ks, short key)
     if (t->ed < 0) return;
     if (scan == 0x0F || scan == 0x50 || scan == 0x48) {                 /* Tab, arrows: next field */
         short i, first = -1, next = -1, prev = -1, last = -1;
-        for (i = 1; i < t->g.n; i++)
-            if (t->g.o[i].ob_flags & OF_EDITABLE) {
+        for (i = 1; i < t->gp->n; i++)
+            if (t->gp->o[i].ob_flags & OF_EDITABLE) {
                 if (first < 0) first = i;
                 if (i > t->ed && next < 0) next = i;
                 if (i < t->ed) prev = i;
@@ -231,17 +231,17 @@ static void tw_key(TWIN *t, short ks, short key)
     tw_cursor(t, 1);
     {
         short np = t->idx;
-        if (field_edit(t->g.o, t->ed, key, &np)) {       /* the text edited here, the field drawn again */
+        if (field_edit(t->gp->o, t->ed, key, &np)) {       /* the text edited here, the field drawn again */
             GRECT fr;
             tw_cursor(t, 0);
-            objc_offset(t->g.o, t->ed, &fr.g_x, &fr.g_y);
-            fr.g_w = t->g.o[t->ed].ob_width; fr.g_h = t->g.o[t->ed].ob_height;
+            objc_offset(t->gp->o, t->ed, &fr.g_x, &fr.g_y);
+            fr.g_w = t->gp->o[t->ed].ob_width; fr.g_h = t->gp->o[t->ed].ob_height;
             tw_draw(t, &fr);                             /* (which puts the cursor at the end) */
             wind_update(BEG_UPDATE);
             graf_mouse(M_OFF, NULL);
             {
                 int n;
-                for (n = t->idx - np; n > 0; n--) objc_edit(t->g.o, t->ed, 0x4B00, &t->idx, ED_CHAR);
+                for (n = t->idx - np; n > 0; n--) objc_edit(t->gp->o, t->ed, 0x4B00, &t->idx, ED_CHAR);
             }
             graf_mouse(M_ON, NULL);
             wind_update(END_UPDATE);
@@ -250,28 +250,28 @@ static void tw_key(TWIN *t, short ks, short key)
     }
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
-    objc_edit(t->g.o, t->ed, key, &t->idx, ED_CHAR);
+    objc_edit(t->gp->o, t->ed, key, &t->idx, ED_CHAR);
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
 }
 
 static void show_obj(TWIN *t, short item, int show)
 {
-    short o = t->g.it[item].obj;
-    if (show) t->g.o[o].ob_flags &= ~OF_HIDETREE;
-    else t->g.o[o].ob_flags |= OF_HIDETREE;
+    short o = t->gp->it[item].obj;
+    if (show) t->gp->o[o].ob_flags &= ~OF_HIDETREE;
+    else t->gp->o[o].ob_flags |= OF_HIDETREE;
 }
 
 static void set_disabled(TWIN *t, short item, int dis)
 {
-    short o = t->g.it[item].obj, ul = t->g.it[item].ul;
-    unsigned short st = (unsigned short)t->g.o[o].ob_state;
+    short o = t->gp->it[item].obj, ul = t->gp->it[item].ul;
+    unsigned short st = (unsigned short)t->gp->o[o].ob_state;
     if (dis) st |= OS_DISABLED; else st &= ~OS_DISABLED;
     /* MagiC draws the shortcut letter black in a grey label: none while
      * it's disabled */
     if ((st & 0x8000) && (st & OS_WHITEBAK))
         st = (unsigned short)((st & ~0x7F00) | ((dis || ul < 0 ? 0x7F : ul) << 8));
-    t->g.o[o].ob_state = (short)st;
+    t->gp->o[o].ob_state = (short)st;
 }
 
 static DOC *live_doc(DOC *d) { return d && d->used ? d : active_doc(); }
@@ -279,8 +279,9 @@ static DOC *live_doc(DOC *d) { return d && d->used ? d : active_doc(); }
 /* the window's dialog from the resource file: no frame, no title */
 static int tw_tree(TWIN *t, int tree)
 {
-    if (!dlg_load(&t->g, tree)) return 0;
-    t->g.framed = 0;
+    if (!t->gp && (t->gp = (DLG *)calloc(1, sizeof(DLG))) == NULL) { alert(1, 3, AL_NO_MEMORY, AB_OK); return 0; }
+    if (!dlg_load(t->gp, tree)) return 0;
+    t->gp->framed = 0;
     return 1;
 }
 
@@ -294,14 +295,16 @@ static short f_ewhat, f_ewith, f_case, f_word, f_back, f_next, f_rep, f_all, f_c
 
 static int f_flags(void)
 {
-    return (dlg_on(&fw.g, f_case) ? FIND_CASE : 0) | (dlg_on(&fw.g, f_word) ? FIND_WORD : 0) |
-           (dlg_on(&fw.g, f_back) ? FIND_BACK : 0);
+    if (!fw.gp) return 0;
+    return (dlg_on(fw.gp, f_case) ? FIND_CASE : 0) | (dlg_on(fw.gp, f_word) ? FIND_WORD : 0) |
+           (dlg_on(fw.gp, f_back) ? FIND_BACK : 0);
 }
 
 static int f_build(void)
 {
-    DLG *g = &fw.g;
+    DLG *g;
     if (!tw_tree(&fw, RT_FIND)) return 0;
+    g = fw.gp;
     f_ewhat = WFD_WHAT; f_ewith = WFD_WITH; f_case = WFD_CASE; f_word = WFD_WORD; f_back = WFD_BACK;
     f_stat = WFD_STATUS; f_next = WFD_NEXT; f_rep = WFD_REP; f_all = WFD_ALL; f_close = WFD_CLOSE;
     dlg_edtext(g, f_ewhat, f_what);
@@ -319,11 +322,14 @@ static void f_say(int text, long n)
     tw_redraw(&fw);
 }
 
+static int f_dir = -1;          /* Find Next / Previous: forward 0, back 1; -1 as the window says */
+
 /* find from the caret (or after the selection); wraps once */
 static int f_find(DOC *d)
 {
     long from, e, s, a, b;
     int flags = f_flags();
+    if (f_dir >= 0) flags = (flags & ~FIND_BACK) | (f_dir ? FIND_BACK : 0);
     if (!f_what[0]) return 0;
     if (doc_sel(d, &a, &b)) from = flags & FIND_BACK ? a : b;
     else from = d->cursor;
@@ -377,12 +383,18 @@ void find_open(DOC *d)
     (void)f_ewhat; (void)f_ewith; (void)f_stat;
 }
 
-void find_again(DOC *d)
+/* Find Next (F3, Control-G) and Previous (Shift-F3, Control-Shift-G):
+ * the last text searched for, whether the window is open or not */
+void find_again_dir(DOC *d, int back)
 {
     if (!f_what[0]) { find_open(d); return; }
-    if (!fw.g.nit) { fw.act = f_act; fw.build = f_build; if (!f_build()) return; }
+    if (!fw.gp || !fw.gp->nit) { fw.act = f_act; fw.build = f_build; if (!f_build()) return; }
+    f_dir = back;
     f_find(d);
+    f_dir = -1;
 }
+
+void find_again(DOC *d) { find_again_dir(d, 0); }
 
 static int  f_owns(short wh) { return fw.open && wh == fw.wh; }
 static void f_msg(short *m) { tw_msg(&fw, m); }
@@ -434,10 +446,11 @@ int spell_ensure(int quiet)
 
 static int sp_build(void)
 {
-    DLG *g = &sw.g;
+    DLG *g;
     int i;
     static const short sb[6] = { WSP_SUG0, WSP_SUG1, WSP_SUG2, WSP_SUG3, WSP_SUG4, WSP_SUG5 };
     if (!tw_tree(&sw, RT_SPELL)) return 0;
+    g = sw.gp;
     sp.head_i = WSP_HEAD; sp.ech = WSP_CHG;
     dlg_str(g, sp.head_i, sp.head);
     dlg_edtext(g, sp.ech, sp.chg);
@@ -635,11 +648,12 @@ static struct {
 
 static int th_build(void)
 {
-    DLG *g = &tw.g;
+    DLG *g;
     int i;
     static const short mb[TH_MEAN] = { WTH_M0, WTH_M1, WTH_M2, WTH_M3, WTH_M4, WTH_M5 };
     static const short sb[TH_SYN] = { WTH_S0, WTH_S1, WTH_S2, WTH_S3, WTH_S4, WTH_S5, WTH_S6, WTH_S7, WTH_S8, WTH_S9 };
     if (!tw_tree(&tw, RT_THES)) return 0;
+    g = tw.gp;
     th.eword = WTH_WORD; th.look = WTH_LOOK; th.ewith = WTH_WITH; th.msg_i = WTH_MSG; th.rep = WTH_REP; th.cls = WTH_CLOSE;
     dlg_edtext(g, th.eword, th.word);
     dlg_edtext(g, th.ewith, th.with);
@@ -673,8 +687,8 @@ static void th_show_sense(int m)
         show_obj(&tw, th.sb[i], on);
     }
     for (i = 0; i < TH_MEAN; i++) {
-        short o = tw.g.it[th.mb[i]].obj;
-        if (i == m) tw.g.o[o].ob_state |= OS_CHECKED | OS_SELECTED; else tw.g.o[o].ob_state &= ~(OS_CHECKED | OS_SELECTED);
+        short o = tw.gp->it[th.mb[i]].obj;
+        if (i == m) tw.gp->o[o].ob_state |= OS_CHECKED | OS_SELECTED; else tw.gp->o[o].ob_state &= ~(OS_CHECKED | OS_SELECTED);
     }
     if (m < th.r.nsense && th.r.nsyn[m] > 0) strcpy(th.with, th.r.syn[m][0]);
 }
@@ -796,8 +810,8 @@ void find_set(const char *what, const char *with)
 
 static void set_on(TWIN *t, short item, int on)
 {
-    short o = t->g.it[item].obj;
-    if (on) t->g.o[o].ob_state |= OS_SELECTED; else t->g.o[o].ob_state &= ~OS_SELECTED;
+    short o = t->gp->it[item].obj;
+    if (on) t->gp->o[o].ob_state |= OS_SELECTED; else t->gp->o[o].ob_state &= ~OS_SELECTED;
 }
 
 static void fit_status(char *out, int text, const char *name)
@@ -818,10 +832,10 @@ static char ix_status[48];
 static void ix_read(void)
 {
     int i;
-    for (i = 0; i < 6; i++) if (dlg_on(&iw.g, ix_f[i])) ix_fmt = i;
-    for (i = 0; i < 5; i++) if (dlg_on(&iw.g, ix_c[i])) ix_cs = i;
-    ix_join = dlg_on(&iw.g, ix_j[1]);
-    ix_into = dlg_on(&iw.g, ix_i[1]);
+    for (i = 0; i < 6; i++) if (dlg_on(iw.gp, ix_f[i])) ix_fmt = i;
+    for (i = 0; i < 5; i++) if (dlg_on(iw.gp, ix_c[i])) ix_cs = i;
+    ix_join = dlg_on(iw.gp, ix_j[1]);
+    ix_into = dlg_on(iw.gp, ix_i[1]);
 }
 
 static void ix_enable(void)
@@ -834,9 +848,10 @@ static void ix_enable(void)
 
 static int ix_build(void)
 {
-    DLG *g = &iw.g;
+    DLG *g;
     int i;
     if (!tw_tree(&iw, RT_IMPORT)) return 0;
+    g = iw.gp;
     for (i = 0; i < 6; i++) { ix_f[i] = (short)(WIX_F0 + i); dlg_set(g, ix_f[i], ix_fmt == i); }
     for (i = 0; i < 5; i++) { ix_c[i] = (short)(WIX_C0 + i); dlg_set(g, ix_c[i], ix_cs == (i ? i : CS_AUTO)); }
     ix_j[0] = WIX_J0; ix_j[1] = WIX_J1;
@@ -911,10 +926,10 @@ static char ex_docline[48], ex_status[48];
 static void ex_read(void)
 {
     int i;
-    for (i = 0; i < 6; i++) if (dlg_on(&ew.g, ex_f[i])) ex_fmt = i;
-    ex_crlf = dlg_on(&ew.g, ex_e[0]);
-    for (i = 0; i < 4; i++) if (dlg_on(&ew.g, ex_c[i])) ex_cs = i + 1;
-    for (i = 0; i < NPDFRES; i++) if (dlg_on(&ew.g, ex_p[i])) pdf_scale = i + 1;
+    for (i = 0; i < 6; i++) if (dlg_on(ew.gp, ex_f[i])) ex_fmt = i;
+    ex_crlf = dlg_on(ew.gp, ex_e[0]);
+    for (i = 0; i < 4; i++) if (dlg_on(ew.gp, ex_c[i])) ex_cs = i + 1;
+    for (i = 0; i < NPDFRES; i++) if (dlg_on(ew.gp, ex_p[i])) pdf_scale = i + 1;
 }
 
 static void ex_name(void)
@@ -939,9 +954,10 @@ static void ex_enable(void)
 
 static int ex_build(void)
 {
-    DLG *g = &ew.g;
+    DLG *g;
     int i;
     if (!tw_tree(&ew, RT_EXPORT)) return 0;
+    g = ew.gp;
     for (i = 0; i < 6; i++) { ex_f[i] = (short)(WEX_F0 + i); dlg_set(g, ex_f[i], ex_fmt == i); }
     ex_e[0] = WEX_E0; ex_e[1] = WEX_E1;
     dlg_set(g, ex_e[0], ex_crlf); dlg_set(g, ex_e[1], !ex_crlf);
@@ -1007,14 +1023,14 @@ void xfer_refresh(void)
 {
     if (ew.open) {
         char old[48];
-        int dis = (ew.g.o[ew.g.it[ex_go].obj].ob_state & OS_DISABLED) != 0;
+        int dis = (ew.gp->o[ew.gp->it[ex_go].obj].ob_state & OS_DISABLED) != 0;
         strcpy(old, ex_docline);
         ex_enable();
-        if (strcmp(old, ex_docline) || dis != ((ew.g.o[ew.g.it[ex_go].obj].ob_state & OS_DISABLED) != 0))
+        if (strcmp(old, ex_docline) || dis != ((ew.gp->o[ew.gp->it[ex_go].obj].ob_state & OS_DISABLED) != 0))
             tw_redraw(&ew);
     }
     if (iw.open) {
-        int dis = (iw.g.o[iw.g.it[ix_i[1]].obj].ob_state & OS_DISABLED) != 0;
+        int dis = (iw.gp->o[iw.gp->it[ix_i[1]].obj].ob_state & OS_DISABLED) != 0;
         if (dis != !live_doc(NULL)) ix_changed(-1);
     }
 }
@@ -1027,7 +1043,7 @@ void xfer_refresh(void)
  * window's title bar and the window has the frame */
 static void tw_untitle(TWIN *t, short title)
 {
-    DLG *g = &t->g;
+    DLG *g = t->gp;
     short i, dy = (short)(hchar + hchar / 2);
     if (title > 0 && title < g->n) {
         g->o[title].ob_flags |= OF_HIDETREE;
@@ -1054,7 +1070,7 @@ static const int pw_order[NDATEFMT_ST] = { DT_SHORT, DT_DOTS, DT_US, DT_ISO, DT_
  * the text cursor); first: the first one */
 static void pw_edits(short obj, int on, short *first)
 {
-    DLG *g = &pw.g;
+    DLG *g = pw.gp;
     short c;
     for (c = g->o[obj].ob_head; c > 0 && c != obj; c = g->o[c].ob_next) {
         if (g->o[c].ob_type == G_FTEXT || g->o[c].ob_type == G_FBOXTEXT) {
@@ -1067,7 +1083,7 @@ static void pw_edits(short obj, int on, short *first)
 
 static void pw_page(int n)
 {
-    DLG *g = &pw.g;
+    DLG *g = pw.gp;
     short first = 0, show = n ? PF_PAGE1 : PF_PAGE0, hide = n ? PF_PAGE0 : PF_PAGE1;
     tw_cursor(&pw, 0);
     g->o[hide].ob_flags |= OF_HIDETREE;
@@ -1082,13 +1098,14 @@ static void pw_page(int n)
 
 static int pw_build(void)
 {
-    DLG *g = &pw.g;
+    DLG *g;
     int i;
     for (i = 0; i < NDATEFMT_ST; i++) fmt_now(pw_dl[i], pw_order[i]);
     sprintf(pw_mins, "%d", pref_asmin);
     strncpy(pw_dd, pref_docdir, 40);
     pw_dd[40] = 0;
     if (!tw_tree(&pw, RT_PREFS)) return 0;
+    g = pw.gp;
     for (i = 0; i < NLANG; i++) dlg_set(g, (short)(PF_LANG0 + i), ui_lang == i);
     for (i = 0; i < NDATEFMT_ST; i++) { dlg_str(g, (short)(PF_DATE0 + i), pw_dl[i]); dlg_set(g, (short)(PF_DATE0 + i), pref_date == pw_order[i]); }
     for (i = 0; i < NPAPER; i++) dlg_set(g, (short)(PF_PAPER0 + i), pref_paper == i);
@@ -1106,6 +1123,9 @@ static int pw_build(void)
     dlg_set(g, PF_LIVE, pref_live);
     for (i = 0; i < NPDFRES; i++) dlg_set(g, (short)(PF_PDF1 + i), pdf_scale == i + 1);
     dlg_edtext(g, PF_DOCDIR, pw_dd);
+    dlg_set(g, PF_BGPRINT, pref_bgprint);
+    dlg_set(g, PF_FSSYS, !fsel_own());
+    dlg_set(g, PF_FSOWN, fsel_own());
     dlg_tree_end(g);
     tw_untitle(&pw, PF_TITLE);
     pw.def = (short)item_of(&pw, PF_OK);
@@ -1117,7 +1137,7 @@ static int pw_build(void)
 
 static void pw_changed(short it)
 {
-    short o = it >= 0 ? pw.g.it[it].obj : -1;
+    short o = it >= 0 ? pw.gp->it[it].obj : -1;
     if (o != PF_TAB0 && o != PF_TAB1) return;
     pw_page(o == PF_TAB1);
     tw_redraw(&pw);
@@ -1125,7 +1145,7 @@ static void pw_changed(short it)
 
 static void pw_act(short it, int clicks)
 {
-    DLG *g = &pw.g;
+    DLG *g = pw.gp;
     short o = it >= 0 ? g->it[it].obj : -1;
     int i, v;
     (void)clicks;
@@ -1143,6 +1163,8 @@ static void pw_act(short it, int clicks)
     for (i = 0; i < 3; i++) if (dlg_on(g, (short)(PF_KEEP0 + i))) lay_keep = i;
     pref_live = dlg_on(g, PF_LIVE);
     for (i = 0; i < NPDFRES; i++) if (dlg_on(g, (short)(PF_PDF1 + i))) pdf_scale = i + 1;
+    pref_bgprint = dlg_on(g, PF_BGPRINT);
+    pref_fsel = dlg_on(g, PF_FSOWN);
     for (i = 0; i < NLANG; i++)
         if (dlg_on(g, (short)(PF_DICT0 + i)) && i != spell_lang) {   /* another dictionary: loaded when next needed */
             spell_unload_main();
@@ -1197,12 +1219,12 @@ static void ct_fields(void)
     for (i = 0; i < TH_NROLES; i++)
         for (k = 0; k < 3; k++) sprintf(th_f[i][k], "%d", theme_rgb[i][k]);
     sprintf(th_pick, "%.17s", theme_id == THEME_CUSTOM ? L(S_THEME_CUSTOM) : theme_name(theme_id));
-    dlg_str(&thw.g, DTH_PICK, th_pick);
+    dlg_str(thw.gp, DTH_PICK, th_pick);
 }
 
 static int ct_build(void)
 {
-    DLG *g = &thw.g;
+    DLG *g;
     DOC *d = top_doc();
     int i, k;
     if (!theme_possible()) return 0;
@@ -1213,6 +1235,7 @@ static int ct_build(void)
     th_shown = th_kept = 0;
     memcpy(th_grgb, theme_rgb, sizeof th_grgb);
     if (!tw_tree(&thw, RT_THEME)) return 0;
+    g = thw.gp;
     theme_userdef(&g->o[DTH_PREVIEW], &th_pv, 2);   /* the picture of it */
     if (th_wid >= 0) { theme_id = th_wid; memcpy(theme_rgb, th_wrgb, sizeof th_wrgb); }   /* this window's own */
     dlg_set(g, DTH_THISDOC, th_wid >= 0);
@@ -1245,7 +1268,7 @@ static void ct_closed(void)
 
 static void ct_act(short it, int clicks)
 {
-    DLG *g = &thw.g;
+    DLG *g = thw.gp;
     short o = it >= 0 ? g->it[it].obj : -1, x, y;
     unsigned char erg[TH_NROLES][3];
     int i, k, v, eid;

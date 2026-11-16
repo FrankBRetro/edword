@@ -296,7 +296,8 @@ void  gfx_init(void);
 void  gfx_free(void);
 enum { IC_BOLD, IC_ITALIC, IC_UNDER, IC_LEFT, IC_CENTRE, IC_RIGHT, IC_JUSTIFY,
        IC_FONT, IC_SIZE, IC_COLOUR, IC_SPELL, IC_CODES, IC_BULLETS, IC_NUMBERS,
-       IC_UNDO, IC_REDO, IC_ZOOM, IC_TABLE, IC_RULER, IC_GUIDES, IC_PGBRK, IC_COUNT };
+       IC_UNDO, IC_REDO, IC_ZOOM, IC_TABLE, IC_RULER, IC_GUIDES, IC_PGBRK,
+       IC_PREVIEW, IC_SPLITWIN, IC_BACK, IC_PREVPG, IC_NEXTPG, IC_PRINT, IC_PDF, IC_PVZOOM, IC_BMARK, IC_COUNT };   /* tools/icons.h order */
 
 /* character sets */
 const char *lat(const char *st);           /* ST -> Latin-1, into a ring of buffers */

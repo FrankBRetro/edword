@@ -59,6 +59,26 @@ static void scrap_clear(void)
     for (i = 0; old[i]; i++) { scrap_file(path, old[i]); remove(path); }
 }
 
+/* Other programs are told the clipboard changed (SC_CHANGED, through the
+ * AES's broadcast: MultiTOS, MagiC and others with AES 4), so a viewer
+ * or another editor can show the new contents. */
+static void scrap_changed(int picture)
+{
+#ifndef PCGEM
+    short m[8];
+    if (aes_global[0] < 0x0400) return;
+    memset(m, 0, sizeof m);
+    m[0] = 80;                                      /* SC_CHANGED */
+    m[1] = aes_global[2];
+    m[3] = (short)(picture ? 0x0002 : 0x0001);      /* a picture, or text */
+    m[4] = picture ? 0x2E49 : 0x2E52;               /* ".I" / ".R" */
+    m[5] = picture ? 0x4D47 : 0x5446;               /* "MG" / "TF" */
+    shel_write(7, 0, 0, (char *)m, NULL);           /* SWM_BROADCAST */
+#else
+    (void)picture;
+#endif
+}
+
 /* ---- the document clipboard -------------------------------------------- */
 
 static int range_doc(DOC *d, long a, long b, DOC *t)
@@ -75,9 +95,8 @@ static int range_doc(DOC *d, long a, long b, DOC *t)
 /* a selected picture or drawing goes to the clipboard as SCRAP.IMG, as
  * Papyrus and other programs do (a drawing as it looks, in black and
  * white) */
-static int copy_object(DOC *d, const OBJ *o)
+static int object_save(DOC *d, const OBJ *o, const char *path, int scrap)
 {
-    char path[300];
     IMG im, *src = NULL;
     int ok;
     memset(&im, 0, sizeof im);
@@ -96,12 +115,19 @@ static int copy_object(DOC *d, const OBJ *o)
     }
     if (!src) return 0;
     busy_ptr(1);
-    scrap_clear();
-    scrap_file(path, "SCRAP.IMG");
+    if (scrap) scrap_clear();
     ok = img_save(src, path);
     busy_ptr(0);
     img_free(&im);
+    if (ok && scrap) scrap_changed(1);
     return ok;
+}
+
+static int copy_object(DOC *d, const OBJ *o)
+{
+    char path[300];
+    scrap_file(path, "SCRAP.IMG");
+    return object_save(d, o, path, 1);
 }
 
 /* copy the selection to the GEM clipboard (and the internal one) */
@@ -112,9 +138,14 @@ int clip_copy(DOC *d)
     char path[300];
     int ok;
     if (d->selobj >= 0 && d->selobj < d->a.nobj) return copy_object(d, &d->a.objs[d->selobj]);
-    if (!doc_sel(d, &a, &b)) return 0;
-    doc_copy(d);
-    if (!range_doc(d, a, b, &t)) return 0;
+    if (d->colsel && d->anchor >= 0) {           /* a block: its lines' parts */
+        if (col_has_table(d)) { alert(1, 1, AL_COLSEL_TABLE, AB_OK); return 0; }
+        if (!col_copy(d, &t)) return 0;
+    } else {
+        if (!doc_sel(d, &a, &b)) return 0;
+        doc_copy(d);
+        if (!range_doc(d, a, b, &t)) return 0;
+    }
     busy_ptr(1);
     scrap_clear();
     scrap_file(path, "SCRAP.RTF");
@@ -123,6 +154,7 @@ int clip_copy(DOC *d)
     ok = text_export(&t, path, 1, CS_ATARI) && ok;
     busy_ptr(0);
     doc_free(&t);
+    if (ok) scrap_changed(0);
     return ok;
 }
 
@@ -142,8 +174,22 @@ static int clip_get(DOC *d, DOC *t)
 
 static int insert_doc(DOC *d, DOC *t)
 {
-    long a, b, from = doc_sel(d, &a, &b) ? a : d->cursor;
-    int ok = t->len > 0 && doc_insert_doc(d, t, 0, t->len);
+    long a, b, from;
+    int ok;
+    if (d->colsel && d->anchor >= 0 && !block_delete(d)) d->colsel = 0;
+    from = doc_sel(d, &a, &b) ? a : d->cursor;
+    if (d->colmode && t->len > 0) {              /* Column Select: pasted as a block */
+        DOC tmp;
+        long k;
+        /* in d's paragraph and table numbers */
+        doc_init(&tmp);
+        ok = doc_insert_doc(&tmp, t, 0, t->len) ? 1 : 0;
+        for (k = 0; k < tmp.len; k++) tmp.text[k].para = 0;
+        doc_delete_sel(d);
+        from = d->cursor;
+        ok = ok && col_paste(d, &tmp);
+        doc_free(&tmp);
+    } else ok = t->len > 0 && doc_insert_doc(d, t, 0, t->len);
     if (ok) after_edit(d, from);
     return ok;
 }
@@ -218,6 +264,296 @@ char *clip_get_text(long *n)
     }
     *n = k;
     return (char *)b;
+}
+
+/* ---- the clipboard's ten slots ------------------------------------------- */
+
+/* Each slot is a file in the clipboard folder, EDSLOT1.RTF to EDSLOT0.RTF,
+ * emptied when EdWord starts and when it quits: they last while it runs.
+ * n is 0-9 for slots 1-9, 0 */
+static void slot_path(int n, char *path)
+{
+    char name[16];
+    sprintf(name, "EDSLOT%d.RTF", (n + 1) % 10);
+    scrap_file(path, name);
+}
+
+/* a picture or drawing in a slot: EDSLOTn.IMG instead */
+static void slot_img(int n, char *path)
+{
+    char name[16];
+    sprintf(name, "EDSLOT%d.IMG", (n + 1) % 10);
+    scrap_file(path, name);
+}
+
+static int slot_has_img(int n)
+{
+    char path[300];
+    FILE *f;
+    slot_img(n, path);
+    if ((f = fopen(path, "rb")) == NULL) return 0;
+    fclose(f);
+    return 1;
+}
+
+static int slot_load(int n, DOC *t)
+{
+    char path[300];
+    FILE *f;
+    doc_init(t);
+    slot_path(n, path);
+    if ((f = fopen(path, "rb")) == NULL) return 0;
+    fclose(f);
+    return rtf_import(t, path) && t->len > 0;
+}
+
+/* the selection (or block) into slot n */
+int slot_copy(DOC *d, int n)
+{
+    DOC t;
+    long a, b;
+    char path[300];
+    int ok;
+    if (d->selobj >= 0 && d->selobj < d->a.nobj) {          /* a picture or drawing */
+        slot_img(n, path);
+        ok = object_save(d, &d->a.objs[d->selobj], path, 0);
+        if (ok) { slot_path(n, path); remove(path); }
+        else alert(1, 3, AL_CANT_WRITE, AB_OK);
+        return ok;
+    }
+    if (d->colsel && d->anchor >= 0) {
+        if (col_has_table(d)) { alert(1, 1, AL_COLSEL_TABLE, AB_OK); return 0; }
+        if (!col_copy(d, &t)) return 0;
+    } else {
+        if (!doc_sel(d, &a, &b)) return 0;
+        if (!range_doc(d, a, b, &t)) return 0;
+    }
+    busy_ptr(1);
+    slot_path(n, path);
+    ok = rtf_export(&t, path);
+    busy_ptr(0);
+    doc_free(&t);
+    if (!ok) alert(1, 3, AL_CANT_WRITE, AB_OK);
+    else { slot_img(n, path); remove(path); }
+    return ok;
+}
+
+int slot_paste(DOC *d, int n)
+{
+    DOC t;
+    int ok;
+    char ip[300];
+    if (slot_has_img(n)) { slot_img(n, ip); return picture_insert(d, ip); }
+    busy_ptr(1);
+    t.ins = d->ins;
+    ok = slot_load(n, &t);
+    busy_ptr(0);
+    if (!ok) { doc_free(&t); alert(1, 1, AL_SLOT_EMPTY, AB_OK, (n + 1) % 10); return 0; }
+    ok = insert_doc(d, &t);
+    doc_free(&t);
+    return ok;
+}
+
+/* Tools > Clear Clipboard Slots: all ten emptied */
+void slots_clear(void)
+{
+    char path[300];
+    int n;
+    for (n = 0; n < 10; n++) {
+        slot_path(n, path); remove(path);
+        slot_img(n, path); remove(path);
+    }
+}
+
+/* the start of slot n's text, for the popup ("" if it's empty) */
+void slot_peek(int n, char *out, int max)
+{
+    DOC t;
+    long k;
+    int i = 0;
+    out[0] = 0;
+    if (slot_has_img(n)) {                       /* a picture: its name and size */
+        char path[300];
+        IMG im;
+        slot_img(n, path);
+        memset(&im, 0, sizeof im);
+        if (img_load(path, &im)) { sprintf(out, "[IMG %dx%d]", im.w, im.h); img_free(&im); }
+        else strcpy(out, "[IMG]");
+        return;
+    }
+    if (slot_load(n, &t))
+        for (k = 0; k < t.len && i < max - 1; k++) {
+            unsigned char c = t.text[k].ch;
+            if (ISEND(c) || c == '\t') { if (i && out[i - 1] != ' ') out[i++] = ' '; continue; }
+            out[i++] = (char)c;
+        }
+    if (i == max - 1 && max > 4) { out[max - 4] = out[max - 3] = out[max - 2] = '.'; }
+    out[i] = 0;
+    doc_free(&t);
+}
+
+/* Tools > Clipboard Slots: all ten in a document of their own, each under
+ * a heading "Slot n"; saving it writes them back */
+int slots_fill(DOC *d)
+{
+    int s, ok = 1, i;
+    long hat[10], hlen[10];
+    for (s = 0; s < 10 && ok; s++) {
+        DOC t;
+        char head[40];
+        CELL c[44];
+        PARA p;
+        int n;
+        doc_init(&t);                       /* (freed below, picture or not) */
+        sprintf(head, L(S_SLOT_N), (s + 1) % 10);
+        for (n = 0; head[n] && n < 40; n++) { c[n] = d->ins; c[n].para = 0; c[n].ch = (unsigned char)head[n]; }
+        c[n] = d->ins; c[n].para = 0; c[n].ch = '\n';
+        hat[s] = d->len; hlen[s] = n + 1;
+        ok = doc_insert(d, d->len, c, n + 1);
+        if (slot_has_img(s)) {
+            /* a picture: room under the heading, blank lines it goes beside */
+            char path[300];
+            IMG im;
+            long hpt, k, nlines;
+            CELL nl = c[n];
+            slot_img(s, path);
+            memset(&im, 0, sizeof im);
+            hpt = img_load(path, &im) ? px2pt_y(im.h) : 72;
+            if (im.w && px2pt_x(im.w) > PS(d).w - PS(d).ml - PS(d).mr)       /* made to fit the width */
+                hpt = hpt * (PS(d).w - PS(d).ml - PS(d).mr) / px2pt_x(im.w);
+            img_free(&im);
+            nlines = hpt / 14 + 2;
+            for (k = 0; k < nlines && ok; k++) ok = doc_insert(d, d->len, &nl, 1);
+        } else if (ok && slot_load(s, &t)) { d->cursor = d->len; d->anchor = -1; ok = doc_insert_doc(d, &t, 0, t.len); }
+        doc_free(&t);
+        if (ok && !ISBRK(d->text[d->len - 1].ch)) {
+            CELL e = d->text[d->len - 1];
+            e.ch = '\n';
+            ok = doc_insert(d, d->len, &e, 1);
+        }
+        para_default(&p);
+        p.toc = 1;
+        i = para_find(d, &p);
+        {
+            long k;
+            for (k = hat[s]; k < hat[s] + hlen[s]; k++) d->text[k].para = (unsigned char)i;
+        }
+    }
+    /* the pictures: each under its heading, the text after it moved down */
+    for (s = 0; s < 10 && ok; s++) {
+        char path[300];
+        int o;
+        if (!slot_has_img(s)) continue;
+        doc_touch_all(d);
+        doc_layout(d);
+        d->cursor = hat[s];
+        slot_img(s, path);
+        o = picture_add(d, path);
+        if (o >= 0) {
+            OBJ *ob = &d->a.objs[o];
+            PGFMT f;
+            page_fmt(d, ob->page, &f);
+            ob->x = (long)f.ml * TWIPS;                      /* at the left, the blank lines beside it */
+            ob->y += 10L * TWIPS;                            /* clear of the heading (and the gap round it) */
+            sprintf(d->imgs[ob->img].name, "EDSLOT%d.IMG", (s + 1) % 10);
+        }
+    }
+    d->cursor = 0;
+    d->anchor = -1;
+    d->selobj = -1;
+    doc_touch_all(d);
+    return ok;
+}
+
+/* the slot each heading starts, by where they are (page, then down it) */
+static int slot_heads(DOC *d, long *pos)
+{
+    long k = 0;
+    int s, n = 0;
+    for (s = 0; s < 10; s++) pos[s] = -1;
+    while (k < d->len) {
+        long e = k;
+        PARA *p = doc_para_at(d, k);
+        while (e < d->len && !ISBRK(d->text[e].ch)) e++;
+        if (p->toc == 1) {
+            char want[40], got[40];
+            long i;
+            for (i = 0; i < e - k && i < 39; i++) got[i] = (char)d->text[k + i].ch;
+            got[i] = 0;
+            for (s = 0; s < 10; s++) { sprintf(want, L(S_SLOT_N), (s + 1) % 10); if (!strcmp(want, got)) { pos[s] = k; n++; } }
+        }
+        k = e + 1;
+    }
+    return n;
+}
+
+/* the slot whose heading is the last one above an object */
+static int slot_of_obj(DOC *d, const long *pos, const OBJ *o)
+{
+    int s, best = -1;
+    long bp = -1, by = -1, oy = tw2px_y(o->y);
+    for (s = 0; s < 10; s++) {
+        LINE *ln;
+        if (pos[s] < 0) continue;
+        ln = &d->lines[doc_find_line(d, pos[s])];
+        if (ln->page > o->page || (ln->page == o->page && ln->py > oy)) continue;
+        if (ln->page > bp || (ln->page == bp && ln->py > by)) { bp = ln->page; by = ln->py; best = s; }
+    }
+    return best;
+}
+
+/* the slots' document saved: each heading's text back to its slot */
+int slots_save(DOC *d)
+{
+    long k = 0, start = -1, hp[10];
+    int cur = -1, ok = 1, i, pic[10];
+    char path[300];
+    /* the pictures and drawings first: each to the slot it is under */
+    doc_layout(d);
+    slot_heads(d, hp);
+    for (i = 0; i < 10; i++) pic[i] = 0;
+    for (i = 0; i < d->a.nobj; i++) {
+        int sl = slot_of_obj(d, hp, &d->a.objs[i]);
+        if (sl < 0 || pic[sl]) continue;
+        slot_img(sl, path);
+        if (object_save(d, &d->a.objs[i], path, 0)) pic[sl] = 1; else ok = 0;
+    }
+    for (i = 0; i < 10; i++) if (!pic[i]) { slot_img(i, path); remove(path); }   /* taken out */
+    while (k <= d->len) {
+        long e = k;
+        int head = -1;
+        if (k < d->len) {
+            PARA *p = doc_para_at(d, k);
+            while (e < d->len && !ISBRK(d->text[e].ch)) e++;
+            if (p->toc == 1) {
+                int s;
+                char want[40], got[40];
+                long i;
+                for (i = 0; i < e - k && i < 39; i++) got[i] = (char)d->text[k + i].ch;
+                got[i] = 0;
+                for (s = 0; s < 10; s++) { sprintf(want, L(S_SLOT_N), (s + 1) % 10); if (!strcmp(want, got)) head = s; }
+            }
+        }
+        if (k >= d->len || head >= 0) {
+            if (cur >= 0) {         /* the slot before: start..k, without its last Return */
+                long b = k;
+                DOC t;
+                if (b > start && ISBRK(d->text[b - 1].ch)) b--;
+                slot_path(cur, path);
+                if (pic[cur]) remove(path);                       /* a picture: that is the slot */
+                else if (b > start && range_doc(d, start, b, &t)) {
+                    ok = rtf_export(&t, path) && ok;
+                    doc_free(&t);
+                } else remove(path);
+            }
+            if (k >= d->len) break;
+            cur = head;
+            start = e < d->len ? e + 1 : e;
+        }
+        k = e + 1;
+    }
+    if (ok) d->dirty = 0;
+    return ok;
 }
 
 /* ---- Insert > File ------------------------------------------------------ */

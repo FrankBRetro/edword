@@ -47,8 +47,11 @@ enum {
     /* pictures and drawings */
     C_OBJPROP, C_OBJDEL, C_OBJEDIT,
     C_TEMPLATE, C_THEME,
+    /* clone, bookmarks, clipboard slots, column selection, split window, the preview's bar */
+    C_CLONE, C_FINDPREV, C_COLSEL, C_SLOTS, C_GOTOBM, C_INSBM, C_SPLITWIN, C_CUTSLOT, C_COPYSLOT, C_PASTESLOT,
+    C_PVPREV, C_PVNEXT, C_PVZOOM, C_CLEARSLOTS,
     C_LAST,
-    C_FONT0 = 120, C_SIZE0 = 200, C_COLOR0 = 250, C_UD0 = 260, C_WIN0 = 270   /* C_LAST below C_FONT0 (gem.c checks) */
+    C_FONT0 = 140, C_SIZE0 = 220, C_COLOR0 = 270, C_UD0 = 280, C_WIN0 = 290   /* C_LAST below C_FONT0 (gem.c checks) */
 };
 #define NCMD (C_WIN0 + MAX_DOCS)
 
@@ -91,7 +94,9 @@ extern DOC  *docs[MAX_DOCS];
 extern char  progdir[256];
 extern const short sizes[];
 extern int   pref_date, pref_toolbar, pref_paper, pref_land;
-extern int   pref_autosave, pref_asmin, pref_asmode, pref_display, pref_live;
+extern int   pref_autosave, pref_asmin, pref_asmode, pref_display, pref_live, pref_bgprint, pref_fsel;
+int   fsel_own(void);           /* EdWord's own file selector is the one used */
+int   xgdos_loaded(void);
 extern char  pref_docdir[128], tpl_name[48], tpl_addr[3][48], tpl_title[48];
 void  close_pristine(DOC *keep);
 int   dlg_template(int *kind);
@@ -226,6 +231,12 @@ int   clip_put_text(const char *s, long n);
 char *clip_get_text(long *n);
 int   insert_file(DOC *d, const char *path);
 int   insert_loaded(DOC *d, DOC *t);
+int   slot_copy(DOC *d, int n);         /* the clipboard's slots: n 0-9 for 1-9, 0 */
+int   slot_paste(DOC *d, int n);
+void  slot_peek(int n, char *out, int max);
+int   slots_fill(DOC *d);
+int   slots_save(DOC *d);
+void  slots_clear(void);
 int   tc_init(void);                 /* gemobj.c: full colour pictures */
 int   pal_init(void);                /* gemobj.c: colour pictures on 4-256 pens */
 void  autosave_tick(void);
@@ -253,6 +264,11 @@ void  draw_preview_page(DOC *d, int page, long ox, long oy, long n, long den);
 int   export_pdf(DOC *d, const char *path, void (*gauge)(long done, long total));
 int   printer_name(char *out);
 int   print_doc(DOC *d, const unsigned char *sel, int copies, int colour);   /* sel: a flag per page, NULL all */
+int   bgprint_start(DOC *d, const unsigned char *sel, int copies, int colour);  /* in the background (XGDOS) */
+int   bgprint_active(void);
+int   bgprint_idle(long ms);
+void  bgprint_doc_closed(DOC *d);
+void  bgprint_finish(void);
 int   word_misspelt(DOC *d, long a, long b);
 void  img_cache_free(DOC *d);
 
@@ -281,6 +297,7 @@ typedef struct {
     short   cancel;                 /* the Cancel button (Esc)                      */
     short   stay;                   /* exit buttons leave the window open: the next
                                      * dlg_run carries on in it; dlg_close ends it  */
+    short   tree;                   /* the resource tree + 1 (0: built by hand)     */
 } DLG;
 short dlg_run(DLG *g);
 int   field_edit(OBJECT *tree, short obj, short key, short *pos);   /* typing into a field, on every AES */
@@ -319,6 +336,10 @@ int   dlg_goto(DOC *d, int *page);
 int   dlg_print(DOC *d, const char *printer, unsigned char *sel, int *copies, int *colour);
 void  dlg_init(void);
 void  dlg_front(void);
+int   dlg_open_for(DOC *d);             /* a dialog for d (NULL: any) is open: to the front */
+int   dlg_dispatch_msg(short *msg);     /* events for open dialogs, from other loops */
+int   dlg_dispatch_key(short ks, short key);
+int   dlg_dispatch_click(short mx, short my, short br);
 extern int dlg_busy, aes_3d, aes_magic, is_magic, win_dialogs;
 int   winpos_get(const char *key, short *x, short *y, short *w, short *h);
 void  winpos_set(const char *key, short x, short y, short w, short h);
@@ -347,6 +368,7 @@ void  import_open(void);
 void  export_open(void);
 void  xfer_refresh(void);
 void  find_again(DOC *d);
+void  find_again_dir(DOC *d, int back);
 void  spell_run(DOC *d);
 void  spell_close(void);
 DOC  *spell_doc(void);
@@ -355,14 +377,32 @@ void  live_popup(DOC *d, long a, long b, short mx, short my);
 int   spell_ensure(int quiet);
 void  find_set(const char *what, const char *with);
 
-/* gemtool.c: the font selector and print preview windows */
-extern const TOOL fontsel_tool, preview_tool;
+/* gemtool.c: the font selector window; the print preview, a view of a
+ * document's window */
+extern const TOOL fontsel_tool;
 void  fontsel_open(void);
 void  fontsel_sync(void);
-void  preview_open(DOC *d);
+void  preview_draw(DOC *d, const GRECT *a, GRECT *clip);
+void  preview_sliders(DOC *d, const GRECT *a, short *vsz, short *vpos, short *hsz, short *hpos);
+void  preview_goto(DOC *d, long page);
+void  preview_zoom(DOC *d, short mx, short my, const GRECT *a);
+void  preview_area_click(DOC *d, const GRECT *a, short mx, short my);
+void  preview_scroll(DOC *d, const GRECT *a, short *msg);
+int   preview_key(DOC *d, short ks, short key);
 void  preview_changed(DOC *d);
 int   preview_idle(int run);
-int   preview_area(GRECT *r);
+/* gemwin.c: split window, column selection */
+int   block_delete(DOC *d);
+void  pane_swap_doc(DOC *d);
+int   doc_area(DOC *d, GRECT *r);
+void  sheet_pos(DOC *d, short w, short h, short *x, short *y);  /* a document's dialogs: sheets on its window */
+void  sheets_place(DOC *d);
+void  sheets_top(DOC *d);
+void  fsel_top(DOC *d);
+int   fsel_for(DOC *d);              /* d's file selector is open: its window is greyed */
+void  fsel_follow(DOC *d);
+extern DOC *ui_doc;             /* the document a command (and its dialogs) is for */
+int   fsel_window(char *dir, char *name, const char *title);   /* gemfsel.c: 1 OK, 0 Cancel, -1 none */
 
 /* gemobj.c: pictures and drawings in the document view */
 extern const TOOL draw_tool, prefs_tool, theme_tool;
@@ -373,6 +413,7 @@ void  obj_draw_handles(DOC *d, GRECT *tp);
 int   obj_key(DOC *d, short ks, short key);
 void  cmd_picture(DOC *d);
 int   picture_insert(DOC *d, const char *path);
+int   picture_add(DOC *d, const char *path);    /* no redrawing: its object, or -1 */
 void  cmd_drawing(DOC *d);
 void  obj_props(DOC *d);
 void  obj_delete(DOC *d);

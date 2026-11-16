@@ -222,10 +222,10 @@ fr: Tout sélectionner
 cs: Vybrat vše
 @M_FIND
 en: Find and Replace...
-de: Suchen und Ersetzen...
-es: Buscar y reemplazar...
-it: Trova e sostituisci...
-fr: Rechercher/Remplacer...
+de: Suchen/Ersetzen...
+es: Buscar...
+it: Trova...
+fr: Rechercher...
 cs: Najít a nahradit...
 @M_FINDNEXT
 en: Find Next
@@ -254,14 +254,14 @@ cs: Čas
 en: Page Break
 de: Seitenumbruch
 es: Salto de página
-it: Interruzione pagina
+it: Fine pagina
 fr: Saut de page
 cs: Konec stránky
 @M_COLBRK
 en: Column Break
 de: Spaltenumbruch
 es: Salto de columna
-it: Interruzione colonna
+it: Fine colonna
 fr: Saut de colonne
 cs: Konec sloupce
 @M_TBLINS
@@ -571,10 +571,10 @@ cs: Stránky
 @M_SPLIT
 en: Split View (Codes)
 de: Geteilt (Codes)
-es: Vista dividida (cód.)
-it: Vista divisa (codici)
-fr: Vue partagée (codes)
-cs: Dělený pohled (kódy)
+es: Dividida (cód.)
+it: Divisa (codici)
+fr: Partagée (codes)
+cs: Dělený (kódy)
 @M_VCODES
 en: Quick Edit
 de: Schnellbearbeitung
@@ -600,7 +600,7 @@ cs: Zmenšit
 en: Fit Page Width
 de: Seitenbreite
 es: Ajustar al ancho
-it: Adatta alla larghezza
+it: Adatta larghezza
 fr: Pleine largeur
 cs: Na šířku stránky
 @M_ZOOMPAGE
@@ -613,7 +613,7 @@ cs: Celá stránka
 @M_TOOLBAR
 en: Toolbar
 de: Symbolleiste
-es: Barra de herramientas
+es: Barra de botones
 it: Barra strumenti
 fr: Barre d'outils
 cs: Panel nástrojů
@@ -2959,8 +2959,8 @@ en: Go to Page...
 de: Gehe zu Seite...
 es: Ir a la página...
 it: Vai alla pagina...
-fr: Aller à la page...
-cs: Přejít na stránku...
+fr: À la page...
+cs: Na stránku...
 @M_RULERS
 en: Rulers
 de: Lineale
@@ -3857,3 +3857,264 @@ es: Alrededor:
 it: Intorno pagina:
 fr: Autour page :
 cs: Kolem stránky:
+
+# ---- clone, bookmarks, clipboard slots, split window, preview bar ---------
+@M_CLONE
+en: Clone Document
+de: Dokument duplizieren
+es: Duplicar documento
+it: Duplica documento
+fr: Dupliquer le document
+cs: Klonovat dokument
+@M_FINDPREV
+en: Find Previous
+de: Rückwärts suchen
+es: Buscar anterior
+it: Trova precedente
+fr: Précédent
+cs: Najít předchozí
+@M_COLSEL
+en: Column Select
+de: Spaltenauswahl
+es: En columna
+it: A colonne
+fr: En colonne
+cs: Výběr sloupce
+@M_SLOTS
+en: Clipboard Slots...
+de: Ablagefächer...
+es: Ranuras del portapapeles...
+it: Slot degli appunti...
+fr: Emplacements du presse-papiers...
+cs: Pozice schránky...
+@M_GOTOBM
+en: Go to Bookmark...
+de: Zu Lesezeichen...
+es: Ir al marcador...
+it: Al segnalibro...
+fr: Au signet...
+cs: Na záložku...
+@M_INSBM
+en: Bookmark...
+de: Lesezeichen...
+es: Marcador...
+it: Segnalibro...
+fr: Signet...
+cs: Záložka...
+@M_SPLITWIN
+en: Split Window
+de: Fenster teilen
+es: Dividir ventana
+it: Dividi finestra
+fr: Diviser la fenêtre
+cs: Rozdělit okno
+@M_CUTSLOT
+en: Cut to Slot
+de: Ausschn. in Fach
+es: Cortar a ranura
+it: Taglia nello slot
+fr: Couper (empl.)
+cs: Vyjmout do poz.
+@M_COPYSLOT
+en: Copy to Slot
+de: Kopieren in Fach
+es: Copiar a ranura
+it: Copia nello slot
+fr: Copier (empl.)
+cs: Kopírovat do poz.
+@M_PASTESLOT
+en: Paste from Slot
+de: Einfügen aus Fach
+es: Pegar de ranura
+it: Incolla dallo slot
+fr: Coller (empl.)
+cs: Vložit z poz.
+@S_SLOT_N
+en: Slot %d
+de: Fach %d
+es: Ranura %d
+it: Slot %d
+fr: Emplacement %d
+cs: Pozice %d
+@S_SLOT_EMPTY
+en: (empty)
+de: (leer)
+es: (vacía)
+it: (vuoto)
+fr: (vide)
+cs: (prázdná)
+@S_BMARK_N
+en: Bookmark %d
+de: Lesezeichen %d
+es: Marcador %d
+it: Segnalibro %d
+fr: Signet %d
+cs: Záložka %d
+@S_BM_UNSET
+en: (not set)
+de: (nicht gesetzt)
+es: (sin definir)
+it: (non impostato)
+fr: (non défini)
+cs: (nenastavena)
+@S_BM_REMOVE
+en: Remove Bookmark
+de: Lesezeichen entfernen
+es: Quitar marcador
+it: Rimuovi segnalibro
+fr: Supprimer le signet
+cs: Odstranit záložku
+@S_SLOTS_TITLE
+en: Clipboard Slots
+de: Ablagefächer
+es: Ranuras del portapapeles
+it: Slot degli appunti
+fr: Emplacements
+cs: Pozice schránky
+@S_I_EDITED
+en: Edited
+de: Geändert
+es: Modificado
+it: Modificato
+fr: Modifié
+cs: Upraveno
+@S_I_SAVED
+en: Saved
+de: Gespeichert
+es: Guardado
+it: Salvato
+fr: Enregistré
+cs: Uloženo
+@S_I_PRINTING
+en: Printing %d/%d
+de: Druckt %d/%d
+es: Imprimiendo %d/%d
+it: Stampa %d/%d
+fr: Impression %d/%d
+cs: Tisk %d/%d
+@S_I_COLUMN
+en:  [Column]
+de:  [Spalte]
+es:  [Columna]
+it:  [Colonna]
+fr:  [Colonne]
+cs:  [Sloupec]
+@S_PRINTING_LBL
+en: Printing:
+de: Drucken:
+es: Impresión:
+it: Stampa:
+fr: Impression :
+cs: Tisk:
+@S_BGPRINT
+en: In the background (XGDOS)
+de: Im Hintergrund (XGDOS)
+es: En segundo plano (XGDOS)
+it: In background (XGDOS)
+fr: En arrière-plan (XGDOS)
+cs: Na pozadí (XGDOS)
+@S_FSEL_LBL
+en: File selector:
+de: Dateiauswahl:
+es: Selector de archivos:
+it: Selettore file:
+fr: Sélecteur :
+cs: Výběr souborů:
+@S_FSEL_SYS
+en: System
+de: System
+es: Sistema
+it: Sistema
+fr: Système
+cs: Systémový
+@S_FSEL_OWN
+en: EdWord's own
+de: EdWords eigene
+es: El de EdWord
+it: Quello di EdWord
+fr: Celui d'EdWord
+cs: Vlastní
+@S_FS_DIR
+en: Directory:
+de: Verzeichnis:
+es: Directorio:
+it: Cartella:
+fr: Dossier :
+cs: Adresář:
+@S_FS_SELECTION
+en: Selection:
+de: Auswahl:
+es: Selección:
+it: Selezione:
+fr: Sélection :
+cs: Výběr:
+@S_FS_PARENT
+en: Parent
+de: Zurück
+es: Subir
+it: Su
+fr: Parent
+cs: Nahoru
+@AL_NO_BMARK
+en: Bookmark %d is not set.
+de: Lesezeichen %d ist nicht|gesetzt.
+es: El marcador %d no está|definido.
+it: Il segnalibro %d non è|impostato.
+fr: Le signet %d n'est pas|défini.
+cs: Záložka %d není|nastavena.
+@AL_SLOT_EMPTY
+en: Slot %d is empty.
+de: Fach %d ist leer.
+es: La ranura %d está vacía.
+it: Lo slot %d è vuoto.
+fr: L'emplacement %d est vide.
+cs: Pozice %d je prázdná.
+@AL_BGPRINT_DONE
+en: %s|has been printed.
+de: %s|ist gedruckt.
+es: %s|se ha impreso.
+it: %s|è stato stampato.
+fr: %s|a été imprimé.
+cs: %s|byl vytištěn.
+@AL_COLSEL_TABLE
+en: A column selection can't|take in a table.
+de: Eine Spaltenauswahl kann|keine Tabelle enthalten.
+es: Una selección en columna|no puede incluir tablas.
+it: Una selezione a colonne|non può includere tabelle.
+fr: Une sélection en colonne|ne peut pas inclure de|tableau.
+cs: Výběr sloupce nemůže|obsahovat tabulku.
+@M_CLEARSLOTS
+en: Clear Clipboard Slots...
+de: Ablagefächer leeren...
+es: Vaciar ranuras...
+it: Svuota slot...
+fr: Vider les emplacements...
+cs: Vyprázdnit pozice...
+@AL_CLEAR_SLOTS
+en: Empty all ten clipboard|slots?
+de: Alle zehn Ablagefächer|leeren?
+es: ¿Vaciar las diez ranuras|del portapapeles?
+it: Svuotare tutti i dieci|slot degli appunti?
+fr: Vider les dix|emplacements du|presse-papiers ?
+cs: Vyprázdnit všech deset|pozic schránky?
+@AB_CLEAR_CANCEL
+en: Clear|Cancel
+de: Leeren|Abbruch
+es: Vaciar|Cancelar
+it: Svuota|Annulla
+fr: Vider|Annuler
+cs: Vyprázdnit|Zrušit
+@S_FREE_RAM
+en: Free memory: %ld KB
+de: Freier Speicher: %ld KB
+es: Memoria libre: %ld KB
+it: Memoria libera: %ld KB
+fr: Mémoire libre : %ld Ko
+cs: Volná paměť: %ld kB
+@S_FREE_RAM2
+en: Free memory: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)
+de: Freier Speicher: %ld KB (ST-RAM %ld KB, Fast-RAM %ld KB)
+es: Memoria libre: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)
+it: Memoria libera: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)
+fr: Mémoire libre : %ld Ko (ST RAM %ld Ko, Fast RAM %ld Ko)
+cs: Volná paměť: %ld kB (ST RAM %ld kB, Fast RAM %ld kB)

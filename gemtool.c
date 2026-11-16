@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Francis C Bullen. SPDX-License-Identifier: MIT (see LICENSE) */
 /*
- * gemtool.c - the non-modal tool windows: font selector and print preview
+ * gemtool.c - the font selector window, and the print preview view
  *
  * The font selector is an object tree (with the sample drawn by the VDI);
  * the preview is drawn with the VDI, as a live page. They act on the
@@ -20,11 +20,6 @@
 static void setr(GRECT *r, long x, long y, long w, long h)
 {
     r->g_x = (short)x; r->g_y = (short)y; r->g_w = (short)w; r->g_h = (short)h;
-}
-
-static int in_r(const GRECT *r, short x, short y)
-{
-    return x >= r->g_x && y >= r->g_y && x < r->g_x + r->g_w && y < r->g_y + r->g_h;
 }
 
 static int rc_and(const GRECT *a, GRECT *b)
@@ -465,152 +460,58 @@ void fontsel_key(short ks, short key)
 }
 
 /* ================================================================= */
-/*  Print preview                                                     */
+/*  Print preview: a view of the document's own window                */
 /* ================================================================= */
 
-#define PVKIND (NAME | CLOSER | MOVER | SIZER | FULLER | UPARROW | DNARROW | VSLIDE | LFARROW | RTARROW | HSLIDE)
-
-static struct {
-    int  open, stale, zoom;          /* zoom 0: whole page, 1: 100% */
-    short wh, vsz, vpos, hsz, hpos;
-    DOC *d;
-    int  page;
-    long sx, sy;
-    char name[64];
-} pv = { 0, 0, 0, -1, -1, -1, -1, -1, NULL, 0, 0, 0, "" };
-
-typedef struct { GRECT w, bar, area, prev, next, zoom, pdf, prt, close; long lx; } PVLAY;
-
-static void pv_layout(PVLAY *Y)
-{
-    long x, by, bh = hchar + 4;
-    wind_get(pv.wh, WF_WORKXYWH, &Y->w.g_x, &Y->w.g_y, &Y->w.g_w, &Y->w.g_h);
-    setr(&Y->bar, Y->w.g_x, Y->w.g_y, Y->w.g_w, hchar + 10);
-    setr(&Y->area, Y->w.g_x, Y->w.g_y + Y->bar.g_h, Y->w.g_w, Y->w.g_h - Y->bar.g_h);
-    long gap = aes_3d ? 6 : 4;             /* 3D buttons stand 2 pixels out */
-    by = Y->w.g_y + 3;
-    x = Y->w.g_x + gap;
-    setr(&Y->prev, x, by, 4 * wchar, bh); x += 4 * wchar + gap;
-    setr(&Y->next, x, by, 4 * wchar, bh); x += 4 * wchar + 2 * wchar;
-    Y->lx = x; x += ((long)strlen(L(S_PAGE_N_OF)) + 2) * wchar;
-    setr(&Y->zoom, x, by, ((long)strlen(L(S_WHOLE_PAGE)) + 2) * wchar, bh); x += Y->zoom.g_w + gap;
-    setr(&Y->prt, x, by, ((long)strlen(L(S_PRINT_BTN)) + 2) * wchar, bh); x += Y->prt.g_w + gap;
-    setr(&Y->pdf, x, by, ((long)strlen(L(S_EXPORT_PDF)) + 2) * wchar, bh); x += Y->pdf.g_w + gap;
-    setr(&Y->close, x, by, ((long)strlen(L(S_CLOSE)) + 2) * wchar, bh);
-}
+/* The pages as they will print, drawn in the document's window in place
+ * of the text (View > Print Preview, or the toolbar's button); its own
+ * bar has the way back to the document, the pages, the zoom, Print and
+ * PDF. pv_zoom 0: the whole page fits, 1: 100%. */
 
 /* page placement: drawn at n/den of its size, top left at ox,oy */
-static void pv_geom(const PVLAY *Y, long *n, long *den, long *ox, long *oy)
+static void pv_geom(DOC *d, const GRECT *a, long *n, long *den, long *ox, long *oy)
 {
-    long W = pt2px_x(PS(pv.d).w), H = pt2px_y(PS(pv.d).h), aw = Y->area.g_w, ah = Y->area.g_h;
-    if (pv.zoom == 0) {
-        long a = (aw - 16) * 1000L / W, b = (ah - 16) * 1000L / H;
+    long W = pt2px_x(PS(d).w), H = pt2px_y(PS(d).h), aw = a->g_w, ah = a->g_h;
+    if (!d->pv_zoom) {
+        long x = (aw - 16) * 1000L / W, y = (ah - 16) * 1000L / H;
         *den = 1000;
-        *n = a < b ? a : b;
+        *n = x < y ? x : y;
         if (*n > 1000) *n = 1000;
         if (*n < 1) *n = 1;
-        *ox = Y->area.g_x + (aw - W * *n / 1000) / 2;
-        *oy = Y->area.g_y + (ah - H * *n / 1000) / 2;
+        *ox = a->g_x + (aw - W * *n / 1000) / 2;
+        *oy = a->g_y + (ah - H * *n / 1000) / 2;
     } else {
         *n = *den = 1;
-        *ox = Y->area.g_x + 8 - pv.sx;
-        *oy = Y->area.g_y + 8 - pv.sy;
+        *ox = a->g_x + 8 - d->pv_sx;
+        *oy = a->g_y + 8 - d->pv_sy;
+        if (W + 16 < aw) *ox = a->g_x + (aw - W) / 2;
     }
 }
 
-static void pv_clamp(void)
+static void pv_clamp(DOC *d, const GRECT *a)
 {
-    PVLAY Y;
-    long W, H;
-    int np;
-    if (!pv.open) return;
-    pv_layout(&Y);
-    np = doc_npages(pv.d);
-    if (pv.page >= np) pv.page = np - 1;
-    if (pv.page < 0) pv.page = 0;
-    W = pt2px_x(PS(pv.d).w) + 16; H = pt2px_y(PS(pv.d).h) + 16;
-    if (pv.sx > W - Y.area.g_w) pv.sx = W - Y.area.g_w;
-    if (pv.sy > H - Y.area.g_h) pv.sy = H - Y.area.g_h;
-    if (pv.sx < 0) pv.sx = 0;
-    if (pv.sy < 0) pv.sy = 0;
+    long W = pt2px_x(PS(d).w) + 16, H = pt2px_y(PS(d).h) + 16;
+    int np = doc_npages(d);
+    if (d->pv_page >= np) d->pv_page = np - 1;
+    if (d->pv_page < 0) d->pv_page = 0;
+    if (d->pv_sx > W - a->g_w) d->pv_sx = W - a->g_w;
+    if (d->pv_sy > H - a->g_h) d->pv_sy = H - a->g_h;
+    if (d->pv_sx < 0) d->pv_sx = 0;
+    if (d->pv_sy < 0) d->pv_sy = 0;
 }
 
-static void pv_sliders(void)
+void preview_draw(DOC *d, const GRECT *a, GRECT *clip)
 {
-    PVLAY Y;
-    long W, H;
-    short sz, pos;
-    pv_layout(&Y);
-    W = pt2px_x(PS(pv.d).w) + 16; H = pt2px_y(PS(pv.d).h) + 16;
-    if (pv.zoom == 0) W = H = 0;
-    sz = H > Y.area.g_h ? (short)(Y.area.g_h * 1000L / H) : 1000;
-    pos = H > Y.area.g_h ? (short)(pv.sy * 1000L / (H - Y.area.g_h)) : 0;
-    if (sz != pv.vsz) { wind_set(pv.wh, WF_VSLSIZE, sz, 0, 0, 0); pv.vsz = sz; }
-    if (pos != pv.vpos) { wind_set(pv.wh, WF_VSLIDE, pos, 0, 0, 0); pv.vpos = pos; }
-    sz = W > Y.area.g_w ? (short)(Y.area.g_w * 1000L / W) : 1000;
-    pos = W > Y.area.g_w ? (short)(pv.sx * 1000L / (W - Y.area.g_w)) : 0;
-    if (sz != pv.hsz) { wind_set(pv.wh, WF_HSLSIZE, sz, 0, 0, 0); pv.hsz = sz; }
-    if (pos != pv.hpos) { wind_set(pv.wh, WF_HSLIDE, pos, 0, 0, 0); pv.hpos = pos; }
-}
-
-static void pv_draw(const GRECT *clip)
-{
-    PVLAY Y;
-    GRECT r, page, sh;
+    GRECT r = *a, page, sh;
     long n, den, ox, oy, W, H;
-
-    pv_layout(&Y);
-    /* button bar */
-    r = Y.bar;
-    if (rc_and(clip, &r)) {
-        /* an AES object tree: the AES's buttons, 3D where it has them */
-        static OBJECT t[8];
-        static char pg[40];
-        const GRECT *b[6];
-        const char *lab[6];
-        short p[4], i;
-        b[0] = &Y.prev; b[1] = &Y.next; b[2] = &Y.zoom; b[3] = &Y.prt; b[4] = &Y.pdf; b[5] = &Y.close;
-        lab[0] = "\004"; lab[1] = "\003"; lab[2] = pv.zoom ? L(S_WHOLE_PAGE) : "100%";
-        lab[3] = L(S_PRINT_BTN); lab[4] = L(S_EXPORT_PDF); lab[5] = L(S_CLOSE);
-        sprintf(pg, L(S_PAGE_N_OF), pv.page + 1, doc_npages(pv.d));
-        memset(t, 0, sizeof t);
-        t[0].ob_next = -1; t[0].ob_head = 1; t[0].ob_tail = 7;
-        t[0].ob_type = G_BOX; t[0].ob_spec.index = 0x00001100L;
-        t[0].ob_flags = (short)(aes_3d ? OF_FL3DBAK : 0);
-        t[0].ob_x = Y.bar.g_x; t[0].ob_y = Y.bar.g_y; t[0].ob_width = Y.bar.g_w; t[0].ob_height = (short)(Y.bar.g_h - 1);
-        for (i = 0; i < 6; i++) {
-            OBJECT *o = &t[i + 1];
-            o->ob_next = (short)(i + 2); o->ob_head = o->ob_tail = -1;
-            o->ob_type = G_BUTTON; o->ob_spec.free_string = (char *)lab[i];
-            o->ob_flags = (short)(OF_SELECTABLE | (aes_3d ? OF_FL3DACT : 0));
-            o->ob_x = (short)(b[i]->g_x - Y.bar.g_x); o->ob_y = (short)(b[i]->g_y - Y.bar.g_y);
-            o->ob_width = b[i]->g_w; o->ob_height = b[i]->g_h;
-        }
-        t[7].ob_next = 0; t[7].ob_head = t[7].ob_tail = -1;
-        t[7].ob_type = G_STRING; t[7].ob_spec.free_string = pg;
-        t[7].ob_flags = (short)(OF_LASTOB | (aes_3d ? OF_FL3DBAK : 0));
-        t[7].ob_x = (short)(Y.lx - Y.bar.g_x); t[7].ob_y = (short)((Y.bar.g_h - hchar) / 2);
-        t[7].ob_width = (short)(strlen(pg) * wchar); t[7].ob_height = hchar;
-        if (theme_on()) {                   /* drawn in the colour theme's colours */
-            static USERBLK ub[7];
-            theme_userdef(&t[0], &ub[0], 0);
-            for (i = 0; i < 6; i++) theme_userdef(&t[i + 1], &ub[i + 1], (long)lab[i]);
-            t[7].ob_flags &= ~OF_FL3DMASK;
-        }
-        objc_draw(t, 0, 1, r.g_x, r.g_y, r.g_w, r.g_h);
-        p[0] = Y.bar.g_x; p[2] = Y.bar.g_x + Y.bar.g_w - 1;
-        p[1] = p[3] = Y.bar.g_y + Y.bar.g_h - 1;
-        v_pline(vhandle, 2, p);
-    }
-    /* the desk behind the page */
-    r = Y.area;
     if (!rc_and(clip, &r)) return;
+    pv_clamp(d, a);
     clip_to(&r);
-    if (theme_on()) t_fill(&Y.area, theme_pen(TH_DESK), 0);       /* the desk around the page */
-    else t_fill(&Y.area, 1, 2);
-    pv_geom(&Y, &n, &den, &ox, &oy);
-    W = pt2px_x(PS(pv.d).w) * n / den;
-    H = pt2px_y(PS(pv.d).h) * n / den;
+    if (theme_on()) t_fill(a, theme_pen(TH_DESK), 0);       /* the desk around the page */
+    else t_fill(a, 1, 2);
+    pv_geom(d, a, &n, &den, &ox, &oy);
+    W = pt2px_x(PS(d).w) * n / den;
+    H = pt2px_y(PS(d).h) * n / den;
     setr(&sh, ox + 4, oy + 4, W, H);
     t_fill(&sh, 1, 0);                       /* shadow */
     setr(&page, ox, oy, W, H);
@@ -620,214 +521,136 @@ static void pv_draw(const GRECT *clip)
     if (rc_and(&r, &page)) {
         clip_to(&page);
         vswr_mode(vhandle, MD_TRANS);
-        draw_preview_page(pv.d, pv.page, ox, oy, n, den);
+        draw_preview_page(d, (int)d->pv_page, ox, oy, n, den);
+        vswr_mode(vhandle, MD_REPLACE);
+    }
+    {
+        short p[4] = { 0, 0, 0, 0 };
+        vs_clip(vhandle, 0, p);
     }
 }
 
-static void pv_refresh(void) { if (pv.open) { pv_clamp(); t_redraw_all(pv.wh, pv_draw); pv_sliders(); } }
-
-static void pv_set_name(void)
+/* the window's sliders in the preview: the page when it's zoomed in */
+void preview_sliders(DOC *d, const GRECT *a, short *vsz, short *vpos, short *hsz, short *hpos)
 {
-    sprintf(pv.name, " %s: %.30s ", L(S_PREVIEW), pv.d->base);
-    wind_set_str(pv.wh, WF_NAME, pv.name);
-}
-
-void preview_open(DOC *d)
-{
-    short x;
-    long W, H, ww, wh;
-    if (!d) return;
-    if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
-    doc_layout(d);
-    pv.d = d;
-    pv.page = d->lines[doc_find_line(d, d->cursor)].page;
-    if (pv.open) {
-        wind_set(pv.wh, WF_TOP, 0, 0, 0, 0);
-        pv_set_name();
-        pv_refresh();
+    long W = pt2px_x(PS(d).w) + 16, H = pt2px_y(PS(d).h) + 16;
+    pv_clamp(d, a);
+    if (!d->pv_zoom) {                  /* the whole page: the slider is the page number */
+        int np = doc_npages(d);
+        *vsz = (short)(1000 / (np ? np : 1));
+        *vpos = np > 1 ? (short)(d->pv_page * 1000L / (np - 1)) : 0;
+        *hsz = 1000; *hpos = 0;
         return;
     }
-    pv.zoom = 0;
-    pv.sx = pv.sy = 0;
-    W = pt2px_x(PS(d).w); H = pt2px_y(PS(d).h);
-    wh = desk.g_h - 40;
-    ww = (wh - hchar - 30) * W / H + 24;
-    {   /* room for the button bar */
-        long need = (4 + 4 + 2 + (long)strlen(L(S_PAGE_N_OF)) + 2 + (long)strlen(L(S_WHOLE_PAGE)) + 2 +
-                     (long)strlen(L(S_PRINT_BTN)) + 2 + (long)strlen(L(S_EXPORT_PDF)) + 2 + (long)strlen(L(S_CLOSE)) + 2) * wchar + 40;
-        if (ww < need) ww = need;
-    }
-    if (ww > desk.g_w - 20) ww = desk.g_w - 20;
-    pv.wh = wind_create(PVKIND, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
-    if (pv.wh < 0) { alert(1, 3, AL_NO_WINDOWS, AB_OK); return; }
-    pv.open = 1;
-    pv.stale = 0;
-    pv.vsz = pv.vpos = pv.hsz = pv.hpos = -1;
-    pv_set_name();
-    x = (short)(desk.g_x + desk.g_w - ww - 10);
-    {
-        short y = (short)(desk.g_y + 10), w = (short)ww, h = (short)wh;
-        if (winpos_get(" preview ", &x, &y, &w, &h)) winpos_clamp(&x, &y, w, h);
-        wind_open(pv.wh, x, y, w, h);
-    }
-    pv_clamp();
-    pv_sliders();
+    *vsz = H > a->g_h ? (short)(a->g_h * 1000L / H) : 1000;
+    *vpos = H > a->g_h ? (short)(d->pv_sy * 1000L / (H - a->g_h)) : 0;
+    *hsz = W > a->g_w ? (short)(a->g_w * 1000L / W) : 1000;
+    *hpos = W > a->g_w ? (short)(d->pv_sx * 1000L / (W - a->g_w)) : 0;
 }
 
-void preview_close(void)
+void preview_goto(DOC *d, long page)
 {
-    if (!pv.open) return;
-    winpos_save(" preview ", pv.wh);
-    wind_close(pv.wh);
-    wind_delete(pv.wh);
-    pv.open = 0;
-    pv.wh = -1;
-}
-
-int  preview_owns(short wh) { return pv.open && wh == pv.wh; }
-
-/* the preview's work area, for centring the export gauge on it */
-int preview_area(GRECT *r)
-{
-    if (!pv.open) return 0;
-    wind_get(pv.wh, WF_WORKXYWH, &r->g_x, &r->g_y, &r->g_w, &r->g_h);
-    return 1;
-}
-DOC *preview_doc(void) { return pv.open ? pv.d : NULL; }
-int  preview_page(void) { return pv.page; }
-
-void preview_changed(DOC *d) { if (pv.open && pv.d == d) pv.stale = 1; }
-
-void preview_doc_closed(DOC *d) { if (pv.open && pv.d == d) preview_close(); }
-
-/* redraw a stale preview once the user pauses */
-int preview_idle(int run)
-{
-    if (!pv.open || !pv.stale) return 0;
-    if (run) {
-        pv.stale = 0;
-        doc_layout(pv.d);
-        pv_set_name();
-        pv_refresh();
-    }
-    return 1;
-}
-
-static void pv_goto(int page)
-{
-    int np = doc_npages(pv.d);
+    int np = doc_npages(d);
     if (page < 0) page = 0;
     if (page >= np) page = np - 1;
-    if (page == pv.page) return;
-    pv.page = page;
-    pv.sy = 0;
-    pv_refresh();
+    if (page == d->pv_page) return;
+    d->pv_page = page;
+    d->pv_sy = 0;
+    refresh_text(d);
+    refresh_toolbar(d);
+    set_sliders(d);
 }
 
-void preview_msg(short *msg)
+void preview_zoom(DOC *d, short mx, short my, const GRECT *a)
 {
-    GRECT r;
-    PVLAY Y;
-    long W, H;
-    short x, y, w, h;
-    switch (msg[0]) {
-    case WM_REDRAW:
-        r.g_x = msg[4]; r.g_y = msg[5]; r.g_w = msg[6]; r.g_h = msg[7];
-        t_redraw(pv.wh, &r, pv_draw);
-        return;
-    case WM_TOPPED:
-        wind_set(pv.wh, WF_TOP, 0, 0, 0, 0);
-        return;
-    case WM_CLOSED:
-        preview_close();
-        return;
-    case WM_BOTTOMED:
-        wind_set(pv.wh, WF_BOTTOM, 0, 0, 0, 0);
-        return;
-    case WM_MOVED:
-        wind_set(pv.wh, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
-        return;
-    case WM_SIZED:
-        w = msg[6] < 52 * wchar ? (short)(52 * wchar) : msg[6];
-        h = msg[7] < 160 ? 160 : msg[7];
-        wind_set(pv.wh, WF_CURRXYWH, msg[4], msg[5], w, h);
-        pv_refresh();
-        return;
-    case WM_FULLED: {
-        short cx, cy, cw, ch;
-        wind_get(pv.wh, WF_CURRXYWH, &cx, &cy, &cw, &ch);
-        wind_get(pv.wh, WF_FULLXYWH, &x, &y, &w, &h);
-        if (cx == x && cy == y && cw == w && ch == h) wind_get(pv.wh, WF_PREVXYWH, &x, &y, &w, &h);
-        wind_set(pv.wh, WF_CURRXYWH, x, y, w, h);
-        pv_refresh();
-        return;
-    }
-    }
-    pv_layout(&Y);
-    W = pt2px_x(PS(pv.d).w) + 16; H = pt2px_y(PS(pv.d).h) + 16;
+    if (!d->pv_zoom && a) {             /* zoom in around the click */
+        long n, den, ox, oy;
+        pv_geom(d, a, &n, &den, &ox, &oy);
+        d->pv_sx = (mx - ox) * den / n - a->g_w / 2;
+        d->pv_sy = (my - oy) * den / n - a->g_h / 2;
+    } else d->pv_sx = d->pv_sy = 0;
+    d->pv_zoom = !d->pv_zoom;
+    d->vsz = d->vpos = d->hsz = d->hpos = -1;
+    refresh_text(d);
+    refresh_toolbar(d);
+    set_sliders(d);
+}
+
+void preview_area_click(DOC *d, const GRECT *a, short mx, short my)
+{
+    wait_release();
+    preview_zoom(d, mx, my, a);
+}
+
+/* the arrows and sliders of the window */
+void preview_scroll(DOC *d, const GRECT *a, short *msg)
+{
+    long W = pt2px_x(PS(d).w) + 16, H = pt2px_y(PS(d).h) + 16;
     if (msg[0] == WM_ARROWED) {
         switch (msg[4]) {
-        case WA_UPPAGE: if (pv.zoom) pv.sy -= Y.area.g_h - hchar; else { pv_goto(pv.page - 1); return; } break;
-        case WA_DNPAGE: if (pv.zoom) pv.sy += Y.area.g_h - hchar; else { pv_goto(pv.page + 1); return; } break;
-        case WA_UPLINE: pv.sy -= 2 * hchar; break;
-        case WA_DNLINE: pv.sy += 2 * hchar; break;
-        case WA_LFPAGE: pv.sx -= Y.area.g_w - wchar; break;
-        case WA_RTPAGE: pv.sx += Y.area.g_w - wchar; break;
-        case WA_LFLINE: pv.sx -= 4 * wchar; break;
-        case WA_RTLINE: pv.sx += 4 * wchar; break;
+        case WA_UPPAGE: if (d->pv_zoom) d->pv_sy -= a->g_h - hchar; else { preview_goto(d, d->pv_page - 1); return; } break;
+        case WA_DNPAGE: if (d->pv_zoom) d->pv_sy += a->g_h - hchar; else { preview_goto(d, d->pv_page + 1); return; } break;
+        case WA_UPLINE: if (d->pv_zoom) d->pv_sy -= 2 * hchar; else { preview_goto(d, d->pv_page - 1); return; } break;
+        case WA_DNLINE: if (d->pv_zoom) d->pv_sy += 2 * hchar; else { preview_goto(d, d->pv_page + 1); return; } break;
+        case WA_LFPAGE: d->pv_sx -= a->g_w - wchar; break;
+        case WA_RTPAGE: d->pv_sx += a->g_w - wchar; break;
+        case WA_LFLINE: d->pv_sx -= 4 * wchar; break;
+        case WA_RTLINE: d->pv_sx += 4 * wchar; break;
         }
-    } else if (msg[0] == WM_VSLID) pv.sy = H > Y.area.g_h ? (long)msg[4] * (H - Y.area.g_h) / 1000L : 0;
-    else if (msg[0] == WM_HSLID) pv.sx = W > Y.area.g_w ? (long)msg[4] * (W - Y.area.g_w) / 1000L : 0;
+    } else if (msg[0] == WM_VSLID) {
+        if (!d->pv_zoom) { int np = doc_npages(d); preview_goto(d, np > 1 ? ((long)msg[4] * (np - 1) + 500) / 1000 : 0); return; }
+        d->pv_sy = H > a->g_h ? (long)msg[4] * (H - a->g_h) / 1000L : 0;
+    } else if (msg[0] == WM_HSLID) d->pv_sx = W > a->g_w ? (long)msg[4] * (W - a->g_w) / 1000L : 0;
     else return;
-    if (!pv.zoom) return;
-    pv_refresh();
+    if (!d->pv_zoom) return;
+    refresh_text(d);
+    set_sliders(d);
 }
 
-void preview_click(short mx, short my, short clicks)
-{
-    PVLAY Y;
-    (void)clicks;
-    if (!pv.open) return;
-    if (!is_top(pv.wh)) { wind_set(pv.wh, WF_TOP, 0, 0, 0, 0); return; }
-    pv_layout(&Y);
-    if (in_r(&Y.prev, mx, my)) pv_goto(pv.page - 1);
-    else if (in_r(&Y.next, mx, my)) pv_goto(pv.page + 1);
-    else if (in_r(&Y.zoom, mx, my) || in_r(&Y.area, mx, my)) {
-        if (!pv.zoom && in_r(&Y.area, mx, my)) {
-            /* zoom in around the click */
-            long n, den, ox, oy;
-            pv_geom(&Y, &n, &den, &ox, &oy);
-            pv.sx = (mx - ox) * den / n - Y.area.g_w / 2;
-            pv.sy = (my - oy) * den / n - Y.area.g_h / 2;
-        } else if (!pv.zoom) pv.sx = pv.sy = 0;
-        pv.zoom = !pv.zoom;
-        wait_release();
-        pv_refresh();
-    } else if (in_r(&Y.pdf, mx, my)) { wait_release(); cmd_pdf(pv.d); }
-    else if (in_r(&Y.prt, mx, my)) { wait_release(); cmd_print(pv.d); }
-    else if (in_r(&Y.close, mx, my)) { wait_release(); preview_close(); }
-}
-
-void preview_key(short ks, short key)
+/* a key in the preview; 0 if it isn't one of the preview's */
+int preview_key(DOC *d, short ks, short key)
 {
     short scan = (key >> 8) & 0xff, msg[8];
     (void)ks;
     memset(msg, 0, sizeof msg);
     switch (scan) {
-    case 0x4B: pv_goto(pv.page - 1); break;            /* left */
-    case 0x4D: pv_goto(pv.page + 1); break;            /* right */
-    case 0x47: pv_goto(0); break;                      /* Clr/Home */
-    case 0x01: preview_close(); break;                 /* Esc */
-    case 0x39: pv.zoom = !pv.zoom; pv_refresh(); break; /* space: zoom */
-    case 0x48: case 0x50:
+    case 0x4B: preview_goto(d, d->pv_page - 1); return 1;          /* left */
+    case 0x4D: preview_goto(d, d->pv_page + 1); return 1;          /* right */
+    case 0x47: preview_goto(d, (ks & 3) ? doc_npages(d) - 1 : 0); return 1;  /* Clr/Home */
+    case 0x01: set_view(d, VIEW_DOC); return 1;                    /* Esc: back to the document */
+    case 0x39: preview_zoom(d, 0, 0, NULL); return 1;              /* space: zoom */
+    case 0x48: case 0x50: case 0x49: case 0x51: {
+        GRECT tb, tp, cp;
+        get_panes(d, &tb, &tp, &cp);
         msg[0] = WM_ARROWED;
-        msg[4] = scan == 0x48 ? WA_UPLINE : WA_DNLINE;
-        if (!pv.zoom) { pv_goto(pv.page + (scan == 0x48 ? -1 : 1)); break; }
-        preview_msg(msg);
-        break;
+        msg[4] = scan == 0x48 ? WA_UPLINE : scan == 0x50 ? WA_DNLINE : scan == 0x49 ? WA_UPPAGE : WA_DNPAGE;
+        preview_scroll(d, &tp, msg);
+        return 1;
     }
+    }
+    return 0;
+}
+
+/* an edit while the preview shows: drawn again once the user pauses */
+void preview_changed(DOC *d) { if (d->view == VIEW_PREVIEW) d->pv_stale = 1; }
+
+int preview_idle(int run)
+{
+    int i, need = 0;
+    for (i = 0; i < MAX_DOCS; i++) {
+        DOC *d = DOC_USED(i) ? docs[i] : NULL;
+        if (!d || d->view != VIEW_PREVIEW || !d->pv_stale) continue;
+        need = 1;
+        if (run) {
+            d->pv_stale = 0;
+            doc_layout(d);
+            refresh_text(d);
+            refresh_toolbar(d);
+            set_sliders(d);
+        }
+    }
+    return need;
 }
 
 static void fs_docgone(DOC *d) { (void)d; }
 const TOOL fontsel_tool = { fontsel_owns, fontsel_msg, fontsel_click, fontsel_key, fontsel_close, fs_docgone };
-const TOOL preview_tool = { preview_owns, preview_msg, preview_click, preview_key, preview_close, preview_doc_closed };

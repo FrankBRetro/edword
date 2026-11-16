@@ -150,6 +150,7 @@ void para_default(PARA *p)
 
 void doc_init(DOC *d)
 {
+    int i;
     memset(d, 0, sizeof *d);
     d->anchor = -1;
     d->want_x = -1;
@@ -160,6 +161,8 @@ void doc_init(DOC *d)
     d->lay_lo = d->lay_hi = -1;
     d->lay_full = 1;
     d->vsz = d->vpos = d->hsz = d->hpos = -1;
+    for (i = 0; i < NBMARK; i++) d->bmark[i] = -1;
+    d->split_at = 500;
     d->ins.font = (unsigned char)default_font();
     d->ins.size = (unsigned char)default_size();
     d->ins.para = 0;
@@ -252,6 +255,10 @@ int doc_insert(DOC *d, long pos, const CELL *c, long n)
         if (d->lay_lo > pos) d->lay_lo += n;
     }
     d->lay_shift += n;
+    {   /* a bookmark at pos stays in front of what's inserted there */
+        int i;
+        for (i = 0; i < NBMARK; i++) if (d->bmark[i] > pos) d->bmark[i] += n;
+    }
     doc_touch(d, pos, pos + n);
     d->dirty = 1;
     return 1;
@@ -273,6 +280,11 @@ void doc_delete(DOC *d, long pos, long n)
         if (d->lay_lo > pos + n) d->lay_lo -= n; else if (d->lay_lo > pos) d->lay_lo = pos;
     }
     d->lay_shift -= n;
+    {   /* a bookmark in what's deleted goes to where it was */
+        int i;
+        for (i = 0; i < NBMARK; i++)
+            if (d->bmark[i] > pos + n) d->bmark[i] -= n; else if (d->bmark[i] > pos) d->bmark[i] = pos;
+    }
     doc_touch(d, pos, pos);
     d->dirty = 1;
 }
@@ -487,4 +499,41 @@ int doc_img_add(DOC *d, const IMG *im)
     if (d->nimg >= MAX_IMGS) return -1;
     d->imgs[d->nimg] = *im;
     return d->nimg++;
+}
+
+/* a copy of src in d (just made with doc_init): the text, the formats,
+ * the pictures and drawings; 0 without the memory (d then holds nothing) */
+int doc_clone(DOC *d, const DOC *src)
+{
+    int i;
+    if (src->len && !grow_text(d, src->len)) return 0;
+    if (src->len) memcpy(d->text, src->text, src->len * sizeof(CELL));
+    d->len = src->len;
+    d->a = src->a;
+    memcpy(d->bmark, src->bmark, sizeof d->bmark);
+    d->ins = src->ins;
+    d->insp = src->insp;
+    d->toolbar = src->toolbar;
+    d->zoom = src->zoom;
+    d->fitw = src->fitw;
+    for (i = 0; i < src->nimg; i++) {
+        IMG *n = &d->imgs[i];
+        const IMG *o = &src->imgs[i];
+        long nb = (long)o->rb * o->h, nr = o->rgb ? (long)o->w * o->h * 3 : 0;
+        *n = *o;
+        n->bits = (unsigned char *)malloc(nb ? nb : 1);
+        n->rgb = nr ? (unsigned char *)malloc(nr) : NULL;
+        d->nimg = (short)(i + 1);
+        if (!n->bits || (nr && !n->rgb)) { doc_free(d); return 0; }
+        memcpy(n->bits, o->bits, nb);
+        if (nr) memcpy(n->rgb, o->rgb, nr);
+    }
+    if (src->nfpts) {
+        d->fpts = (short *)malloc(src->nfpts * 2 * sizeof(short));
+        if (!d->fpts) { doc_free(d); return 0; }
+        memcpy(d->fpts, src->fpts, src->nfpts * 2 * sizeof(short));
+        d->nfpts = d->capfpts = src->nfpts;
+    }
+    d->lay_full = 1;
+    return 1;
 }

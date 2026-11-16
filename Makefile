@@ -93,7 +93,7 @@ LDLIBS  = -lgem
 
 CORE    = doc.o layout.o edit.o undo.o docops.o rtf.o pdf.o pagedraw.o raster.o img.o thes.o \
           charset.o text.o codes.o spell.o md.o fwp.o protext.o chart.o prt.o
-GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemtheme.o gemtool.o gemtwin.o gemobj.o gemclip.o \
+GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemtheme.o gemtool.o gemtwin.o gemobj.o gemclip.o gemfsel.o \
           demo.o lang.o cpucheck.o
 OBJS    = $(addprefix $(OBJDIR)/,$(GEMOBJ) $(CORE))
 

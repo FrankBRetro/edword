@@ -1440,6 +1440,61 @@ int main(int argc, char **argv)
         }
         CHECK(ok && two, "letter and newsletter templates");
     }
+    {   /* bookmarks: they move with the text, survive codes and RTF; a clone */
+        DOC t, c; long e2; int okm = 1;
+        doc_init(&t);
+        import_str(&t, "one two three\nfour five\n", CS_ATARI, 0);
+        t.bmark[0] = 4; t.bmark[9] = 14;
+        doc_insert(&t, 0, t.text, 2);                 /* two cells in front */
+        okm &= t.bmark[0] == 6 && t.bmark[9] == 16;
+        doc_delete(&t, 5, 3);                         /* over mark 1 */
+        okm &= t.bmark[0] == 5 && t.bmark[9] == 13;
+        CHECK(okm, "bookmarks move with inserts and deletes");
+        t.cv.cols = 60; codes_build(&t);
+        CHECK(strstr(t.cv.t, "[Mark 1]") && strstr(t.cv.t, "[Mark 0]"), "codes view shows bookmarks");
+        codes_insert(&t.cv, 0, "[Mark 5]", 8);
+        { char *m = strstr(t.cv.t, "[Mark 0]"); codes_delete(&t.cv, m - t.cv.t, 8); }
+        codes_apply(&t);
+        CHECK(t.bmark[4] == 0 && t.bmark[9] == -1 && t.bmark[0] == 5, "bookmarks added and deleted in codes");
+        sprintf(path, "%s/marks.rtf", argv[2]);
+        rtf_export(&t, path);
+        doc_init(&c);
+        CHECK(rtf_import(&c, path) && c.bmark[4] == 0 && c.bmark[0] == 5 && c.bmark[9] == -1, "bookmarks saved and loaded");
+        doc_free(&c);
+        doc_init(&c);
+        CHECK(doc_clone(&c, &t) && same_cells(&c, &t) && c.bmark[0] == 5 && find_next(&c, 0, "four", 0, &e2) > 0,
+              "clone copies the document");
+        doc_free(&c);
+        doc_free(&t);
+    }
+    {   /* column selection: copy, delete, paste a block */
+        DOC t, c; char got[64]; long k;
+        doc_init(&t);
+        import_str(&t, "abcdef\nghijkl\nmnopqr\n", CS_ATARI, 0);
+        doc_layout(&t);
+        t.anchor = 1; t.cursor = 17;
+        k = t.len;
+        CHECK(col_copy(&t, &c), "column copy");
+        { long n0 = k;
+        for (k = 0; k < c.len && k < 63; k++) got[k] = c.text[k].ch == '\n' ? '/' : (char)c.text[k].ch;
+        got[k] = 0;
+        printf("  block: %s\n", got);
+        CHECK(!strcmp(got + strlen(got) - 3, "/no") && strchr(got, '/') != strrchr(got, '/'), "column copy takes the block");
+        col_delete(&t);
+        doc_layout(&t);
+        printf("  after delete: len %ld cursor %ld\n", t.len, t.cursor);
+        CHECK(t.len == n0 - (c.len - 2) && t.cursor == 1 && t.text[0].ch == 'a', "column delete");
+        t.cursor = 1;
+        col_paste(&t, &c);
+        doc_layout(&t);
+        for (k = 0; k < t.len && k < 63; k++) got[k] = t.text[k].ch == '\n' ? '/' : (char)t.text[k].ch;
+        got[k] = 0;
+        printf("  pasted back: %s\n", got);
+        CHECK(!strcmp(got, "abcdef/ghijkl/mnopqr"), "column paste puts the block back");
+        }
+        doc_free(&c);
+        doc_free(&t);
+    }
     rs_end();
 
     printf("%s: %d checks, %d failures\n", fails ? "FAILED" : "PASSED", checks, fails);

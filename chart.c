@@ -435,6 +435,15 @@ static void bars(OPS *o, const CHDATA *cd, long w, long h, int d3)
     line(o, px0, y0, px1 + (d3 ? dep : 0), y0);
 }
 
+/* room for a chart's operations: kept once a chart has been drawn, so a
+ * document without charts never needs it */
+CHOP *chart_buf(void)
+{
+    static CHOP *buf;
+    if (!buf) buf = (CHOP *)malloc(CH_MAXOPS * sizeof(CHOP));
+    return buf;
+}
+
 int chart_ops(DOC *d, int tbl, long w, long h, CHOP *op, int max)
 {
     static CHDATA cd;

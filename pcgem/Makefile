@@ -34,7 +34,7 @@ endif
 
 CORE    = doc layout edit undo docops rtf pdf pagedraw raster img thes \
           charset text codes spell md fwp protext chart prt
-FRONT   = gem gemwin gemdlg gemrsc gemrend gemtheme gemtool gemtwin gemobj gemclip lang
+FRONT   = gem gemwin gemdlg gemrsc gemrend gemtheme gemtool gemtwin gemobj gemclip gemfsel lang
 PORT    = pgrsc pgtos pglinear
 KITPORT = pgaes pgvdi
 

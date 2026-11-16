@@ -304,18 +304,20 @@ static void place_new(DOC *d, OBJ *o, long w, long h)
 }
 
 /* insert the GEM IMG picture at path */
-int picture_insert(DOC *d, const char *path)
+/* the picture added under the caret's line, text flowing around it; its
+ * object's number, or -1 */
+int picture_add(DOC *d, const char *path)
 {
     IMG im;
     OBJ o;
-    int k, i;
-    if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return 0; }
+    int k;
+    if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return -1; }
     busy_begin(L(S_LOADING_PIC));
     k = img_load(path, &im);
     busy_end();
-    if (!k) { alert(1, 3, AL_CANT_READ_IMG, AB_OK); return 0; }
+    if (!k) { alert(1, 3, AL_CANT_READ_IMG, AB_OK); return -1; }
     k = doc_img_add(d, &im);
-    if (k < 0) { img_free(&im); return 0; }
+    if (k < 0) { img_free(&im); return -1; }
     {
         const char *b = strrchr(path, '\\');
         strncpy(d->imgs[k].name, b ? b + 1 : path, 13);
@@ -326,7 +328,12 @@ int picture_insert(DOC *d, const char *path)
     o.img = (short)k;
     o.wrap = WR_BOX;
     place_new(d, &o, px2pt_x(im.w), px2pt_y(im.h));
-    i = doc_obj_add(d, &o);
+    return doc_obj_add(d, &o);
+}
+
+int picture_insert(DOC *d, const char *path)
+{
+    int i = picture_add(d, path);
     if (i < 0) return 0;
     d->selobj = i;
     d->anchor = -1;
@@ -438,8 +445,6 @@ int pal_init(void)
     if (ext[4] < 2 || ext[4] > 8) return 0;
     pal_planes = ext[4];
     pal_n = 1 << pal_planes;
-    pal_cube = (unsigned short *)calloc(32768, sizeof(unsigned short));
-    if (!pal_cube) return 0;
     memset(&src, 0, sizeof src); memset(&dm, 0, sizeof dm); memset(&sm, 0, sizeof sm);
     one[0] = 0x8000;
     src.fd_addr = one; src.fd_w = 16; src.fd_h = 1; src.fd_wdwidth = 1; src.fd_nplanes = 1;
@@ -460,7 +465,7 @@ int pal_init(void)
     }
     /* every pen the same pixel: the VDI didn't draw into memory */
     for (i = 1; i < pal_n && pal_px[i] == pal_px[0]; i++) ;
-    if (i == pal_n) { free(pal_cube); pal_cube = NULL; return 0; }
+    if (i == pal_n) return 0;
     edlog("colour pictures on %d pens, pen 1 is pixel %d", pal_n, pal_px[1]);
     pal_ok = 1;
     return 1;
@@ -470,8 +475,12 @@ static int pal_nearest(int r, int g, int b)
 {
     unsigned idx = (unsigned)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
     int skip = pref_display == DISP_AMBER && pal_n >= 16 ? 6 : -1;
-    if (skip != pal_skip) { memset(pal_cube, 0, 32768 * sizeof(unsigned short)); pal_skip = skip; }
-    if (!pal_cube[idx]) {
+    if (!pal_cube) {                            /* 64K: only once a colour picture is shown */
+        pal_cube = (unsigned short *)calloc(32768, sizeof(unsigned short));
+        pal_skip = skip;
+    }
+    if (pal_cube && skip != pal_skip) { memset(pal_cube, 0, 32768 * sizeof(unsigned short)); pal_skip = skip; }
+    if (!pal_cube || !pal_cube[idx]) {
         long best = 0x7fffffffL;
         int i, bi = 0, cr = (r & ~7) | 4, cg = (g & ~7) | 4, cb = (b & ~7) | 4;
         for (i = 0; i < pal_n; i++) {
@@ -481,6 +490,7 @@ static int pal_nearest(int r, int g, int b)
             if (pal_n >= 256 && i >= TH_PEN0 && i < TH_PEN0 + TH_NROLES) continue;   /* the colour theme's */
             if (dd < best) { best = dd; bi = i; }
         }
+        if (!pal_cube) return bi;
         pal_cube[idx] = (unsigned short)(bi + 1);
     }
     return pal_cube[idx] - 1;
