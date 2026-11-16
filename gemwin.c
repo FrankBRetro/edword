@@ -2142,6 +2142,36 @@ int block_delete(DOC *d)
     return 1;
 }
 
+/* Key repeat: presses of the same cursor key already waiting are taken
+ * together, and the window drawn once for all of them, so a held key
+ * doesn't fall behind. A different key read on the way is kept for the
+ * event loop (key_pending). */
+static short pend_ks, pend_key;
+static int   pend_on;
+
+int key_pending(short *ks, short *key)
+{
+    if (!pend_on) return 0;
+    pend_on = 0;
+    *ks = pend_ks; *key = pend_key;
+    return 1;
+}
+
+/* how many more of this key are waiting (at most max) */
+static int key_repeats(short ks, short key, int max)
+{
+    short msg[8], mx, my, mb, ks2, k2, br, ev;
+    int n = 0;
+    while (n < max && !pend_on) {
+        ev = evnt_multi(MU_KEYBD | MU_TIMER, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        msg, 0L, &mx, &my, &mb, &ks2, &k2, &br);
+        if (!(ev & MU_KEYBD)) break;
+        if (k2 == key && (ks2 & 0x0F) == (ks & 0x0F)) n++;
+        else { pend_on = 1; pend_ks = ks2; pend_key = k2; }
+    }
+    return n;
+}
+
 static void text_key2(DOC *d, short ks, short key)
 {
     short scan = (key >> 8) & 0xff, asc = key & 0xff;
@@ -2172,14 +2202,20 @@ static void text_key2(DOC *d, short ks, short key)
         return;
     }
     switch (scan) {
-    case 0x4B: d->want_x = -1; move_to(d, d->cursor - 1, shift); return;   /* left  */
-    case 0x4D: d->want_x = -1; move_to(d, d->cursor + 1, shift); return;   /* right */
+    case 0x4B:                                                             /* left  */
+    case 0x4D: {                                                           /* right */
+        long n = 1 + key_repeats(ks, key, 200);
+        d->want_x = -1;
+        move_to(d, d->cursor + (scan == 0x4B ? -n : n), shift);
+        return;
+    }
     case 0x48:                                                             /* up    */
     case 0x50: {                                                           /* down  */
-        long nl, wx;
+        long nl = li, wx;
+        int n = 1 + key_repeats(ks, key, 100);
         if (d->want_x < 0) d->want_x = doc_x_of(d, li, d->cursor);
         wx = d->want_x;
-        nl = doc_line_vert(d, li, wx, scan == 0x48 ? -1 : 1);
+        while (n-- > 0 && nl >= 0 && nl < d->nlines) nl = doc_line_vert(d, nl, wx, scan == 0x48 ? -1 : 1);
         if (nl < 0) { move_to(d, 0, shift); return; }
         if (nl >= d->nlines) { move_to(d, d->len, shift); return; }
         move_to(d, doc_pos_in_line(d, nl, wx), shift);

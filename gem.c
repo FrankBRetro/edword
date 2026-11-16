@@ -389,8 +389,21 @@ static void build_menu(void)
 #endif
 }
 
-static void check(int cmd, int on)  { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_icheck(mtree, cmdobj[cmd], on ? 1 : 0); }
-static void enable(int cmd, int on) { if (cmd > 0 && cmd < NCMD && cmdobj[cmd]) menu_ienable(mtree, cmdobj[cmd], on ? 1 : 0); }
+/* Menu items ticked or greyed: update_menu runs after every move of the
+ * cursor, so the AES is called only for items whose state changes (a few
+ * hundred calls each time made the cursor slow on an ST) */
+static void check(int cmd, int on)
+{
+    short o;
+    if (cmd <= 0 || cmd >= NCMD || !(o = cmdobj[cmd])) return;
+    if (((mtree[o].ob_state & OS_CHECKED) != 0) != (on != 0)) menu_icheck(mtree, o, on ? 1 : 0);
+}
+static void enable(int cmd, int on)
+{
+    short o;
+    if (cmd <= 0 || cmd >= NCMD || !(o = cmdobj[cmd])) return;
+    if (((mtree[o].ob_state & OS_DISABLED) == 0) != (on != 0)) menu_ienable(mtree, o, on ? 1 : 0);
+}
 
 /* set a dynamic item's text, keeping the menu width */
 static void set_item(int cmd, const char *text)
@@ -2277,8 +2290,15 @@ int main(int argc, char *argv[])
     edlog("first window open, entering the event loop");
 
     while (!quit_now) {
-        int need = idle_work(0), timer = need || pref_autosave;
-        long tmo = need ? (demo_on ? 50L : 400L) : 5000L, bl = blink_wait(), since;
+        int need, timer;
+        long tmo, bl, since;
+        if (key_pending(&ks, &key)) {           /* read while taking a key's repeats together */
+            blink_wake(); last_input = clock();
+            handle_key(ks, key);
+            continue;
+        }
+        need = idle_work(0); timer = need || pref_autosave;
+        tmo = need ? (demo_on ? 50L : 400L) : 5000L; bl = blink_wait();
         if (demo_on) need = timer = 1;
         if (bl >= 0) { timer = 1; if (bl < tmo) tmo = bl; }
         if (bgprint_active()) { timer = 1; tmo = 10; }       /* printing in the background */

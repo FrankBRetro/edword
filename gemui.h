@@ -394,6 +394,7 @@ int   preview_idle(int run);
 /* gemwin.c: split window, column selection */
 int   block_delete(DOC *d);
 void  pane_swap_doc(DOC *d);
+int   key_pending(short *ks, short *key);   /* a key read ahead, for the event loop */
 int   doc_area(DOC *d, GRECT *r);
 void  sheet_pos(DOC *d, short w, short h, short *x, short *y);  /* a document's dialogs: sheets on its window */
 void  sheets_place(DOC *d);
