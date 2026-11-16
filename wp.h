@@ -380,6 +380,8 @@ int  doc_apply(DOC *d, long a, long b, int what, int val);
 void doc_sync_ins(DOC *d);
 void doc_copy(DOC *d);
 int  doc_paste(DOC *d);
+void doc_copy_doc(const DOC *t);
+DOC *doc_clip(void);           /* the internal clipboard, NULL if empty */
 int  doc_insert_doc(DOC *d, DOC *src, long a, long b);
 void doc_clip_free(void);
 int  doc_in_table(DOC *d, long pos, long *row_start, int *cell);
@@ -536,6 +538,11 @@ typedef struct {
 #define CH_MAXOPS 160
 int  chart_number(const char *s, long *v);    /* in hundredths */
 int  chart_data(DOC *d, int tbl, CHDATA *cd);
+#ifdef EDLITE
+#define CHARTS 0                 /* EdWord Lite: a table's chart is kept in the file, not shown */
+#else
+#define CHARTS 1
+#endif
 int  chart_ops(DOC *d, int tbl, long w, long h, CHOP *op, int max);
 CHOP *chart_buf(void);   /* CH_MAXOPS of them, allocated when first needed */
 int  chart_color(int series);
@@ -642,6 +649,7 @@ typedef struct {
     void *ctx;
     int  colour;                /* print each colour the page uses separately */
     int  scale;                 /* set by print_page: render at this scale */
+    int  maxdpi;                /* at most this many dots per inch (0: the printer's) */
 } PRTOUT;
 int  print_page(DOC *d, int page, PRTOUT *o);
 /* the same a band at a time */

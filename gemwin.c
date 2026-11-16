@@ -131,7 +131,11 @@ static void status_rect(DOC *d, GRECT *sb)
  * in has its scroll in scroll_x, scroll_y and cv.top, the other's in
  * scroll2_x... (pane_swap() changes them over); pane2 says which of
  * the two is the one worked in, the top (0) or the bottom (1). */
+#ifdef EDLITE
+#define split_on(d) 0           /* EdWord Lite: one pane */
+#else
 static int split_on(DOC *d) { return d->split2 && d->view != VIEW_PREVIEW && !d->iconified; }
+#endif
 #define SPLITH 9                /* the bar between the panes, with its grip */
 
 /* the area r cut in two: the active pane in r, the other in o, the bar
@@ -552,6 +556,9 @@ static int tb_disabled(DOC *d, int cmd)
     if (cmd == C_UNDO) return !undo_can(d) && d->ch_lo < 0;
     if (cmd == C_REDO) return !redo_can(d);
     if (cmd == C_PVPREV) return d->pv_page <= 0;
+#ifdef EDLITE
+    if (cmd == C_PDF || cmd == C_SPLITWIN) return 1;   /* not in EdWord Lite */
+#endif
     if (cmd == C_PVNEXT) return d->pv_page >= doc_npages(d) - 1;
     return 0;
 }
@@ -1044,6 +1051,7 @@ static void draw_guides(DOC *d, int page, long x, long y, const GRECT *clip)
         }
     }
     vsl_type(vhandle, 1);
+#ifndef EDLITE
     {   /* bookmarks: a small flag where each is */
         int k;
         for (k = 0; k < NBMARK; k++) {
@@ -1069,6 +1077,7 @@ static void draw_guides(DOC *d, int page, long x, long y, const GRECT *clip)
             v_fillarea(vhandle, 3, f);
         }
     }
+#endif
     vsl_color(vhandle, 1);
     vswr_mode(vhandle, MD_REPLACE);
 }
@@ -2598,7 +2607,9 @@ void chart_popup(DOC *d, int t, short x, short y)
 static int chart_click(DOC *d, GRECT *tp, short mx, short my)
 {
     long px, py;
-    int p = view_to_page(d, tp, mx, my, &px, &py), t;
+    int p, t;
+    if (!CHARTS) return 0;
+    p = view_to_page(d, tp, mx, my, &px, &py);
     for (t = 0; t < d->a.ntbl; t++) {
         const CHBOX *cb = &d->cbox[t];
         if (!d->a.tbls[t].chart || cb->page != p) continue;
@@ -2619,7 +2630,7 @@ static void refresh_chart_at(DOC *d, long pos)
     long e;
     int t;
     const CHBOX *cb;
-    if (d->len <= 0) return;
+    if (!CHARTS || d->len <= 0) return;
     if (pos >= d->len) pos = d->len - 1;
     if (pos < 0) pos = 0;
     e = doc_para_end(d, pos);
@@ -2738,6 +2749,7 @@ static void codes_click(DOC *d, const GRECT *cp, short mx, short my, short ks)
     if (c->anchor == c->cursor) c->anchor = -1;
 }
 
+#ifndef EDLITE
 /* dragging the bar between the two panes of a split window; dragged to
  * the top or the bottom it ends the split, the pane left showing goes on */
 static void split_drag(DOC *d, const GRECT *dv)
@@ -2806,6 +2818,7 @@ static void split_drag(DOC *d, const GRECT *dv)
     update_menu(d);
     refresh_tb_if_changed(d);
 }
+#endif
 
 void win_click(DOC *d, short mx, short my, short ks, short clicks)
 {
@@ -2814,7 +2827,9 @@ void win_click(DOC *d, short mx, short my, short ks, short clicks)
     if (d->iconified) { uniconify(d, NULL); return; }
     if (in_rect(&tb, mx, my)) { toolbar_click(d, &tb, mx); return; }
     if (d->view == VIEW_PREVIEW) { if (in_rect(&tp, mx, my)) preview_area_click(d, &tp, mx, my); return; }
+#ifndef EDLITE
     if (sdv.g_h && in_rect(&sdv, mx, my)) { split_drag(d, &sdv); return; }
+#endif
     if (op.g_h && in_rect(&op, mx, my)) {
         /* the other pane: it becomes the one worked in */
         pane_swap(d);
@@ -2857,10 +2872,17 @@ void win_drop_point(DOC *d, short mx, short my)
  * outside the selection puts the cursor there first. */
 void win_rclick(DOC *d, short mx, short my)
 {
+#ifdef EDLITE
+    static const short cmds[] = { C_HEAD1, C_HEAD2, C_HEAD3, C_BODY, 0, C_BULLETS, C_NUMBERS, 0, C_CUT, C_COPY, C_PASTE,
+                                  0, C_COLSEL };
+    static const short text[] = { M_HEAD1, M_HEAD2, M_HEAD3, M_BODY, 0, M_BULLETS, M_NUMBERS, 0, M_CUT, M_COPY, M_PASTE,
+                                  0, M_COLSEL };
+#else
     static const short cmds[] = { C_HEAD1, C_HEAD2, C_HEAD3, C_BODY, 0, C_BULLETS, C_NUMBERS, 0, C_CUT, C_COPY, C_PASTE,
                                   0, C_CUTSLOT, C_COPYSLOT, C_PASTESLOT, 0, C_INSBM, C_GOTOBM, C_COLSEL };
     static const short text[] = { M_HEAD1, M_HEAD2, M_HEAD3, M_BODY, 0, M_BULLETS, M_NUMBERS, 0, M_CUT, M_COPY, M_PASTE,
                                   0, M_CUTSLOT, M_COPYSLOT, M_PASTESLOT, 0, M_INSBM, M_GOTOBM, M_COLSEL };
+#endif
 #define NRC ((int)(sizeof cmds / sizeof cmds[0]))
     const char *items[NRC];
     static char colsel_item[48];

@@ -4,9 +4,11 @@
 # and all of it in EDWORD-<version>.zip to upload ("make dist" runs it)
 #
 #   DIST/EDWORD/        ready to copy to an Atari as it is: the 68000 program
-#                       (it runs on any ST, STE, TT or Falcon), the resource
-#                       files of every language, the English dictionary and
-#                       thesaurus, the English manual, the licences
+#                       (it runs on any ST, STE, TT or Falcon), EdWord Lite
+#                       (EDWLITE.PRG, with the EDWORDxx.LNG files of its
+#                       other languages), the resource files of every
+#                       language, the English dictionary and thesaurus, the
+#                       English manual, the licences
 #   DIST/CPU/<cpu>/     EDWORD.PRG for a faster processor, to put in its place:
 #                       030 (68030), 030F (68030 with an FPU), 040 (68040 or
 #                       68060), CF (ColdFire, the FireBee)
@@ -24,6 +26,8 @@ mkdir -p DIST/EDWORD
 cp EDWORD.PRG EDWORD.RSC EDWORDDE.RSC EDWORDES.RSC EDWORDIT.RSC EDWORDFR.RSC EDWORDCS.RSC DIST/EDWORD/
 cp dict/EDWORD.DIC dict/EDWORD.THS dict/COPYING.DIC dict/COPYING.THS manual/MANUALEN.PDF DIST/EDWORD/
 cp LICENSE DIST/EDWORD/LICENSE.TXT
+# EdWord Lite, for a machine with little memory, and its languages
+cp EDWLITE.PRG EDWORDDE.LNG EDWORDES.LNG EDWORDIT.LNG EDWORDFR.LNG EDWORDCS.LNG DIST/EDWORD/
 for cpu in 030 030F 040 CF; do
     mkdir -p DIST/CPU/$cpu
     cp EDW$cpu.PRG DIST/CPU/$cpu/EDWORD.PRG
@@ -43,6 +47,11 @@ printf '%s\r\n' "EdWord $ver for Atari compatible computers" "" \
   "EDWORD      Copy this folder to your Atari and run EDWORD.PRG. It runs on" \
   "            any ST, STE, Mega ST, TT or Falcon, in the language TOS is" \
   "            set to (with English spelling)." \
+  "            EDWLITE.PRG is EdWord Lite, for an ST with little memory" \
+  "            (1 MB, or 4 MB with GDOS): it reads its dictionary from" \
+  "            disk as it goes, saves only EdWord's own files, and has no" \
+  "            PDF export (print to XGDOS's PDF instead), clipboard slots," \
+  "            colour themes or file selector of its own." \
   "CPU\\030     Faster versions: copy the EDWORD.PRG for your processor over" \
   "CPU\\030F    the one in EDWORD - 030 for a 68030, 030F for a 68030 with" \
   "CPU\\040     an FPU, 040 for a 68040 or 68060, CF for a FireBee." \

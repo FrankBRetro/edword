@@ -18,7 +18,7 @@
 #include <string.h>
 #include "gemui.h"
 
-#ifdef PCGEM
+#if defined(PCGEM) || defined(EDLITE)
 int fsel_window(char *dir, char *name, const char *title) { (void)dir; (void)name; (void)title; return -1; }
 void fsel_follow(DOC *d) { (void)d; }
 void fsel_top(DOC *d) { (void)d; }

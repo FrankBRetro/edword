@@ -33,6 +33,7 @@
 long img_rgb_max = 0x7fffffffL;      /* the largest colour copy kept, bytes */
 
 static unsigned rd16(const unsigned char *p) { return ((unsigned)p[0] << 8) | p[1]; }
+static unsigned long rd32(const unsigned char *p) __attribute__((unused));   /* (EdWord Lite: no PNG) */
 static unsigned long rd32(const unsigned char *p)
 {
     return ((unsigned long)p[0] << 24) | ((unsigned long)p[1] << 16) | ((unsigned long)p[2] << 8) | p[3];
@@ -296,6 +297,7 @@ static int gem_img(const unsigned char *b, long n, IMG *im)
     return sink_end(&s, ok);
 }
 
+#ifndef EDLITE /* EdWord Lite reads GEM IMG pictures only */
 /* ================================================================= */
 /*  Inflate (RFC 1951), for PNG                                       */
 /* ================================================================= */
@@ -819,6 +821,7 @@ out:
     return ok;
 }
 
+#endif /* EDLITE */
 /* ================================================================= */
 /*  Any picture                                                       */
 /* ================================================================= */
@@ -830,9 +833,12 @@ int img_load(const char *path, IMG *im)
     int ok = 0;
     memset(im, 0, sizeof *im);
     if (!b) return 0;
+#ifndef EDLITE
     if (n >= 8 && !memcmp(b, "\x89PNG\r\n\x1a\n", 8)) ok = png_img(b, n, im);
     else if (n >= 12 && !memcmp(b, "FORM", 4) && (!memcmp(b + 8, "ILBM", 4) || !memcmp(b + 8, "PBM ", 4))) ok = iff_img(b, n, im);
-    else ok = gem_img(b, n, im);
+    else
+#endif
+    ok = gem_img(b, n, im);
     free(b);
     if (ok) set_name(im, path);
     return ok;
@@ -841,8 +847,10 @@ int img_load(const char *path, IMG *im)
 /* is this a picture EdWord reads? (by its first bytes) */
 int img_detect(const unsigned char *b, long n)
 {
+#ifndef EDLITE
     if (n >= 8 && !memcmp(b, "\x89PNG\r\n\x1a\n", 8)) return 1;
     if (n >= 12 && !memcmp(b, "FORM", 4) && (!memcmp(b + 8, "ILBM", 4) || !memcmp(b + 8, "PBM ", 4))) return 1;
+#endif
     /* (only the first bytes may be here: an XIMG palette makes the header
      * longer than that, so it isn't required to fit) */
     if (n >= 16 && rd16(b + 2) >= 8 && rd16(b + 2) <= 2000 && rd16(b + 6) <= 255 &&

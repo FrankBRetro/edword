@@ -20,6 +20,30 @@
 #include "gemui.h"
 #include "edrsc.h"
 
+#ifdef EDLITE
+/* EdWord Lite: no colour themes, the AES's own colours */
+int theme_id;
+unsigned char theme_rgb[TH_NROLES][3];
+const char *theme_name(int id) { (void)id; return ""; }
+int  theme_possible(void) { return 0; }
+int  theme_per_window(void) { return 0; }
+int  theme_on(void) { return 0; }
+void theme_for(int slot) { (void)slot; }
+void theme_global(void) {}
+int  theme_window(int slot, unsigned char rgb[TH_NROLES][3]) { (void)slot; (void)rgb; return -1; }
+void theme_set_window(int slot, int id, unsigned char rgb[TH_NROLES][3]) { (void)slot; (void)id; (void)rgb; }
+int  theme_pen(int role) { return TH_PEN0 + role; }
+void theme_pick(int id) { (void)id; }
+void theme_apply(void) {}
+void theme_preview_pens(void) {}
+void theme_init(void) {}
+void theme_exit(void) {}
+void theme_load(const char *key, const char *val) { (void)key; (void)val; }
+void theme_save(void *fp) { (void)fp; }
+void theme_bevel(short x, short y, short w, short h, int pressed) { (void)x; (void)y; (void)w; (void)h; (void)pressed; }
+void theme_userdef(OBJECT *o, USERBLK *ub, long parm) { (void)o; (void)ub; (void)parm; }
+#else
+
 /* the themes: Atari (none) and the Windows 95 schemes under other names
  * (Classic is Windows Standard, Terracotta Brick, Dune Desert, Aubergine
  * Eggplant, Lavender Lilac, Sycamore Maple, Nautical Marine, Damson Plum,
@@ -344,3 +368,5 @@ void theme_userdef(OBJECT *o, USERBLK *ub, long parm)
     o->ob_spec.userblk = ub;
     o->ob_flags &= ~OF_FL3DMASK;
 }
+
+#endif /* EDLITE */

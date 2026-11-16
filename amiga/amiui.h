@@ -55,6 +55,7 @@ enum {
     C_VDOC, C_SPLIT, C_VCODES, C_ZOOMIN, C_ZOOMOUT, C_TOOLBAR, C_RULERS, C_GUIDES, C_TILEV, C_TILEH,
     C_CASCADE, C_ICONIFY, C_ICONALL, C_BOTTOM, C_CYCLE, C_WINMORE,
     C_OBJPROP, C_OBJDEL, C_OBJEDIT, C_ZOOMFIT, C_ZOOMPAGE, C_THEME, C_ICONS, C_HELP,
+    C_CLONE, C_FINDPREV, C_COLSEL, C_GOTOBM, C_INSBM, C_SPLITWIN, C_PVPREV, C_PVNEXT, C_PVZOOM,
     C_LAST,
     C_FONT0 = 120, C_SIZE0 = 220, C_COLOR0 = 270, C_UD0 = 280, C_WIN0 = 290
 };
@@ -409,6 +410,10 @@ void  busy_end(void);
 extern const TOOL find_tool, spell_tool, thes_tool;
 void  find_open(DOC *d);
 void  find_again(DOC *d);
+void  find_again_dir(DOC *d, int back);
+void  bm_key(int n, int set);
+int   block_delete(DOC *d);
+void  split_toggle(DOC *d);
 void  spell_run(DOC *d);
 void  spell_close(void);
 DOC  *spell_doc(void);
@@ -416,12 +421,13 @@ void  thes_run(DOC *d);
 void  live_popup(DOC *d, long a, long b, short mx, short my);
 int   spell_ensure(int quiet);
 
-/* amitool.c: the font selector and print preview windows */
-extern const TOOL fontsel_tool, preview_tool;
+/* amitool.c: the font selector window */
+extern const TOOL fontsel_tool;
 void  fontsel_open(void);
 void  fontsel_sync(void);
-void  preview_open(DOC *d);
 void  preview_changed(DOC *d);
+void  preview_goto(DOC *d, long page);
+void  preview_zoom(DOC *d, short mx, short my, const GRECT *a);
 int   preview_idle(int run);
 
 /* amiobj.c: pictures and drawings in the document view */

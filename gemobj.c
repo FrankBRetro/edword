@@ -352,6 +352,10 @@ void cmd_drawing(DOC *d)
 {
     OBJ o;
     int i;
+#ifdef EDLITE
+    (void)d; (void)o; (void)i;
+    return;                             /* no drawing in EdWord Lite */
+#endif
     if (d->a.nobj >= MAX_OBJS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return; }
     memset(&o, 0, sizeof o);
     o.type = OB_DRAW;
@@ -755,6 +759,7 @@ void draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
     vswr_mode(vhandle, MD_TRANS);
 }
 
+#ifndef EDLITE /* EdWord Lite shows drawings but has no drawing window */
 /* ================================================================= */
 /*  The drawing window                                                 */
 /* ================================================================= */
@@ -1096,9 +1101,10 @@ static int freehand(short mx, short my, const GRECT *cv, short *xy)
 
 /* the stroke as a shape: its points in drawing points, thinned to at most
  * MAX_FREEPTS, into the document's pool; 0 if it can't be */
-static int freehand_shape(OBJ *o, const short *sxy, int n)
+static int freehand_shape(OBJ *o, short *sxy, int n)
 {
-    static short pt[2 * FH_MAX], nrm[2 * MAX_FREEPTS];
+    static short nrm[2 * MAX_FREEPTS];
+    short *pt = sxy;                    /* in place: each point goes no later than it was read */
     short minx = 32767, miny = 32767, maxx = -32767, maxy = -32767;
     int i, m = 0, step, at;
     SHAPE *s;
@@ -1274,10 +1280,13 @@ static void dw_click(short mx, short my, short clicks)
     /* draw a new shape */
     if (o->nsh >= MAX_SHAPES) { alert(1, 3, AL_TOO_MANY_SHAPES, AB_OK); return; }
     if (dw.tool == T_FREE) {
-        static short sxy[2 * FH_MAX];
-        int n = freehand(mx, my, &cv, sxy);
+        short *sxy = (short *)malloc(2 * FH_MAX * sizeof(short));   /* only while drawing */
+        int n;
+        if (!sxy) { alert(1, 3, AL_NO_MEMORY, AB_OK); return; }
+        n = freehand(mx, my, &cv, sxy);
         if (n >= 2 && freehand_shape(o, sxy, n)) dw_changed();
         else dw_redraw();
+        free(sxy);
         return;
     }
     if (!rubber(dw.tool, mx, my, &x2, &y2)) return;
@@ -1355,7 +1364,13 @@ void draw_demo_stroke(int t, const short *xy, int n)
     wind_get(dw.wh, WF_WORKXYWH, &wa.g_x, &wa.g_y, &wa.g_w, &wa.g_h);
     canvas_geom(&wa, &cv);
     dw.tool = t;
-    if (n >= 2 && o->nsh < MAX_SHAPES && freehand_shape(o, xy, n)) dw_changed();
+    if (n >= 2 && o->nsh < MAX_SHAPES && n <= FH_MAX) {
+        short *c = (short *)malloc((size_t)n * 2 * sizeof(short));
+        if (!c) return;
+        memcpy(c, xy, (size_t)n * 2 * sizeof(short));
+        if (freehand_shape(o, c, n)) dw_changed();
+        free(c);
+    }
 }
 #endif
 
@@ -1374,3 +1389,18 @@ static void d_click(short x, short y, short c) { dw_click(x, y, c); }
 static void d_close_tool(void) { dw_close(); }
 static void d_docgone(DOC *d) { if (dw.d == d) dw_close(); }
 const TOOL draw_tool = { d_owns, dw_msg, d_click, dw_key, d_close_tool, d_docgone };
+#else
+void draw_close_for(DOC *d, int i) { (void)d; (void)i; }
+void draw_edit(DOC *d, int i) { (void)d; (void)i; }
+void draw_select_shape(int k) { (void)k; }
+#ifdef EDDEMO
+void draw_demo_stroke(int t, const short *xy, int n) { (void)t; (void)xy; (void)n; }
+#endif
+static int  d_owns(short wh) { (void)wh; return 0; }
+static void d_msg(short *m) { (void)m; }
+static void d_click(short x, short y, short c) { (void)x; (void)y; (void)c; }
+static void d_key(short ks, short k) { (void)ks; (void)k; }
+static void d_close_tool(void) {}
+static void d_docgone(DOC *d) { (void)d; }
+const TOOL draw_tool = { d_owns, d_msg, d_click, d_key, d_close_tool, d_docgone };
+#endif

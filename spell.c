@@ -18,7 +18,13 @@
 
 #define BLOCK 32
 
+#ifdef EDLITE
+#define SPELL_DISK              /* the low memory build: blocks read when needed */
+#endif
+
+#ifndef SPELL_DISK
 static unsigned char *mdata;
+#endif
 static long *moff, mblocks, mlen;
 static unsigned char alpha[96];          /* the dictionary's lower-case letters */
 static int nalpha;
@@ -88,6 +94,121 @@ static long be32(const unsigned char *p)
     return ((long)p[0] << 24) | ((long)p[1] << 16) | ((long)p[2] << 8) | p[3];
 }
 
+#ifdef SPELL_DISK
+/* The dictionary stays on disk: in memory only each block's place and first
+ * word, and the blocks used last. A word is looked up in its block, read
+ * from the file when it isn't one of them. */
+#define NCACHE 24
+static FILE *mf;
+static long mbase;                       /* where the blocks start in the file */
+static char *fwbuf;                      /* each block's first word         */
+static long *fwoff;
+static struct { long blk, len, used; unsigned char *b; } bc[NCACHE];
+static long bc_clock;
+
+static void cache_free(void)
+{
+    int i;
+    for (i = 0; i < NCACHE; i++) { free(bc[i].b); bc[i].b = NULL; bc[i].blk = -1; }
+}
+
+/* block i's bytes (and how many) */
+static unsigned char *blk_get(long i, long *len)
+{
+    int k, old = 0;
+    long l = (i + 1 < mblocks ? moff[i + 1] : mlen) - moff[i];
+    for (k = 0; k < NCACHE; k++)
+        if (bc[k].b && bc[k].blk == i) { bc[k].used = ++bc_clock; *len = bc[k].len; return bc[k].b; }
+    for (k = 1; k < NCACHE; k++)
+        if (!bc[k].b || bc[k].used < bc[old].used) { old = k; if (!bc[k].b) break; }
+    free(bc[old].b);
+    bc[old].blk = -1;
+    if ((bc[old].b = (unsigned char *)malloc((size_t)l + 1)) == NULL) return NULL;
+    if (fseek(mf, mbase + moff[i], SEEK_SET) || fread(bc[old].b, 1, (size_t)l, mf) != (size_t)l) {
+        free(bc[old].b); bc[old].b = NULL;
+        return NULL;
+    }
+    bc[old].b[l] = 0;
+    bc[old].blk = i;
+    bc[old].len = l;
+    bc[old].used = ++bc_clock;
+    *len = l;
+    return bc[old].b;
+}
+
+void spell_unload_main(void)
+{
+    cache_free();
+    if (mf) fclose(mf);
+    mf = NULL;
+    free(moff); free(fwbuf); free(fwoff);
+    moff = NULL; fwbuf = NULL; fwoff = NULL;
+    mblocks = mlen = 0;
+}
+
+int spell_load_main(const char *path)
+{
+    unsigned char h[20], *ob = NULL, *win = NULL, seen[256];
+    long i, nb, dl, ws = 0, wl = 0, fwlen = 0, fwcap;
+    int c;
+    if (fwbuf) return 1;
+    if ((mf = fopen(path, "rb")) == NULL) return 0;
+    if (fread(h, 1, 20, mf) != 20 || memcmp(h, "EDWDIC1\n", 8)) goto fail;
+    nb = be32(h + 12);
+    dl = be32(h + 16);
+    mbase = 20 + nb * 4;
+    fwcap = nb * 10 + 64;
+    moff = (long *)malloc(nb * sizeof(long) + 4);
+    fwoff = (long *)malloc(nb * sizeof(long) + 4);
+    ob = (unsigned char *)malloc(nb * 4 + 4);
+    fwbuf = (char *)malloc((size_t)fwcap);
+    win = (unsigned char *)malloc(8192 + 1);
+    if (!moff || !fwoff || !ob || !fwbuf || !win || fread(ob, 4, nb, mf) != (size_t)nb) goto fail;
+    for (i = 0; i < nb; i++) moff[i] = be32(ob + i * 4);
+    free(ob); ob = NULL;
+    memset(seen, 0, sizeof seen);
+    /* through the file in parts: each block's first word, the letters used */
+    for (i = 0; i < nb; i++) {
+        long n;
+        unsigned char *w;
+        if (moff[i] < ws || moff[i] + WORDMAX + 1 > ws + wl) {
+            long k = dl - moff[i] < 8192 ? dl - moff[i] : 8192, j;
+            if (k <= 0 || fseek(mf, mbase + moff[i], SEEK_SET) || fread(win, 1, (size_t)k, mf) != (size_t)k) goto fail;
+            ws = moff[i]; wl = k;
+            for (j = 0; j < k; j++) seen[win[j]] = 1;
+            PROG(ws + wl, dl);
+        }
+        w = win + (moff[i] - ws);
+        for (n = 0; n < WORDMAX && moff[i] + n < ws + wl && w[n]; n++) ;
+        if (fwlen + n + 1 > fwcap) {
+            char *nbuf = (char *)realloc(fwbuf, (size_t)(fwcap *= 2));
+            if (!nbuf) goto fail;
+            fwbuf = nbuf;
+        }
+        memcpy(fwbuf + fwlen, w, (size_t)n);
+        fwbuf[fwlen + n] = 0;
+        fwoff[i] = fwlen;
+        fwlen += n + 1;
+    }
+    free(win);
+    mblocks = nb;
+    mlen = dl;
+    nalpha = 0;
+    for (c = 'a'; c <= 'z'; c++) alpha[nalpha++] = (unsigned char)c;
+    for (c = 128; c < 256 && nalpha < (int)sizeof alpha - 1; c++)
+        if (seen[c] && st_isalpha((unsigned char)c) && st_lower((unsigned char)c) == c) alpha[nalpha++] = (unsigned char)c;
+    for (i = 0; i < NCACHE; i++) bc[i].blk = -1;
+    return 1;
+fail:
+    free(ob); free(win);
+    if (mf) fclose(mf);
+    mf = NULL;
+    free(moff); free(fwbuf); free(fwoff);
+    moff = NULL; fwbuf = NULL; fwoff = NULL;
+    return 0;
+}
+
+#else
 int spell_load_main(const char *path)
 {
     FILE *f;
@@ -146,6 +267,8 @@ void spell_unload_main(void)
     mblocks = mlen = 0;
 }
 
+#endif
+
 /* the main dictionary's file name for a language (EDWORD.DIC: English) */
 const char *spell_dic_name(int lang)
 {
@@ -153,6 +276,43 @@ const char *spell_dic_name(int lang)
     return lang >= 1 && lang <= 5 ? n[lang] : n[0];
 }
 
+#ifdef SPELL_DISK
+int spell_main_loaded(void) { return fwbuf != NULL; }
+#define MAIN_LOADED (fwbuf != NULL)
+
+static int main_has(const char *w)
+{
+    long lo = 0, hi = mblocks - 1, p, end;
+    char cur[WORDMAX + 4];
+    unsigned char *b;
+    int c, i;
+
+    if (!fwbuf) return 0;
+    while (lo < hi) {                       /* last block whose first word <= w */
+        long mid = (lo + hi + 1) / 2;
+        if (strcmp(fwbuf + fwoff[mid], w) <= 0) lo = mid; else hi = mid - 1;
+    }
+    strncpy(cur, fwbuf + fwoff[lo], WORDMAX);
+    cur[WORDMAX] = 0;
+    c = strcmp(cur, w);
+    if (c == 0) return 1;
+    if (c > 0) return 0;
+    if ((b = blk_get(lo, &end)) == NULL) return 0;
+    p = (long)strlen((char *)b) + 1;
+    for (i = 1; i < BLOCK && p < end; i++) {
+        int pre = b[p++];
+        long sl = (long)strlen((char *)b + p);
+        if (pre + sl > WORDMAX) { p += sl + 1; continue; }
+        memcpy(cur + pre, b + p, sl + 1);
+        p += sl + 1;
+        c = strcmp(cur, w);
+        if (c == 0) return 1;
+        if (c > 0) return 0;
+    }
+    return 0;
+}
+#else
+#define MAIN_LOADED (mdata != NULL)
 int spell_main_loaded(void) { return mdata != NULL; }
 
 static int main_has(const char *w)
@@ -186,6 +346,8 @@ static int main_has(const char *w)
     }
     return 0;
 }
+
+#endif
 
 /* ---- user dictionaries --------------------------------------------- */
 
@@ -250,8 +412,12 @@ void spell_free_all(void)
 {
     while (spell_nuser > 0) spell_user_unload(spell_nuser - 1);
     wl_free(&ignored);
+#ifdef SPELL_DISK
+    spell_unload_main();
+#else
     free(mdata); free(moff);
     mdata = NULL; moff = NULL;
+#endif
 }
 
 /* ---- checking -------------------------------------------------------- */
@@ -307,7 +473,7 @@ int spell_check(const char *w)
     char lw[WORDMAX], cw[WORDMAX];
     int n = (int)strlen(w), i, cap, allcap = 1;
 
-    if (!mdata && !spell_nuser) return 1;
+    if (!MAIN_LOADED && !spell_nuser) return 1;
     if (n < 2 || n >= WORDMAX) return 1;
     for (i = 0; i < n; i++) {
         unsigned char c = (unsigned char)w[i];

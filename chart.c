@@ -138,9 +138,8 @@ static int table_cells(DOC *d, int tbl, char cell[][CH_MAXCOL][CH_TXT], int *nco
     return nrow;
 }
 
-int chart_data(DOC *d, int tbl, CHDATA *cd)
+static int chart_data2(DOC *d, int tbl, CHDATA *cd, char cell[][CH_MAXCOL][CH_TXT])
 {
-    static char cell[CH_MAXROW + 1][CH_MAXCOL][CH_TXT];
     int nrow, ncol, r, c, numcol[CH_MAXCOL], header = 0, labels = 0, start;
     long v;
     memset(cd, 0, sizeof *cd);
@@ -187,6 +186,17 @@ int chart_data(DOC *d, int tbl, CHDATA *cd)
         else sprintf(cd->cat[r], "%d", r + 1);
     }
     return cd->nser > 0 && cd->ncat > 0;
+}
+
+/* the table's cells are read into memory taken only while it's done */
+int chart_data(DOC *d, int tbl, CHDATA *cd)
+{
+    char (*cell)[CH_MAXCOL][CH_TXT] = malloc((CH_MAXROW + 1) * sizeof *cell);
+    int ok;
+    if (!cell) { memset(cd, 0, sizeof *cd); return 0; }
+    ok = chart_data2(d, tbl, cd, cell);
+    free(cell);
+    return ok;
 }
 
 /* ---- the display list ------------------------------------------------- */

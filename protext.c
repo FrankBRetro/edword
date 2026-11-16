@@ -34,6 +34,9 @@
 #define P_NORMAL  0xEE
 #define P_UNDER   0xF5
 
+static int ch2pt(long n) __attribute__((unused));
+static int pt2ch(long p) __attribute__((unused));
+static int is_ctl(unsigned char c) __attribute__((unused));
 static int ch2pt(long n) { return (int)((n * 72 + 5) / 10); }
 static int pt2ch(long p) { return (int)((p * 10 + (p >= 0 ? 36 : -36)) / 72); }
 
@@ -75,6 +78,7 @@ int pt_detect(const unsigned char *b, long n)
     return soft > 0 || (e >= 2 && !(e & 1) && n > 0 && b[0] == '>');
 }
 
+#ifndef EDLITE /* EdWord Lite reads only RTF, 1st Word Plus and text */
 /* ================================================================= */
 /*  Import                                                            */
 /* ================================================================= */
@@ -256,6 +260,9 @@ int pt_import(DOC *d, const char *path)
     return 1;
 }
 
+#endif
+
+#ifndef EDLITE /* EdWord Lite saves only its own files */
 /* ================================================================= */
 /*  Export                                                            */
 /* ================================================================= */
@@ -421,6 +428,7 @@ int pt_export(DOC *d, const char *path)
     fclose(f);
     return !err;
 }
+#endif /* EDLITE */
 
 /* ================================================================= */
 /*  Any format (used by every version's Open, Import and Export)      */
@@ -445,12 +453,16 @@ int file_detect(const char *path, int text)
     long n;
     unsigned char *b;
     int t = text ? FT_TEXT : FT_RTF;
+#ifndef EDLITE
     if (ends_with(path, ".MD") || ends_with(path, ".MARKDOWN") || ends_with(path, ".MKD")) return FT_MD;
+#endif
     b = load_file(path, &n);
     if (!b) return t;
     if (n >= 5 && !memcmp(b, "{\\rtf", 5)) t = FT_RTF;
     else if (fwp_detect(b, n)) t = FT_FWP;
+#ifndef EDLITE
     else if (pt_detect(b, n)) t = FT_PT;
+#endif
     else if (is_utf16(b, n)) t = FT_TEXT;
     else if (ends_with(path, ".TXT") || ends_with(path, ".ASC") || ends_with(path, ".TEXT") || text) t = FT_TEXT;
     free(b);
@@ -462,9 +474,11 @@ int doc_read(DOC *d, const char *path, int type, int cs, int join)
     if (type == FT_AUTO) type = file_detect(path, 1);
     switch (type) {
     case FT_TEXT: return text_import(d, path, cs, join);
+#ifndef EDLITE
     case FT_MD:   return md_import(d, path, cs);
-    case FT_FWP:  return fwp_import(d, path);
     case FT_PT:   return pt_import(d, path);
+#endif
+    case FT_FWP:  return fwp_import(d, path);
     case FT_RTF:  return rtf_import(d, path);
     default:      return 0;
     }
@@ -474,9 +488,11 @@ int doc_write(DOC *d, const char *path, int type, int crlf, int cs)
 {
     switch (type) {
     case FT_TEXT: return text_export(d, path, crlf, cs);
+#ifndef EDLITE
     case FT_MD:   return md_export(d, path, crlf, cs);
     case FT_FWP:  return fwp_export(d, path);
     case FT_PT:   return pt_export(d, path);
+#endif
     case FT_RTF:  return rtf_export(d, path);
     default:      return 0;
     }

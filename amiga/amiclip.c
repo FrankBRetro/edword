@@ -145,12 +145,22 @@ int clip_copy(DOC *d)
     long a, b, i, k = 0;
     char *t;
     int ok;
-    if (!doc_sel(d, &a, &b)) return 0;
-    doc_copy(d);
+    const DOC *src = d;
+    DOC *blk = NULL;
+    if (d->colsel && d->anchor >= 0) {           /* a block: its lines' parts */
+        if (col_has_table(d)) { alert(1, 1, AL_COLSEL_TABLE, AB_OK); return 0; }
+        if ((blk = (DOC *)malloc(sizeof(DOC))) == NULL) return 0;
+        if (!col_copy(d, blk)) { free(blk); return 0; }
+        doc_copy_doc(blk);
+        src = blk; a = 0; b = blk->len;
+    } else {
+        if (!doc_sel(d, &a, &b)) return 0;
+        doc_copy(d);
+    }
     t = (char *)malloc((size_t)(b - a + 1));
-    if (!t) return 1;
+    if (!t) { if (blk) { doc_free(blk); free(blk); } return 1; }
     for (i = a; i < b; i++) {
-        unsigned char c = d->text[i].ch;
+        unsigned char c = src->text[i].ch;
         if (c == CH_CELL) t[k++] = '\t';
         else if (ISBRK(c)) t[k++] = '\n';
         else t[k++] = (char)lat_ch(c);
@@ -159,14 +169,30 @@ int clip_copy(DOC *d)
     ok = put_ftxt(t, k);
     busy(0);
     free(t);
+    if (blk) { doc_free(blk); free(blk); }
     (void)ok;
     return 1;
 }
 
 static int insert_doc(DOC *d, DOC *t)
 {
-    long a, b, from = doc_sel(d, &a, &b) ? a : d->cursor;
-    int ok = t->len > 0 && doc_insert_doc(d, t, 0, t->len);
+    long a, b, from;
+    int ok;
+    if (d->colsel && d->anchor >= 0 && !block_delete(d)) d->colsel = 0;
+    from = doc_sel(d, &a, &b) ? a : d->cursor;
+    if (d->colmode && t->len > 0) {              /* Column Select: pasted as a block */
+        DOC *tmp = (DOC *)malloc(sizeof(DOC));
+        long k;
+        if (!tmp) return 0;
+        doc_init(tmp);                           /* in d's paragraph and table numbers */
+        ok = doc_insert_doc(tmp, t, 0, t->len) ? 1 : 0;
+        for (k = 0; k < tmp->len; k++) tmp->text[k].para = 0;
+        doc_delete_sel(d);
+        from = d->cursor;
+        ok = ok && col_paste(d, tmp);
+        doc_free(tmp);
+        free(tmp);
+    } else ok = t->len > 0 && doc_insert_doc(d, t, 0, t->len);
     if (ok) after_edit(d, from);
     return ok;
 }
@@ -192,6 +218,7 @@ int clip_paste(DOC *d)
         return ok;
     }
     free(s);
+    if (d->colmode || (d->colsel && d->anchor >= 0)) return doc_clip() ? insert_doc(d, doc_clip()) : 0;
     from = doc_sel(d, &a, &b) ? a : d->cursor;
     ok = doc_paste(d);
     if (ok) after_edit(d, from);

@@ -31,7 +31,11 @@ short ap_id;
 static int   untitled_no;
 
 /* SpeedoGDOS does its work on our stack; give it room (MiNTLib) */
+#ifdef EDLITE
+long  _stksize = 40960L;            /* the low memory build: fewer dialogs at once */
+#else
 long  _stksize = 65536L;
+#endif
 
 /* ================================================================= */
 /*  Start-up log: EDWORD.LOG next to the program. Every line is        */
@@ -98,12 +102,19 @@ int pref_autosave, pref_asmin = 5, pref_asmode, pref_display, pref_live;
 int pref_rulers, pref_guides = 1;
 DOC *ui_doc;                    /* the document the command running now is for */
 int pref_bgprint = 1;           /* with XGDOS, print in the background */
+int pref_prtdpi;                /* print at most this many dpi; 0 the printer's own */
 int pref_fsel = -1;             /* file selector: 0 the system's, 1 EdWord's, -1 not chosen yet */
 char pref_docdir[128] = "C:\\DATA\\DOCPROC\\EDWORD";
 char tpl_name[48], tpl_addr[3][48], tpl_title[48];
 static int pref_lang = -1, pref_spell = -1;
 
+#ifdef EDLITE
+/* EdWord Lite keeps its own, EDWLITE.INF, so the two can share a folder;
+ * the first time it starts from EdWord's */
+static void prefs_path(char *p) { sprintf(p, "%sEDWLITE.INF", progdir); }
+#else
 static void prefs_path(char *p) { sprintf(p, "%sEDWORD.INF", progdir); }
+#endif
 
 static void load_prefs(void)
 {
@@ -111,6 +122,9 @@ static void load_prefs(void)
     FILE *f;
     prefs_path(path);
     f = fopen(path, "r");
+#ifdef EDLITE
+    if (!f) { sprintf(path, "%sEDWORD.INF", progdir); f = fopen(path, "r"); }
+#endif
     if (!f) return;
     while (fgets(line, sizeof line, f)) {
         char *eq = strchr(line, '='), *val;
@@ -136,6 +150,7 @@ static void load_prefs(void)
         else if (!strcmp(line, "rulers")) pref_rulers = v != 0;
         else if (!strcmp(line, "guides")) pref_guides = v != 0;
         else if (!strcmp(line, "bgprint")) pref_bgprint = v != 0;
+        else if (!strcmp(line, "prtdpi") && v >= 0 && v <= 2400) pref_prtdpi = v;
         else if (!strcmp(line, "fsel") && v >= -1 && v <= 1) pref_fsel = v;
         else if (!strncmp(line, "theme", 5)) theme_load(line, val);
         else if (!strcmp(line, "keep") && v >= KEEP_ANY && v <= KEEP_TOGETHER) lay_keep = v;
@@ -165,7 +180,7 @@ void save_prefs(void)
             pref_autosave, pref_asmin, pref_asmode, pref_display, ui_lang, pref_live, pref_rulers, pref_guides, spell_lang);
     fprintf(f, "keep=%d\ndocdir=%s\ntplname=%s\ntpladdr1=%s\ntpladdr2=%s\ntpladdr3=%s\ntpltitle=%s\n",
             lay_keep, pref_docdir, tpl_name, tpl_addr[0], tpl_addr[1], tpl_addr[2], tpl_title);
-    fprintf(f, "bgprint=%d\nfsel=%d\n", pref_bgprint, pref_fsel);
+    fprintf(f, "bgprint=%d\nfsel=%d\nprtdpi=%d\n", pref_bgprint, pref_fsel, pref_prtdpi);
     theme_save(f);
     fclose(f);
 }
@@ -184,6 +199,10 @@ int xgdos_loaded(void)
 int fsel_own(void)
 {
     long v;
+#ifdef EDLITE
+    (void)v;
+    return 0;                           /* EdWord Lite: always the system's */
+#endif
     if (pref_fsel >= 0) return pref_fsel;
     if (Getcookie(0x4653454CL, &v) == C_FOUND || Getcookie(0x4D616758L, &v) == C_FOUND) return 0;
     return 1;
@@ -406,7 +425,15 @@ void update_menu(DOC *d)
     for (i = C_SAVE; i <= C_CLOSE; i++) enable(i, d != NULL);
     enable(C_SPELL, hasdoc); enable(C_THES, hasdoc); enable(C_SUMMARY, hasdoc);
     for (i = C_CLONE; i <= C_PVZOOM; i++) enable(i, hasdoc);
+#ifdef EDLITE
+    /* EdWord Lite has no slots or PDF: their menu items stay grey */
+    enable(C_SLOTS, 0); enable(C_CLEARSLOTS, 0);
+    enable(C_CUTSLOT, 0); enable(C_COPYSLOT, 0); enable(C_PASTESLOT, 0); enable(C_PDF, 0);
+    enable(C_DRAWING, 0); enable(C_OBJEDIT, 0); enable(C_INSBM, 0); enable(C_GOTOBM, 0); enable(C_CHART, 0); enable(C_SPLITWIN, 0);
+    enable(C_EXPORT, 0); enable(C_EXPTXT, 0); enable(C_EXPMD, 0); enable(C_EXPFWP, 0); enable(C_EXPPT, 0);
+#else
     enable(C_SLOTS, 1); enable(C_CLEARSLOTS, 1);
+#endif
     enable(C_THEME, theme_possible());
     xfer_refresh();
     if (!d) return;
@@ -718,6 +745,9 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
     long n = 0;
 
     if (type == FT_AUTO) type = file_type(path, 1);
+#ifdef EDLITE
+    if (type == FT_MD || type == FT_PT) type = FT_TEXT;     /* read as plain text */
+#endif
     if (type == FT_TEXT) {
         int eol, det;
         b = load_file(path, &n);
@@ -741,9 +771,11 @@ int read_into(const char *path, int type, int cs, int join, DOC *into, int ask)
     prog_part(0, into ? 1000 : 650);           /* then laying it out */
     switch (type) {
     case FT_TEXT: ok = text_import_buf(d, b, n, cs, join); break;
+#ifndef EDLITE
     case FT_MD:   ok = md_import(d, path, cs); break;
-    case FT_FWP:  ok = fwp_import(d, path); break;
     case FT_PT:   ok = pt_import(d, path); break;
+#endif
+    case FT_FWP:  ok = fwp_import(d, path); break;
     default:      ok = rtf_import(d, path); break;
     }
     free(b);
@@ -855,6 +887,7 @@ static void cmd_clone(DOC *src)
 
 /* ---- bookmarks and the clipboard's slots ----------------------------------- */
 
+#ifndef EDLITE /* EdWord Lite: no bookmarks or slots */
 /* a popup of the ten bookmarks or slots at the mouse; 0-9, or -1 */
 static int ten_popup(DOC *d, int slots, int remove_item)
 {
@@ -920,6 +953,9 @@ static void cmd_insbm(DOC *d)
     else if (i >= 0) { if (d->bmark[i] != d->cursor) bm_set(d, i); }
 }
 
+#endif
+
+#ifndef EDLITE
 static void cmd_slot(DOC *d, int cmd)
 {
     long a, b;
@@ -932,6 +968,7 @@ static void cmd_slot(DOC *d, int cmd)
     else if (d->colsel && d->anchor >= 0) block_delete(d);
     else if (doc_sel(d, &a, &b)) { doc_delete_sel(d); after_edit(d, a); }
 }
+
 
 /* Tools > Clipboard Slots: the ten slots in a document; Save writes them.
  * top: the window to the front (else just brought up to date) */
@@ -975,11 +1012,17 @@ static void slots_window(int top)
     d->dirty = 0;
     open_window(d);
 }
+#endif
+
 
 void cmd_pdf(DOC *d)
 {
     char path[256], def[40];
     int ok;
+#ifdef EDLITE
+    (void)d; (void)path; (void)def; (void)ok;
+    return;                             /* no PDF in EdWord Lite: print to XGDOS's PDF */
+#endif
     default_name(d, ".PDF", def);
     if (!ask_file(L(S_FS_PDF), "*.PDF", def, path)) return;
 #ifdef EDLOG
@@ -997,6 +1040,7 @@ void cmd_pdf(DOC *d)
     if (!ok) alert(1, 3, AL_CANT_PDF, AB_OK);
 }
 
+#ifndef EDLITE
 /* Markdown and 1st Word Plus: the file selector, then write it */
 static void cmd_export(DOC *d, int fmt)
 {
@@ -1042,6 +1086,7 @@ int export_doc(DOC *d, int fmt, int crlf, int cs, char *written)
     busy_end();
     return ok;
 }
+#endif
 
 /* File > Print: through GDOS to its printer (device 21) */
 void cmd_print(DOC *d)
@@ -1074,6 +1119,7 @@ static void cmd_repag(DOC *d)
     doc_changed(d);
 }
 
+#ifndef EDLITE
 static void cmd_exptxt(DOC *d)
 {
     char path[256], def[40];
@@ -1086,6 +1132,7 @@ static void cmd_exptxt(DOC *d)
     busy_end();
     if (!ok) alert(1, 3, AL_CANT_WRITE, AB_OK);
 }
+#endif
 
 int close_doc(DOC *d)
 {
@@ -1373,9 +1420,13 @@ void do_cmd(int cmd)
     case C_ABOUT:  ui_doc = NULL; dlg_about(); return;     /* not any document's */
     case C_NEW:    cmd_new(); return;
     case C_TEMPLATE: cmd_template(); return;
+#ifndef EDLITE
     case C_SLOTS:  slots_window(1); return;
     case C_CLEARSLOTS:
         if (alert(2, 2, AL_CLEAR_SLOTS, AB_CLEAR_CANCEL) == 1) { slots_clear(); slots_window(0); }
+#else
+    case C_SLOTS: case C_CLEARSLOTS: case C_PDF: return;
+#endif
         return;
     case C_OPEN:   if (ask_file(L(S_FS_OPEN), "*.EWR", NULL, path)) open_path(path, 0); return;
     case C_IMPORT: import_open(); return;
@@ -1490,10 +1541,12 @@ void do_cmd(int cmd)
     case C_INSTIME: insert_date(d, DT_TIME); break;
     case C_PGBRK:   insert_break(d, CH_PAGE); break;
     case C_COLBRK:  insert_break(d, CH_COLBRK); break;
+#ifndef EDLITE
     case C_EXPTXT:  cmd_exptxt(d); break;
     case C_EXPMD:   cmd_export(d, FT_MD); break;
     case C_EXPFWP:  cmd_export(d, FT_FWP); break;
     case C_EXPPT:   cmd_export(d, FT_PT); break;
+#endif
     case C_PREVPAGE: case C_NEXTPAGE: {
         int pg = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0;
         goto_page(d, pg + (cmd == C_NEXTPAGE ? 1 : -1));
@@ -1512,6 +1565,7 @@ void do_cmd(int cmd)
     case C_HEADFOOT:
         if (dlg_headfoot(d)) doc_changed(d);
         break;
+#ifndef EDLITE
     case C_CHART: {
         long e2 = d->len ? doc_para_end(d, d->cursor < d->len ? d->cursor : d->len - 1) : 0;
         int t2 = d->len ? PARA_OF(d, &d->text[e2 < d->len ? e2 : d->len - 1])->tbl - 1 : -1;
@@ -1521,6 +1575,7 @@ void do_cmd(int cmd)
         chart_popup(d, t2, mx, my);
         break;
     }
+#endif
     case C_INSFILE:
         if (ask_file(L(S_FS_INSERT), "*.*", NULL, path)) insert_file(d, path);
         break;
@@ -1569,9 +1624,13 @@ void do_cmd(int cmd)
     case C_FIND:     find_open(d); break;
     case C_FINDNEXT: find_again(d); break;
     case C_FINDPREV: find_again_dir(d, 1); break;
+#ifndef EDLITE
     case C_GOTOBM:   { int n = ten_popup(d, 0, 0); if (n >= 0) bm_goto(d, n); } break;
     case C_INSBM:    cmd_insbm(d); break;
+#endif
+#ifndef EDLITE
     case C_CUTSLOT: case C_COPYSLOT: case C_PASTESLOT: cmd_slot(d, cmd); break;
+#endif
     case C_COLSEL:
         d->colmode = !d->colmode;
         if (d->anchor >= 0) select_range(d, -1, d->cursor);
@@ -1579,6 +1638,7 @@ void do_cmd(int cmd)
         update_menu(d);
         set_info(d);
         break;
+#ifndef EDLITE
     case C_SPLITWIN:
         if (d->view == VIEW_PREVIEW) set_view(d, VIEW_DOC);
         if (d->split2 && d->pane2) pane_swap_doc(d);   /* the top pane goes on */
@@ -1590,6 +1650,7 @@ void do_cmd(int cmd)
         set_sliders(d);
         update_menu(d);
         break;
+#endif
     case C_PLAIN:   apply_style(d, AP_PLAIN, 0); break;
     case C_BOLD:    apply_style(d, AP_TOGGLE, A_BOLD); break;
     case C_ITALIC:  apply_style(d, AP_TOGGLE, A_ITALIC); break;
@@ -1979,12 +2040,14 @@ void handle_key(short ks, short key)
     edlog("key %04x shift %x: top window %d (owner %d), document %d", (unsigned short)key, ks, h, d1, d ? d->wh : -1);
     if (!(ks & 4) && tool_route_key(h, ks, key)) return;
     if (!(ks & 4) && special_key(ks, key)) return;
+#ifndef EDLITE
     if ((ks & 8) && scan >= 0x78 && scan <= 0x81 && d && !d->iconified) {
         /* Alternate 1-0: to that bookmark; with Shift, set it here */
         int n = scan - 0x78;
         if (shift) bm_set(d, n); else bm_goto(d, n);
         return;
     }
+#endif
     if (ks & 4) {                               /* Control */
         if (scan == 0x0F) { do_cmd(C_CYCLE); return; }
         if (scan == 0x1C || scan == 0x72) { do_cmd(shift ? C_COLBRK : C_PGBRK); return; }

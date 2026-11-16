@@ -4118,3 +4118,17 @@ es: Memoria libre: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)
 it: Memoria libera: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)
 fr: Mémoire libre : %ld Ko (ST RAM %ld Ko, Fast RAM %ld Ko)
 cs: Volná paměť: %ld kB (ST RAM %ld kB, Fast RAM %ld kB)
+@S_PRINT_RES
+en: Print resolution:
+de: Druckauflösung:
+es: Resolución impresión:
+it: Risoluzione stampa:
+fr: Résolution impression :
+cs: Rozlišení tisku:
+@S_PRINTER_RES
+en: Printer
+de: Drucker
+es: Impresora
+it: Stampante
+fr: Imprimante
+cs: Tiskárna

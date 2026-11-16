@@ -29,7 +29,7 @@ typedef struct {
     struct Gadget *g[7];                    /* by GID; g[0] unused            */
     struct Image  *img[5];                  /* up down left right size        */
     long  vf, hf;                           /* scroller scale factors         */
-    char  title[200];
+    char  title[300];
     short iw;                               /* iconified window               */
 } DWIN;
 static DWIN dws[MAX_DOCS];
@@ -85,18 +85,43 @@ void work_area(DOC *d, GRECT *g)
 /* the rulers: along the top and down the left of the page pane */
 #define RULH (hchar + 7)
 #define RULW (3 * wchar + 4)
-static int rulers_on(DOC *d) { return pref_rulers && d->view != VIEW_CODES && !d->iconified; }
+static int rulers_on(DOC *d) { return pref_rulers && d->view != VIEW_CODES && d->view != VIEW_PREVIEW && !d->iconified; }
 
-static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
+/* Split window: the text (or in Quick Edit the codes) is in two panes,
+ * one above the other, each with its own scroll. The pane being worked
+ * in has its scroll in scroll_x, scroll_y and cv.top, the other's in
+ * scroll2_x... (pane_swap() changes them over); pane2 says which of
+ * the two is the one worked in, the top (0) or the bottom (1). */
+static int split_on(DOC *d) { return d->split2 && d->view != VIEW_PREVIEW && !d->iconified; }
+#define SPLITH 9                /* the bar between the panes, with its grip */
+
+/* the area r cut in two: the active pane in r, the other in o, the bar
+ * between them in dv */
+static void split_cut(DOC *d, GRECT *r, GRECT *o, GRECT *dv)
 {
-    GRECT wa;
+    short h = r->g_h - SPLITH, h1;
+    if (h < 2) h = 2;
+    h1 = (short)((long)h * d->split_at / 1000);
+    if (h1 < 1) h1 = 1;
+    if (h1 > h - 1) h1 = (short)(h - 1);
+    *o = *dv = *r;
+    dv->g_y = r->g_y + h1; dv->g_h = SPLITH;
+    if (d->pane2) { o->g_h = h1; r->g_y = dv->g_y + SPLITH; r->g_h = (short)(h - h1); }
+    else { r->g_h = h1; o->g_y = dv->g_y + SPLITH; o->g_h = (short)(h - h1); }
+}
+
+static void panes_ex(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp, GRECT *op, GRECT *dv)
+{
+    GRECT wa, o2, d2;
     short y, h;
+    if (!op) op = &o2;
+    if (!dv) dv = &d2;
     work_area(d, &wa);
-    *tb = *tp = *cp = *hr = *vr = wa;
-    tb->g_h = cp->g_h = hr->g_h = vr->g_h = 0;
+    *tb = *tp = *cp = *hr = *vr = *op = *dv = wa;
+    tb->g_h = cp->g_h = hr->g_h = vr->g_h = op->g_h = dv->g_h = 0;
     if (d->iconified) return;
     y = wa.g_y; h = wa.g_h;
-    if (d->toolbar) { tb->g_h = TBH; y += TBH; h -= TBH; }
+    if (d->toolbar || d->view == VIEW_PREVIEW) { tb->g_h = TBH; y += TBH; h -= TBH; }
     if (h < 0) h = 0;
     tp->g_y = y; tp->g_h = h;
     if (d->view == VIEW_SPLIT) {
@@ -110,6 +135,7 @@ static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
         cp->g_y = y;
         cp->g_h = h;
     }
+    if (split_on(d)) split_cut(d, d->view == VIEW_CODES ? cp : tp, op, dv);
     if (rulers_on(d) && tp->g_h > 2 * RULH && tp->g_w > 3 * RULW) {
         hr->g_y = tp->g_y; hr->g_h = RULH; hr->g_x = tp->g_x; hr->g_w = tp->g_w;
         vr->g_y = tp->g_y + RULH; vr->g_h = tp->g_h - RULH; vr->g_x = tp->g_x; vr->g_w = RULW;
@@ -117,6 +143,25 @@ static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
         tp->g_y += RULH; tp->g_h -= RULH;
     }
 }
+
+static void panes(DOC *d, GRECT *tb, GRECT *hr, GRECT *vr, GRECT *tp, GRECT *cp)
+{
+    panes_ex(d, tb, hr, vr, tp, cp, NULL, NULL);
+}
+
+/* the other pane becomes the one worked in */
+static void pane_swap(DOC *d)
+{
+    long t;
+    if (d->view == VIEW_CODES) { t = d->cv.top; d->cv.top = d->cv_top2; d->cv_top2 = t; }
+    else {
+        t = d->scroll_x; d->scroll_x = d->scroll2_x; d->scroll2_x = t;
+        t = d->scroll_y; d->scroll_y = d->scroll2_y; d->scroll2_y = t;
+    }
+    d->pane2 = !d->pane2;
+}
+static int other_pane;          /* drawing (or refreshing) the pane not worked in */
+void pane_swap_doc(DOC *d) { pane_swap(d); }
 
 void get_panes(DOC *d, GRECT *tb, GRECT *tp, GRECT *cp)
 {
@@ -201,7 +246,18 @@ static void draw_selection(DOC *d, GRECT *tp, GRECT *r)
 {
     long a, b, li;
     if (d->selobj >= 0) return;
-    if (doc_sel(d, &a, &b)) {
+    if (d->colsel && d->anchor >= 0) {             /* a block: a span of each line */
+        long la, lb, x0, x1, ca, cb;
+        if (col_block(d, &la, &lb, &x0, &x1))
+            for (li = la; li <= lb && li < d->nlines; li++) {
+                LINE *ln = &d->lines[li];
+                long y1 = scr_y(d, tp, ln->page, ln->py), xa, xb;
+                if (y1 > r->g_y + r->g_h || y1 + zx(d, ln->asc + ln->desc) < r->g_y) continue;
+                col_span(d, li, x0, x1, &ca, &cb);
+                xa = doc_x_of(d, li, ca); xb = doc_x_of(d, li, cb);
+                if (xb > xa) xor_rect(scr_x(d, tp, xa), y1, scr_x(d, tp, xb) - 1, y1 + zx(d, ln->asc + ln->desc) - 1);
+            }
+    } else if (doc_sel(d, &a, &b)) {
         long la = doc_find_line(d, a), lb = doc_find_line(d, b);
         for (li = la; li <= lb && li < d->nlines; li++) {
             LINE *ln = &d->lines[li];
@@ -219,7 +275,7 @@ static void draw_selection(DOC *d, GRECT *tp, GRECT *r)
             if (x2 > x1)
                 xor_rect(scr_x(d, tp, x1), y1, scr_x(d, tp, x2) - 1, y1 + zx(d, ln->asc + ln->desc) - 1);
         }
-    } else if (d->view == VIEW_DOC || d->focus == 0) {
+    } else if ((d->view == VIEW_DOC || d->focus == 0) && !other_pane) {
         long li2 = doc_find_line(d, d->cursor);
         LINE *ln = &d->lines[li2];
         long x = scr_x(d, tp, doc_x_of(d, li2, d->cursor)), y = scr_y(d, tp, ln->page, ln->py);
@@ -347,7 +403,7 @@ static void draw_codes_pane(DOC *d, const GRECT *cp, GRECT *clip)
             if (li < c->top || y > r.g_y + r.g_h) continue;
             if (c2 > c1) xor_rect(x0 + c1 * cwid, y, x0 + c2 * cwid - 1, y + chgt - 1);
         }
-    } else if (codes_focus(d)) {
+    } else if (codes_focus(d) && !other_pane) {
         long li2 = codes_line_of(c, c->cursor);
         long x = x0 + (c->cursor - c->ls[li2]) * cwid, y = y0 + (li2 - c->top) * chgt;
         if (li2 >= c->top) xor_rect(x, y, x + 1, y + chgt - 1);
@@ -371,9 +427,19 @@ static const TBI tbi[] = {
     { IC_JUSTIFY, BTNW, C_JFULL }, { -1, 6, 0 },
     { IC_BULLETS, BTNW, C_BULLETS }, { IC_NUMBERS, BTNW, C_NUMBERS }, { IC_TABLE, BTNW, C_TBLINS }, { IC_PGBRK, BTNW, C_PGBRK }, { -1, 6, 0 },
     { IC_FONT, POPW, TB_FONT }, { IC_SIZE, POPW, TB_SIZE }, { IC_COLOUR, POPW, TB_COLOR }, { -1, 6, 0 },
-    { IC_ZOOM, POPW, TB_ZOOM }, { IC_SPELL, BTNW, C_SPELL }, { IC_CODES, BTNW, C_SPLIT }, { -1, 6, 0 },
+    { IC_ZOOM, POPW, TB_ZOOM }, { IC_SPELL, BTNW, C_SPELL }, { IC_CODES, BTNW, C_SPLIT }, { IC_SPLITWIN, BTNW, C_SPLITWIN },
+    { IC_PREVIEW, BTNW, C_PREVIEW }, { -1, 6, 0 },
     { IC_RULER, BTNW, C_RULERS }, { IC_GUIDES, BTNW, C_GUIDES }, { -1, 0, 0 }
 };
+
+/* the print preview's bar: back to the document, the pages, the zoom,
+ * Print and PDF; then which page it is */
+static const TBI pvi[] = {
+    { IC_BACK, BTNW, C_PREVIEW }, { -1, 6, 0 },
+    { IC_PREVPG, BTNW, C_PVPREV }, { IC_NEXTPG, BTNW, C_PVNEXT }, { IC_PVZOOM, BTNW, C_PVZOOM }, { -1, 6, 0 },
+    { IC_PRINT, BTNW, C_PRINT }, { IC_PDF, BTNW, C_PDF }, { -1, 12, 0 }, { -1, 0, 0 }
+};
+static const TBI *bar_of(DOC *d) { return d->view == VIEW_PREVIEW ? pvi : tbi; }
 
 static int tb_active(DOC *d, int cmd)
 {
@@ -388,7 +454,10 @@ static int tb_active(DOC *d, int cmd)
     case C_JFULL:   return p->just == J_FULL;
     case C_BULLETS: return p->list == LIST_BULLET;
     case C_NUMBERS: return p->list == LIST_NUMBER;
-    case C_SPLIT:   return d->view != VIEW_DOC;
+    case C_SPLIT:   return d->view != VIEW_DOC && d->view != VIEW_PREVIEW;
+    case C_SPLITWIN: return d->split2;
+    case C_PVZOOM:  return d->pv_zoom;
+    case C_PREVIEW: return d->view == VIEW_PREVIEW;
     case C_RULERS:  return pref_rulers;
     case C_GUIDES:  return pref_guides;
     }
@@ -400,6 +469,8 @@ static int tb_disabled(DOC *d, int cmd)
     if (cmd == C_UNDO) return !undo_can(d) && d->ch_lo < 0;
     if (cmd == C_REDO) return !redo_can(d);
     if (cmd == TB_COLOR) return !colour_on;
+    if (cmd == C_PVPREV) return d->pv_page <= 0;
+    if (cmd == C_PVNEXT) return d->pv_page >= doc_npages(d) - 1;
     return 0;
 }
 
@@ -408,7 +479,8 @@ static long tb_key(DOC *d)
     PARA *p = doc_para_at(d, d->cursor);
     return ((long)d->ins.attr << 8) ^ ((long)p->just << 2) ^ ((long)p->list << 12) ^ d->view ^ ((long)colour_on << 30) ^
            ((long)undo_can(d) << 16) ^ ((long)redo_can(d) << 17) ^ ((long)d->zoom << 18) ^ ((long)(d->ch_lo >= 0) << 29) ^
-           ((long)pref_rulers << 26) ^ ((long)pref_guides << 27);
+           ((long)pref_rulers << 26) ^ ((long)pref_guides << 27) ^ ((long)d->split2 << 28) ^
+           (d->view == VIEW_PREVIEW ? (d->pv_page * 977L) ^ ((long)d->pv_zoom << 25) ^ ((long)doc_npages(d) << 19) : 0);
 }
 
 static void draw_toolbar(DOC *d, const GRECT *tb, GRECT *clip)
@@ -416,27 +488,33 @@ static void draw_toolbar(DOC *d, const GRECT *tb, GRECT *clip)
     GRECT r = *clip;
     long x = tb->g_x + 4, by = tb->g_y + 1, bh = tb->g_h - 3;
     int i, ih = icon_h();
+    const TBI *tbi_ = bar_of(d);
 
     if (!rc_inter(tb, &r)) return;
     clip_set(&r);
     fill_g(&r, P_TFACE);
     line(tb->g_x, tb->g_y + tb->g_h - 1, tb->g_x + tb->g_w - 1, tb->g_y + tb->g_h - 1, P_TDARK);
-    for (i = 0; tbi[i].w; i++) {
-        long bw = tbi[i].w - 2;
-        if (tbi[i].icon >= 0) {
+    for (i = 0; tbi_[i].w; i++) {
+        long bw = tbi_[i].w - 2;
+        if (tbi_[i].icon >= 0) {
             GRECT b;
-            int act = tb_active(d, tbi[i].cmd), dis = tb_disabled(d, tbi[i].cmd);
+            int act = tb_active(d, tbi_[i].cmd), dis = tb_disabled(d, tbi_[i].cmd);
             b.g_x = (short)x; b.g_y = (short)by; b.g_w = (short)bw; b.g_h = (short)bh;
             if (act) fill_rect(x + 1, by + 1, x + bw - 2, by + bh - 2, P_TMARGIN);
             bevel(&b, act);
-            draw_tbicon(tbi[i].icon, x + (bw - 16) / 2, by + (bh - ih) / 2, P_TTEXT);
-            if (tbi[i].cmd < 0) {                     /* popup arrow */
+            draw_tbicon(tbi_[i].icon, x + (bw - 16) / 2, by + (bh - ih) / 2, P_TTEXT);
+            if (tbi_[i].cmd < 0) {                     /* popup arrow */
                 long ax = x + bw - 9, ay = by + bh / 2 - 1, k;
                 for (k = 0; k < 3; k++) line(ax + k, ay + k, ax + 6 - k, ay + k, P_TTEXT);
             }
             if (dis) fill_pat(x + 1, by + 1, x + bw - 2, by + bh - 2, P_TFACE, 1);
         }
-        x += tbi[i].w;
+        x += tbi_[i].w;
+    }
+    if (d->view == VIEW_PREVIEW) {                    /* which page */
+        char s[40];
+        sprintf(s, L(S_PAGE_N_OF), d->pv_page + 1, doc_npages(d));
+        sys_text(x + 4, tb->g_y + (tb->g_h - hchar) / 2, s, P_TTEXT);
     }
     clip_off();
     tb_state[d->slot] = tb_key(d);
@@ -450,14 +528,15 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
     int i, k, n, sel;
     short px, py;
     struct Window *w = DW(d)->w;
+    const TBI *tbi_ = bar_of(d);
 
-    for (i = 0; tbi[i].w; i++) {
-        if (tbi[i].icon >= 0 && mx >= x && mx < x + tbi[i].w - 2) break;
-        x += tbi[i].w;
+    for (i = 0; tbi_[i].w; i++) {
+        if (tbi_[i].icon >= 0 && mx >= x && mx < x + tbi_[i].w - 2) break;
+        x += tbi_[i].w;
     }
-    if (!tbi[i].w) return;
+    if (!tbi_[i].w) return;
     px = (short)(x + w->LeftEdge); py = (short)(tb->g_y + tb->g_h + w->TopEdge);
-    switch (tbi[i].cmd) {
+    switch (tbi_[i].cmd) {
     case TB_FONT: {
         /* as many as a popup can hold; the rest are in the font selector */
         int nshow = nfonts, rows = (scr_h - py) / (hchar + 1) - 1;
@@ -499,7 +578,7 @@ static void toolbar_click(DOC *d, const GRECT *tb, short mx)
         else if (sel == NZOOM + 1) set_fit_width(d, FIT_PAGE);
         break;
     default:
-        if (!tb_disabled(d, tbi[i].cmd)) do_cmd(tbi[i].cmd);
+        if (!tb_disabled(d, tbi_[i].cmd)) do_cmd(tbi_[i].cmd);
     }
     update_menu(top_doc());
 }
@@ -683,21 +762,243 @@ static void draw_guides(DOC *d, int page, long x, long y)
             dotted_v(x + zx(d, cx + pt2px_x(f.colgap)), t, b, pen);
         }
     }
+    {   /* bookmarks: a small flag where each is */
+        int k, fpen = npens >= 16 ? P_RED : pen;
+        for (k = 0; k < NBMARK; k++) {
+            long li, bx, by, h, pos, tri_[6];
+            LINE *ln;
+            if (d->bmark[k] < 0 || !d->nlines) continue;
+            pos = d->bmark[k] <= d->len ? d->bmark[k] : d->len;
+            li = doc_find_line(d, pos);
+            ln = &d->lines[li];
+            if (ln->page != page) continue;
+            bx = x + zx(d, doc_x_of(d, li, pos));
+            by = y + zx(d, ln->py);
+            h = zx(d, ln->asc + ln->desc);
+            line(bx - 1, by - 4, bx - 1, by + h, fpen);
+            tri_[0] = bx - 1; tri_[1] = by - 4; tri_[2] = bx + 5; tri_[3] = by - 2; tri_[4] = bx - 1; tri_[5] = by;
+            poly_fill(tri_, 3, fpen, 0);
+        }
+    }
 }
+
+static void set_prop(DOC *d, int gid, long top, long total, long vis);
+
+/* ================================================================= */
+/*  Print preview: a view of the document's own window                */
+/* ================================================================= */
+
+/* The pages as they will print, drawn in the document's window in place
+ * of the text (Project > Print Preview, or the toolbar's button); its own
+ * bar has the way back to the document, the pages, the zoom, Print and
+ * PDF. pv_zoom 0: the whole page fits, 1: 100%. */
+
+/* page placement: drawn at n/den of its size, top left at ox,oy */
+static void pv_geom(DOC *d, const GRECT *a, long *n, long *den, long *ox, long *oy)
+{
+    long W = pt2px_x(PS(d).w), H = pt2px_y(PS(d).h), aw = a->g_w, ah = a->g_h;
+    if (!d->pv_zoom) {
+        long x = (aw - 16) * 1000L / W, y = (ah - 16) * 1000L / H;
+        *den = 1000;
+        *n = x < y ? x : y;
+        if (*n > 1000) *n = 1000;
+        if (*n < 1) *n = 1;
+        *ox = a->g_x + (aw - W * *n / 1000) / 2;
+        *oy = a->g_y + (ah - H * *n / 1000) / 2;
+    } else {
+        *n = *den = 1;
+        *ox = a->g_x + 8 - d->pv_sx;
+        *oy = a->g_y + 8 - d->pv_sy;
+        if (W + 16 < aw) *ox = a->g_x + (aw - W) / 2;
+    }
+}
+
+static void pv_clamp(DOC *d, const GRECT *a)
+{
+    long W = pt2px_x(PS(d).w) + 16, H = pt2px_y(PS(d).h) + 16;
+    int np = doc_npages(d);
+    if (d->pv_page >= np) d->pv_page = np - 1;
+    if (d->pv_page < 0) d->pv_page = 0;
+    if (d->pv_sx > W - a->g_w) d->pv_sx = W - a->g_w;
+    if (d->pv_sy > H - a->g_h) d->pv_sy = H - a->g_h;
+    if (d->pv_sx < 0) d->pv_sx = 0;
+    if (d->pv_sy < 0) d->pv_sy = 0;
+}
+
+static void preview_draw(DOC *d, const GRECT *a, GRECT *clip)
+{
+    GRECT r = *a, page;
+    long n, den, ox, oy, W, H;
+    if (!a->g_h || !rc_inter(clip, &r)) return;
+    pv_clamp(d, a);
+    clip_set(&r);
+    fill_g(a, P_DESK);
+    pv_geom(d, a, &n, &den, &ox, &oy);
+    W = pt2px_x(PS(d).w) * n / den;
+    H = pt2px_y(PS(d).h) * n / den;
+    fill_rect(ox + 4, oy + 4, ox + W + 3, oy + H + 3, P_SHADOW);
+    fill_rect(ox, oy, ox + W - 1, oy + H - 1, P_WHITE);
+    frame(ox, oy, ox + W - 1, oy + H - 1, P_BLACK);
+    page.g_x = (short)(ox + 1); page.g_y = (short)(oy + 1); page.g_w = (short)(W - 2); page.g_h = (short)(H - 2);
+    if (rc_inter(&r, &page)) {
+        clip_set(&page);
+        draw_preview_page(d, (int)d->pv_page, ox, oy, n, den);
+    }
+    clip_off();
+}
+
+/* the scrollers in the preview: the page number, or the page when zoomed in */
+static void preview_sliders(DOC *d, const GRECT *a)
+{
+    long W = pt2px_x(PS(d).w) + 16, H = pt2px_y(PS(d).h) + 16;
+    pv_clamp(d, a);
+    if (!d->pv_zoom) {
+        int np = doc_npages(d);
+        set_prop(d, GID_VPROP, d->pv_page, np, 1);
+        set_prop(d, GID_HPROP, 0, 1, 1);
+        return;
+    }
+    set_prop(d, GID_VPROP, d->pv_sy, H, a->g_h);
+    set_prop(d, GID_HPROP, d->pv_sx, W, a->g_w);
+}
+
+void preview_goto(DOC *d, long page)
+{
+    int np = doc_npages(d);
+    if (page < 0) page = 0;
+    if (page >= np) page = np - 1;
+    if (page == d->pv_page) return;
+    d->pv_page = page;
+    d->pv_sy = 0;
+    refresh_text(d);
+    refresh_toolbar(d);
+    set_sliders(d);
+}
+
+void preview_zoom(DOC *d, short mx, short my, const GRECT *a)
+{
+    if (!d->pv_zoom && a) {             /* zoom in around the click */
+        long n, den, ox, oy;
+        pv_geom(d, a, &n, &den, &ox, &oy);
+        d->pv_sx = (mx - ox) * den / n - a->g_w / 2;
+        d->pv_sy = (my - oy) * den / n - a->g_h / 2;
+    } else d->pv_sx = d->pv_sy = 0;
+    d->pv_zoom = !d->pv_zoom;
+    refresh_text(d);
+    refresh_toolbar(d);
+    set_sliders(d);
+}
+
+/* a click in the page: zoom in or out there; zoomed in, a drag moves it */
+static void preview_click(DOC *d, const GRECT *a, short mx, short my)
+{
+    short x, y;
+    long sx0 = d->pv_sx, sy0 = d->pv_sy;
+    int q, moved = 0;
+    if (!d->pv_zoom) { preview_zoom(d, mx, my, a); return; }
+    while (track_next(&x, &y, &q)) {
+        if (x == mx && y == my && !moved) continue;
+        moved = 1;
+        d->pv_sx = sx0 - (x - mx);
+        d->pv_sy = sy0 - (y - my);
+        pv_clamp(d, a);
+        redraw_area(d, (GRECT *)a);
+    }
+    if (moved) set_sliders(d);
+    else preview_zoom(d, mx, my, a);
+}
+
+/* a key in the preview: the page keys; no typing */
+static void preview_key(DOC *d, int key, int qual)
+{
+    GRECT tb, tp, cp;
+    get_panes(d, &tb, &tp, &cp);
+    switch (key) {
+    case K_LEFT: preview_goto(d, d->pv_page - 1); return;
+    case K_RIGHT: preview_goto(d, d->pv_page + 1); return;
+    case K_ESC: set_view(d, VIEW_DOC); return;
+    case ' ': preview_zoom(d, 0, 0, NULL); return;
+    case K_UP: case K_DOWN:
+        if (!d->pv_zoom) { preview_goto(d, d->pv_page + (key == K_UP ? -1 : 1)); return; }
+        d->pv_sy += (key == K_UP ? -1 : 1) * ((qual & KQ_SHIFT) ? tp.g_h - hchar : 2 * hchar);
+        pv_clamp(d, &tp);
+        refresh_text(d);
+        set_sliders(d);
+        return;
+    }
+}
+
+/* an edit while the preview shows: drawn again once the user pauses */
+void preview_changed(DOC *d) { if (d->view == VIEW_PREVIEW) d->pv_stale = 1; }
+
+int preview_idle(int run)
+{
+    int i, need = 0;
+    for (i = 0; i < MAX_DOCS; i++) {
+        DOC *d = DOC_USED(i) ? docs[i] : NULL;
+        if (!d || d->view != VIEW_PREVIEW || !d->pv_stale) continue;
+        need = 1;
+        if (run) {
+            d->pv_stale = 0;
+            doc_layout(d);
+            refresh_text(d);
+            refresh_toolbar(d);
+            set_sliders(d);
+        }
+    }
+    return need;
+}
+
+/* the bar between the two panes of a split window, with a grip to drag */
+static void draw_split_bar(const GRECT *dv, GRECT *clip)
+{
+    GRECT r = *clip;
+    long cx = dv->g_x + dv->g_w / 2, k;
+    if (!dv->g_h || !rc_inter(dv, &r)) return;
+    clip_set(&r);
+    fill_g(dv, P_TFACE);
+    line(dv->g_x, dv->g_y, dv->g_x + dv->g_w - 1, dv->g_y, P_TDARK);
+    line(dv->g_x, dv->g_y + 1, dv->g_x + dv->g_w - 1, dv->g_y + 1, P_TLIGHT);
+    line(dv->g_x, dv->g_y + dv->g_h - 1, dv->g_x + dv->g_w - 1, dv->g_y + dv->g_h - 1, P_TDARK);
+    for (k = 0; k < 3; k++) line(cx - 12, dv->g_y + 3 + k * 2, cx + 12, dv->g_y + 3 + k * 2, P_TDARK);
+    clip_off();
+}
+
+static void draw_panes(DOC *d, GRECT *clip);
 
 static void draw_window(DOC *d, GRECT *clip)
 {
-    GRECT tb, tp, cp, dv, hr, vr;
-    panes(d, &tb, &hr, &vr, &tp, &cp);
+    GRECT tb, tp, cp, hr, vr, op, sdv;
+    panes_ex(d, &tb, &hr, &vr, &tp, &cp, &op, &sdv);
     if (d->iconified) { GRECT wa; work_area(d, &wa); clip_set(&wa); draw_icon(d, &wa); clip_off(); return; }
     if (tb.g_h) draw_toolbar(d, &tb, clip);
+    if (d->view == VIEW_PREVIEW) { preview_draw(d, &tp, clip); return; }
+    draw_panes(d, clip);
+    if (split_on(d)) {
+        GRECT r = *clip;
+        draw_split_bar(&sdv, clip);
+        if (rc_inter(&op, &r)) {            /* the other pane, with its own scroll */
+            pane_swap(d);
+            other_pane = 1;
+            draw_panes(d, &r);
+            other_pane = 0;
+            pane_swap(d);
+        }
+    }
+}
+
+/* the text and codes panes (and the rulers) of the pane worked in */
+static void draw_panes(DOC *d, GRECT *clip)
+{
+    GRECT tb, tp, cp, dv, hr, vr;
+    panes(d, &tb, &hr, &vr, &tp, &cp);
     if (hr.g_h) { draw_hruler(d, &hr, &tp, clip); draw_vruler(d, &vr, &tp, clip); draw_corner(&hr, &vr, clip); }
     if (tp.g_h) draw_text_pane(d, &tp, clip);
-    if (hr.g_h && d->view == VIEW_SPLIT) { tp.g_y = hr.g_y; tp.g_h += hr.g_h; tp.g_x = vr.g_x; tp.g_w += vr.g_w; }
-    if (d->view == VIEW_SPLIT) {
+    if (other_pane && d->view != VIEW_CODES) return;     /* the codes pane isn't split */
+    if (d->view == VIEW_SPLIT) {                         /* the bar over the codes */
         GRECT r;
-        dv = tp;
-        dv.g_y = tp.g_y + tp.g_h;
+        work_area(d, &dv);
+        dv.g_y = cp.g_y - DIVH;
         dv.g_h = DIVH;
         r = *clip;
         if (rc_inter(&dv, &r)) {
@@ -730,13 +1031,25 @@ void refresh_all(DOC *d)
     redraw_area(d, &wa);
 }
 
-void refresh_text(DOC *d)
+/* the text pane worked in, with its rulers */
+static void refresh_text1(DOC *d)
 {
     GRECT tb, hr, vr, tp, cp;
     if (!DW(d)->w) return;
     panes(d, &tb, &hr, &vr, &tp, &cp);
+    if (d->view == VIEW_PREVIEW) { if (tp.g_h) redraw_area(d, &tp); return; }
     if (hr.g_h) { tp.g_h += (short)(tp.g_y - hr.g_y); tp.g_y = hr.g_y; tp.g_w += (short)(tp.g_x - vr.g_x); tp.g_x = vr.g_x; }
     if (tp.g_h) redraw_area(d, &tp);
+}
+
+/* the text, in both panes of a split window */
+void refresh_text(DOC *d)
+{
+    GRECT tb, hr, vr, tp, cp, op;
+    if (!DW(d)->w) return;
+    refresh_text1(d);
+    panes_ex(d, &tb, &hr, &vr, &tp, &cp, &op, NULL);
+    if (op.g_h && d->view != VIEW_CODES) redraw_area(d, &op);
 }
 
 /* what the rulers show: the caret's page and paragraph, the scroll */
@@ -756,7 +1069,14 @@ static void refresh_ruler_if_changed(DOC *d)
     panes(d, &tb, &hr, &vr, &tp, &cp);
     if (hr.g_h) redraw_area(d, &hr);
 }
-void refresh_codes(DOC *d)   { GRECT tb, tp, cp; if (!DW(d)->w) return; get_panes(d, &tb, &tp, &cp); if (cp.g_h) redraw_area(d, &cp); }
+void refresh_codes(DOC *d)
+{
+    GRECT tb, hr, vr, tp, cp, op;
+    if (!DW(d)->w) return;
+    panes_ex(d, &tb, &hr, &vr, &tp, &cp, &op, NULL);
+    if (cp.g_h) redraw_area(d, &cp);
+    if (op.g_h && d->view == VIEW_CODES) redraw_area(d, &op);
+}
 void refresh_toolbar(DOC *d) { GRECT tb, tp, cp; if (!DW(d)->w) return; get_panes(d, &tb, &tp, &cp); if (tb.g_h) redraw_area(d, &tb); }
 
 static void refresh_tb_if_changed(DOC *d)
@@ -766,7 +1086,7 @@ static void refresh_tb_if_changed(DOC *d)
 
 /* redraw from line li to the bottom of the pane; from the top of its page
  * when the page has columns, tables or pictures (they move together) */
-static void refresh_from(DOC *d, long li)
+static void refresh_from1(DOC *d, long li)
 {
     GRECT tb, tp, cp, r;
     LINE *ln;
@@ -788,7 +1108,7 @@ static void refresh_from(DOC *d, long li)
     redraw_area(d, &r);
 }
 
-static void refresh_lines(DOC *d, long la, long lb)
+static void refresh_lines1(DOC *d, long la, long lb)
 {
     GRECT tb, tp, cp, r;
     long sy = 32767, ey = -32767, li;
@@ -809,6 +1129,27 @@ static void refresh_lines(DOC *d, long la, long lb)
     if (ey <= sy) return;
     r.g_x = tp.g_x; r.g_w = tp.g_w; r.g_y = (short)sy; r.g_h = (short)(ey - sy);
     redraw_area(d, &r);
+}
+
+/* the same in the other pane of a split window, which shows the same text */
+static void refresh_from(DOC *d, long li)
+{
+    refresh_from1(d, li);
+    if (split_on(d) && d->view != VIEW_CODES && !other_pane) {
+        pane_swap(d); other_pane = 1;
+        refresh_from1(d, li);
+        other_pane = 0; pane_swap(d);
+    }
+}
+
+static void refresh_lines(DOC *d, long la, long lb)
+{
+    refresh_lines1(d, la, lb);
+    if (split_on(d) && d->view != VIEW_CODES && !other_pane) {
+        pane_swap(d); other_pane = 1;
+        refresh_lines1(d, la, lb);
+        other_pane = 0; pane_swap(d);
+    }
 }
 
 /* ================================================================= */
@@ -836,6 +1177,7 @@ void set_sliders(DOC *d)
     GRECT tb, tp, cp;
     if (d->iconified || !DW(d)->w) return;
     get_panes(d, &tb, &tp, &cp);
+    if (d->view == VIEW_PREVIEW) { preview_sliders(d, &tp); return; }
     if (codes_focus(d)) set_prop(d, GID_VPROP, d->cv.top, d->cv.nl, codes_vis(d));
     else set_prop(d, GID_VPROP, d->scroll_y, content_h(d), tp.g_h);
     set_prop(d, GID_HPROP, d->scroll_x, codes_focus(d) ? 0 : content_w(d), tp.g_w);
@@ -846,7 +1188,11 @@ static void set_title(DOC *d)
     DWIN *w = DW(d);
     if (!w->w) return;
     if (d->iconified) sprintf(w->title, "%.12s", lat(d->base));
-    else sprintf(w->title, "%s%s  %s", d->dirty ? "* " : "", lat(d->base), d->info);
+    else {
+        /* edited or saved by the name, where it's seen */
+        const char *st = lat(d->dirty ? L(S_I_EDITED) : d->path[0] ? L(S_I_SAVED) : "");
+        sprintf(w->title, "%.40s%s%s%s  %.200s", lat(d->base), st[0] ? " [" : "", st, st[0] ? "]" : "", d->info);
+    }
     SetWindowTitles(w->w, (UBYTE *)w->title, (UBYTE *)-1);
 }
 
@@ -870,7 +1216,9 @@ void set_info(DOC *d)
     if (p->list) sprintf(extra + strlen(extra), " %s", L(p->list == LIST_BULLET ? S_I_BULLET : S_I_NUMBER));
     if (p->toc) sprintf(extra + strlen(extra), " H%d", p->toc);
     if (doc_in_table(d, d->cursor, NULL, NULL)) sprintf(extra + strlen(extra), " %s", L(S_I_TABLE));
-    sprintf(s, "- %.18s %dpt %s%s%s  %s%s  %s %d/%d  %d%%%s", fonts[c->font < nfonts ? c->font : 0].name, c->size,
+    if (d->colmode) strcat(extra, L(S_I_COLUMN));
+    if (d->view == VIEW_PREVIEW) sprintf(s, "- %s", L(M_PREVIEW));
+    else sprintf(s, "- %.18s %dpt %s%s%s  %s%s  %s %d/%d  %d%%%s", fonts[c->font < nfonts ? c->font : 0].name, c->size,
             c->attr & A_BOLD ? "B" : "", c->attr & A_ITALIC ? "I" : "", c->attr & A_UNDER ? "U" : "",
             L(jn[p->just & 3]), extra, L(S_I_PAGE), ln->page + 1, doc_npages(d), d->zoom,
             d->view == VIEW_CODES ? L(S_I_QUICK) : d->view == VIEW_SPLIT ? (d->focus ? L(S_I_CODES) : L(S_I_TEXT)) : "");
@@ -967,7 +1315,7 @@ static void lines_span(DOC *d, GRECT *tp, LINE *l, long a, long b, long *sy, lon
 }
 
 /* redraw only the lines that the edit changed; 0 if that can't be told */
-static int refresh_changed(DOC *d)
+static int refresh_changed1(DOC *d)
 {
     GRECT tb, tp, cp, r;
     long a = 0, eo, en, shift = d->len - old_len, sy = 0x7fffffffL, ey = -0x7fffffffL;
@@ -989,6 +1337,18 @@ static int refresh_changed(DOC *d)
     r.g_x = tp.g_x; r.g_w = tp.g_w; r.g_y = (short)sy; r.g_h = (short)(ey - sy);
     redraw_area(d, &r);
     return 1;
+}
+
+/* in the other pane of a split window too */
+static int refresh_changed(DOC *d)
+{
+    int r = refresh_changed1(d);
+    if (r && split_on(d) && d->view != VIEW_CODES) {
+        pane_swap(d); other_pane = 1;
+        refresh_changed1(d);
+        other_pane = 0; pane_swap(d);
+    }
+    return r;
 }
 
 /* after an edit in a table with a chart: draw the chart again */
@@ -1115,7 +1475,7 @@ static void caret_tick(DOC *d)
     if (blink_d) { caret_unblink(); return; }
     blink_n = 0;
     if (!w || d->iconified || !(w->Flags & WFLG_WINDOWACTIVE)) return;
-    if (d->anchor >= 0 || d->selobj >= 0 || !d->nlines) return;
+    if (d->anchor >= 0 || d->selobj >= 0 || !d->nlines || d->view == VIEW_PREVIEW) return;
     if (!(d->view == VIEW_DOC || d->focus == 0)) return;
     caret_xor(d, d->cursor);
     blink_d = d;
@@ -1138,7 +1498,7 @@ void after_move(DOC *d, long oc, long oa)
         goto done;
     }
     d->scroll_x = osx; d->scroll_y = osy;
-    if (d->selobj < 0 && oa >= 0 && oa == d->anchor) {
+    if (d->selobj < 0 && oa >= 0 && oa == d->anchor && !d->colsel) {
         /* a selection grew or shrank: only between the old end and the new */
         lo = oc < d->cursor ? oc : d->cursor;
         hi = oc < d->cursor ? d->cursor : oc;
@@ -1169,6 +1529,10 @@ done:
 void select_range(DOC *d, long a, long b)
 {
     long oc = d->cursor, oa = d->anchor;
+    if (d->colsel) {                            /* a block goes: its lines again */
+        d->colsel = 0;
+        if (oa >= 0) refresh_lines(d, doc_find_line(d, oa < oc ? oa : oc), doc_find_line(d, oa < oc ? oc : oa));
+    }
     d->anchor = a;
     d->cursor = b;
     after_move(d, oc, oa);
@@ -1207,6 +1571,25 @@ void rebuild_codes(DOC *d)
 void set_view(DOC *d, int view)
 {
     if (view == d->view) return;
+    if (view == VIEW_PREVIEW || d->view == VIEW_PREVIEW) {
+        /* the print preview: the pages as they will print, in this window */
+        caret_unblink();
+        if (view == VIEW_PREVIEW) {
+            if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
+            doc_layout(d);
+            d->pv_view = d->view;
+            d->pv_page = d->nlines ? d->lines[doc_find_line(d, d->cursor)].page : 0;
+            d->pv_sx = d->pv_sy = 0;
+            d->view = VIEW_PREVIEW;
+        } else d->view = d->pv_view == VIEW_PREVIEW ? VIEW_DOC : d->pv_view;
+        if (d->view != VIEW_PREVIEW) { clamp_scroll(d); ensure_visible(d); }
+        refresh_all(d);
+        set_sliders(d);
+        set_info(d);
+        update_menu(d);
+        if (view != VIEW_PREVIEW && view != d->view) set_view(d, view);
+        return;
+    }
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
     if (d->view == VIEW_DOC) {
         d->cv.cols = codes_cols_of(d);
@@ -1574,10 +1957,24 @@ static void move_to(DOC *d, long pos, int extend)
     long oc = d->cursor, oa = d->anchor;
     if (pos < 0) pos = 0;
     if (pos > d->len) pos = d->len;
-    if (extend) { if (d->anchor < 0) d->anchor = d->cursor; }
+    if (extend) { if (d->anchor < 0) { d->anchor = d->cursor; d->colsel = d->colmode; } }
     else d->anchor = -1;
     d->cursor = pos;
     after_move(d, oc, oa);
+    if (d->anchor < 0) d->colsel = 0;
+}
+
+/* a block selected: deleted (Backspace, Del, typing over it) */
+int block_delete(DOC *d)
+{
+    long la, lb, x0, x1;
+    if (!d->colsel || d->anchor < 0) return 0;
+    if (col_has_table(d)) { alert(1, 1, AL_COLSEL_TABLE, AB_OK); return 1; }
+    if (!col_block(d, &la, &lb, &x0, &x1)) { d->colsel = 0; return 0; }
+    col_delete(d);
+    d->colsel = 0;
+    after_edit(d, d->lines[la].start);
+    return 1;
 }
 
 static void line_end(DOC *d, long li, int extend)
@@ -1606,7 +2003,7 @@ void chart_menu(DOC *d, int t)
 
 static void text_key2(DOC *d, int key, int qual)
 {
-    int shift = (qual & KQ_SHIFT) != 0, alt = (qual & KQ_ALT) != 0, intbl = doc_in_table(d, d->cursor, NULL, NULL) != 0;
+    int shift = (qual & KQ_SHIFT) != 0, alt = (qual & KQ_ALT) != 0, intbl = doc_in_table(d, d->cursor, NULL, NULL) != 0, blk = 0;
     long li, from, a, b;
     CELL c;
     unsigned char ch;
@@ -1677,6 +2074,7 @@ static void text_key2(DOC *d, int key, int qual)
     }
     switch (key) {
     case K_BS:
+        if (block_delete(d)) return;
         if (doc_sel(d, &a, &b)) { doc_delete_sel(d); after_edit(d, a); }
         else if (d->cursor > 0) {
             doc_delete_range(d, d->cursor - 1, d->cursor);
@@ -1685,11 +2083,12 @@ static void text_key2(DOC *d, int key, int qual)
         }
         return;
     case K_DEL:
+        if (block_delete(d)) return;
         if (doc_sel(d, &a, &b)) { doc_delete_sel(d); after_edit(d, a); }
         else if (d->cursor < d->len) { doc_delete_range(d, d->cursor, d->cursor + 1); after_typing(d, d->cursor); }
         return;
     case K_ESC:
-        if (d->anchor >= 0) select_range(d, -1, d->cursor);
+        if (d->anchor >= 0) { select_range(d, -1, d->cursor); d->colsel = 0; }
         return;
     }
 
@@ -1719,11 +2118,17 @@ static void text_key2(DOC *d, int key, int qual)
     else if (key >= 32 && key < 256 && key != 127 && (qual & KQ_AMIGA) == 0) ch = st_ch((unsigned char)key);
     else return;
 
+    if (d->colsel && d->anchor >= 0) {          /* typing over a block: it goes first */
+        if (col_has_table(d)) { alert(1, 1, AL_COLSEL_TABLE, AB_OK); return; }
+        col_delete(d);
+        d->colsel = 0;
+        blk = 1;
+    }
     from = doc_sel(d, &a, &b) ? a : d->cursor;
     c = d->ins;
     c.ch = ch;
     if (doc_type(d, &c, 1)) {
-        if (ch == '\n' || from != d->cursor - 1) after_edit(d, from);
+        if (ch == '\n' || blk || from != d->cursor - 1) after_edit(d, from);
         else after_typing(d, from);
     } else alert(1, 3, AL_NO_MEMORY, AB_OK);
 }
@@ -1976,6 +2381,7 @@ void win_key(DOC *d, int key, int qual)
         if (key == K_RETURN || key == K_ENTER || key == ' ') uniconify(d);
         return;
     }
+    if (d->view == VIEW_PREVIEW) { preview_key(d, key, qual); return; }
     if (codes_focus(d)) codes_key(d, key, qual);
     else text_key(d, key, qual);
 }
@@ -2047,6 +2453,10 @@ static void text_click(DOC *d, GRECT *tp, short mx, short my, int qual, int clic
         return;
     }
     /* clicks in quick succession cycle: the word, the line, nothing */
+    if (clicks >= 2 && d->colsel) {
+        d->colsel = 0;
+        if (oa >= 0) refresh_lines(d, doc_find_line(d, oa < oc ? oa : oc), doc_find_line(d, oa < oc ? oc : oa));
+    }
     if (clicks == 2) {
         if (word_at(d, pos, &wa, &wb, word, WORDMAX)) { d->anchor = wa; d->cursor = wb; }
         after_move(d, oc, oa);
@@ -2069,8 +2479,13 @@ static void text_click(DOC *d, GRECT *tp, short mx, short my, int qual, int clic
         update_menu(d);
         return;
     }
-    if (qual & KQ_SHIFT) { if (d->anchor < 0) d->anchor = d->cursor; }
-    else d->anchor = pos;
+    if (qual & KQ_SHIFT) { if (d->anchor < 0) { d->anchor = d->cursor; d->colsel = d->colmode; } }
+    else {
+        /* Alt held, or Column Select on: a block */
+        if (d->colsel) { d->colsel = 0; if (oa >= 0) refresh_lines(d, doc_find_line(d, oa < oc ? oa : oc), doc_find_line(d, oa < oc ? oc : oa)); }
+        d->anchor = pos;
+        d->colsel = (qual & KQ_ALT) || d->colmode;
+    }
     d->cursor = pos;
     d->want_x = -1;
     after_move(d, oc, oa);
@@ -2083,13 +2498,19 @@ static void text_click(DOC *d, GRECT *tp, short mx, short my, int qual, int clic
         if (scrolled) clamp_scroll(d);
         pos = hit_text(d, tp, mx, my);
         if (pos != d->cursor || scrolled) {
+            long lo, hi;
             oc = d->cursor;
             d->cursor = pos;
+            lo = oc < pos ? oc : pos; hi = oc < pos ? pos : oc;
+            if (d->colsel && d->anchor >= 0) {     /* a block is as wide as the lines between */
+                if (d->anchor < lo) lo = d->anchor;
+                if (d->anchor > hi) hi = d->anchor;
+            }
             if (scrolled) { refresh_text(d); set_sliders(d); }
-            else refresh_lines(d, doc_find_line(d, oc < pos ? oc : pos), doc_find_line(d, oc < pos ? pos : oc));
+            else refresh_lines(d, doc_find_line(d, lo), doc_find_line(d, hi));
         }
     }
-    if (d->anchor == d->cursor) d->anchor = -1;
+    if (d->anchor == d->cursor) { d->anchor = -1; d->colsel = 0; }
     if (d->anchor < 0) doc_sync_ins(d);
     update_menu(d);
     set_info(d);
@@ -2125,12 +2546,95 @@ static void codes_click(DOC *d, const GRECT *cp, short mx, short my, int qual)
     if (c->anchor == c->cursor) c->anchor = -1;
 }
 
+/* dragging the bar between the two panes of a split window; dragged to
+ * the top or the bottom it ends the split, the pane left showing goes on */
+static void split_drag(DOC *d, const GRECT *dv, short my)
+{
+    GRECT tb, hr, vr, tp, cp, op, sdv, top_p, bot_p;
+    short top, bot, ny, cur, off, mx;
+    int q;
+    panes_ex(d, &tb, &hr, &vr, &tp, &cp, &op, &sdv);
+    if (d->view == VIEW_CODES) tp = cp;
+    else if (hr.g_h) { tp.g_h += (short)(tp.g_y - hr.g_y); tp.g_y = hr.g_y; }
+    top_p = d->pane2 ? op : tp;
+    bot_p = d->pane2 ? tp : op;
+    top = top_p.g_y;
+    bot = (short)(bot_p.g_y + bot_p.g_h);
+    off = (short)(my - dv->g_y);
+    cur = ny = dv->g_y;
+    /* the bar follows the mouse as an outline until the button is let go */
+    draw_begin(d);
+    xor_frame(dv->g_x, cur, dv->g_x + dv->g_w - 1, cur + dv->g_h - 1);
+    gfx_end();
+    while (track_next(&mx, &my, &q)) {
+        ny = (short)(my - off);
+        if (ny < top) ny = top;
+        if (ny > bot - dv->g_h) ny = (short)(bot - dv->g_h);
+        if (ny != cur) {
+            draw_begin(d);
+            xor_frame(dv->g_x, cur, dv->g_x + dv->g_w - 1, cur + dv->g_h - 1);
+            cur = ny;
+            xor_frame(dv->g_x, cur, dv->g_x + dv->g_w - 1, cur + dv->g_h - 1);
+            gfx_end();
+        }
+    }
+    draw_begin(d);
+    xor_frame(dv->g_x, cur, dv->g_x + dv->g_w - 1, cur + dv->g_h - 1);
+    gfx_end();
+    ny = cur;
+    if (ny < top + hchar * 2 || ny + SPLITH > bot - hchar * 2) {
+        int keep_bottom = ny < top + hchar * 2;
+        /* the pane that stays becomes the window's only one */
+        if (keep_bottom != d->pane2) pane_swap(d);
+        d->pane2 = 0;
+        d->split2 = 0;
+    } else if (bot - top - SPLITH > 0) {
+        d->split_at = (int)((long)(ny - top) * 1000 / (bot - top - SPLITH));
+        if (d->split_at < 30) d->split_at = 30;
+        if (d->split_at > 970) d->split_at = 970;
+    }
+    clamp_scroll(d);
+    refresh_all(d);
+    set_sliders(d);
+    update_menu(d);
+    refresh_tb_if_changed(d);
+}
+
+/* Window > Split Window: on or off */
+void split_toggle(DOC *d)
+{
+    if (d->view == VIEW_PREVIEW) set_view(d, VIEW_DOC);
+    if (d->split2 && d->pane2) pane_swap(d);    /* the top pane goes on */
+    d->split2 = !d->split2;
+    if (d->split2) { d->scroll2_x = d->scroll_x; d->scroll2_y = d->scroll_y; d->cv_top2 = d->cv.top; }
+    clamp_scroll(d);
+    refresh_all(d);
+    set_sliders(d);
+    update_menu(d);
+    refresh_tb_if_changed(d);
+}
+
 static void win_click(DOC *d, short mx, short my, int qual, int clicks)
 {
-    GRECT tb, tp, cp, hr, vr;
-    panes(d, &tb, &hr, &vr, &tp, &cp);
+    GRECT tb, tp, cp, hr, vr, op, sdv;
+    panes_ex(d, &tb, &hr, &vr, &tp, &cp, &op, &sdv);
     if (d->iconified) { uniconify(d); return; }
     track_begin(DW(d)->w);
+    if (d->view == VIEW_PREVIEW) {
+        if (in_rect(&tb, mx, my)) { track_end(); toolbar_click(d, &tb, mx); }
+        else if (in_rect(&tp, mx, my)) preview_click(d, &tp, mx, my);
+        track_end();
+        return;
+    }
+    if (sdv.g_h && in_rect(&sdv, mx, my)) { split_drag(d, &sdv, my); track_end(); return; }
+    if (op.g_h && in_rect(&op, mx, my)) {
+        /* the other pane: it becomes the one worked in */
+        pane_swap(d);
+        set_sliders(d);
+        refresh_text(d);                     /* the caret from one pane to the other */
+        if (d->view == VIEW_CODES) refresh_codes(d);
+        panes(d, &tb, &hr, &vr, &tp, &cp);
+    }
     if (in_rect(&tb, mx, my)) { track_end(); toolbar_click(d, &tb, mx); }
     else if (in_rect(&hr, mx, my) || in_rect(&vr, mx, my)) {
         /* a double click on a ruler: the indents, or the page layout */
@@ -2159,7 +2663,7 @@ static void scroll_text(DOC *d, long osx, long osy)
     struct Window *w = DW(d)->w;
     get_panes(d, &tb, &tp, &cp);
     if (!dx && !dy) return;
-    if (dx || dy >= tp.g_h || -dy >= tp.g_h || !tp.g_h || !(w->Flags & WFLG_WINDOWACTIVE)) { refresh_text(d); return; }
+    if (dx || dy >= tp.g_h || -dy >= tp.g_h || !tp.g_h || !(w->Flags & WFLG_WINDOWACTIVE)) { refresh_text1(d); return; }
     ScrollRaster(w->RPort, 0, dy, tp.g_x, tp.g_y, tp.g_x + tp.g_w - 1, tp.g_y + tp.g_h - 1);
     r = tp;
     if (dy > 0) { r.g_y = (short)(tp.g_y + tp.g_h - dy); r.g_h = (short)dy; }
@@ -2210,6 +2714,26 @@ void win_msg(DOC *d, struct IntuiMessage *m)
     if (d->iconified || m->Class != IDCMP_IDCMPUPDATE) return;
 
     get_panes(d, &tb, &tp, &cp);
+    if (d->view == VIEW_PREVIEW) {
+        switch (upd_id) {
+        case GID_UP:    if (d->pv_zoom) d->pv_sy -= 2 * hchar; else { preview_goto(d, d->pv_page - 1); return; } break;
+        case GID_DOWN:  if (d->pv_zoom) d->pv_sy += 2 * hchar; else { preview_goto(d, d->pv_page + 1); return; } break;
+        case GID_LEFT:  d->pv_sx -= 4 * wchar; break;
+        case GID_RIGHT: d->pv_sx += 4 * wchar; break;
+        case GID_VPROP:
+            if (upd_top < 0) return;
+            if (!d->pv_zoom) { preview_goto(d, upd_top * DW(d)->vf); return; }
+            d->pv_sy = upd_top * DW(d)->vf;
+            break;
+        case GID_HPROP: if (upd_top >= 0) d->pv_sx = upd_top * DW(d)->hf; break;
+        default: return;
+        }
+        if (!d->pv_zoom) return;
+        pv_clamp(d, &tp);
+        refresh_text(d);
+        if (upd_id != GID_VPROP && upd_id != GID_HPROP) set_sliders(d);
+        return;
+    }
     if (codes_focus(d)) {
         CODES *c = &d->cv;
         long otop = c->top;

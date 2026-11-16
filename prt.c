@@ -212,6 +212,11 @@ int prt_begin(PRTPAGE *s, DOC *d, int page, PRTOUT *o)
         s->scale = (int)((dev_pixh * 100 + o->pixh * 112 - 1) / (o->pixh * 112));
     if (s->scale < 1) s->scale = 1;
     if (s->scale > 16) s->scale = 16;               /* 1200 dpi from a 75-90 dpi screen */
+    if (o->maxdpi > 0) {                            /* a lower resolution asked for: faster, coarser */
+        long m = ((long)o->maxdpi * dev_pixw + 12700L) / 25400L;
+        if (m < 1) m = 1;
+        if (m < s->scale) s->scale = (int)m;
+    }
     o->scale = s->scale;
     s->sw = pt2px_x(PS(d).w) * s->scale;
     s->sh = pt2px_y(PS(d).h) * s->scale;

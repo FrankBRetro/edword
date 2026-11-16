@@ -598,8 +598,11 @@ static const char *const s_en[S_COUNT] = {
     "Clear|Cancel",
     "Free memory: %ld KB",
     "Free memory: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)",
+    "Print resolution:",
+    "Printer",
 };
 
+#ifndef EDLITE
 static const char *const s_de[S_COUNT] = {
     "EdWord",
     "Datei",
@@ -1191,6 +1194,8 @@ static const char *const s_de[S_COUNT] = {
     "Leeren|Abbruch",
     "Freier Speicher: %ld KB",
     "Freier Speicher: %ld KB (ST-RAM %ld KB, Fast-RAM %ld KB)",
+    "Druckaufl\224sung:",
+    "Drucker",
 };
 
 static const char *const s_es[S_COUNT] = {
@@ -1784,6 +1789,8 @@ static const char *const s_es[S_COUNT] = {
     "Vaciar|Cancelar",
     "Memoria libre: %ld KB",
     "Memoria libre: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)",
+    "Resoluci\242n impresi\242n:",
+    "Impresora",
 };
 
 static const char *const s_it[S_COUNT] = {
@@ -2377,6 +2384,8 @@ static const char *const s_it[S_COUNT] = {
     "Svuota|Annulla",
     "Memoria libera: %ld KB",
     "Memoria libera: %ld KB (ST RAM %ld KB, Fast RAM %ld KB)",
+    "Risoluzione stampa:",
+    "Stampante",
 };
 
 static const char *const s_fr[S_COUNT] = {
@@ -2970,6 +2979,8 @@ static const char *const s_fr[S_COUNT] = {
     "Vider|Annuler",
     "M\202moire libre : %ld Ko",
     "M\202moire libre : %ld Ko (ST RAM %ld Ko, Fast RAM %ld Ko)",
+    "R\202solution impression :",
+    "Imprimante",
 };
 
 static const char *const s_cs[S_COUNT] = {
@@ -3563,6 +3574,8 @@ static const char *const s_cs[S_COUNT] = {
     "Vypr\240zdnit|Zru\250it",
     "Voln\240 pam\210\237: %ld kB",
     "Voln\240 pam\210\237: %ld kB (ST RAM %ld kB, Fast RAM %ld kB)",
+    "Rozli\250en\241 tisku:",
+    "Tisk\240rna",
 };
 
 static const char *const *const tab[NLANG] = { s_en, s_de, s_es, s_it, s_fr, s_cs };
@@ -3574,3 +3587,54 @@ const char *L(int id)
     s = tab[ui_lang >= 0 && ui_lang < NLANG ? ui_lang : 0][id];
     return s ? s : s_en[id];
 }
+#else
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+extern char progdir[256];
+static const char **ltab;       /* the language read from its file */
+static char *lbuf;
+static int lfor = -1;
+
+/* EDWORDxx.LNG: "EDLNG1\n\0", the number of strings (2 bytes), then each
+ * string: 0 (not translated) or 1 and the text with a 0 after it */
+static void lang_load(int lang)
+{
+    static const char *const code[NLANG] = { "", "DE", "ES", "IT", "FR", "CS" };
+    char path[300];
+    FILE *f;
+    long n, i, k;
+    free(ltab); free(lbuf);
+    ltab = NULL; lbuf = NULL;
+    lfor = lang;
+    if (lang <= 0 || lang >= NLANG) return;
+    sprintf(path, "%sEDWORD%s.LNG", progdir, code[lang]);
+    if ((f = fopen(path, "rb")) == NULL) return;
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    lbuf = (char *)malloc((size_t)n + 1);
+    ltab = (const char **)calloc(S_COUNT, sizeof(char *));
+    if (!lbuf || !ltab || fread(lbuf, 1, (size_t)n, f) != (size_t)n || n < 10 || memcmp(lbuf, "EDLNG1\n", 7) ||
+        ((unsigned char)lbuf[8] << 8 | (unsigned char)lbuf[9]) != S_COUNT) {
+        fclose(f); free(ltab); free(lbuf); ltab = NULL; lbuf = NULL;
+        return;
+    }
+    fclose(f);
+    lbuf[n] = 0;
+    for (i = 0, k = 10; i < S_COUNT && k < n; i++) {
+        if (lbuf[k++] == 0) continue;
+        ltab[i] = lbuf + k;
+        k += (long)strlen(lbuf + k) + 1;
+    }
+}
+
+const char *L(int id)
+{
+    const char *s = NULL;
+    if (id < 0 || id >= S_COUNT) return "?";
+    if (ui_lang != lfor) lang_load(ui_lang);
+    if (ltab) s = ltab[id];
+    return s ? s : s_en[id];
+}
+#endif

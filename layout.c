@@ -511,7 +511,7 @@ static void lay_row(LS *s, long rs, long e, const PARA *P)
     const TBL *T = &d->a.tbls[P->tbl - 1];
     long saved = d->nlines, x0 = s->colx + pt2px_x(P->left);
     int tries = 0;
-    if (T->chart && d->cbox[P->tbl - 1].pos == CP_LEFT) x0 += d->cbox[P->tbl - 1].w + CHGAP;
+    if (CHARTS && T->chart && d->cbox[P->tbl - 1].pos == CP_LEFT) x0 += d->cbox[P->tbl - 1].w + CHGAP;
 
     for (;;) {
         long y0 = s->y, rowh = 0, k = rs, cx = x0, tw = 0, below;
@@ -655,7 +655,7 @@ static void lay_from(LS *s, long i, TAIL *t)
         brk = e < d->len ? d->text[e].ch : 0;
         if (P->tbl && P->tbl <= d->a.ntbl && d->a.tbls[P->tbl - 1].ncols > 0) {
             int t = P->tbl - 1, first = 1, lastrow = 1;
-            if (d->a.tbls[t].chart) {
+            if (CHARTS && d->a.tbls[t].chart) {
                 if (i > 0) first = PARA_OF(d, &d->text[i - 1])->tbl != P->tbl;
                 if (e + 1 < d->len) {
                     long e2 = doc_para_end(d, e + 1);
@@ -664,7 +664,7 @@ static void lay_from(LS *s, long i, TAIL *t)
                 if (first) chart_begin(s, t, P);
             }
             lay_row(s, i, e, P);
-            if (d->a.tbls[t].chart) {
+            if (CHARTS && d->a.tbls[t].chart) {
                 if (first) chart_first_row(s, t);
                 if (lastrow) chart_end(s, t);
             }

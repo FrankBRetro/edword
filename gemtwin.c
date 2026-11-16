@@ -762,12 +762,17 @@ static void th_act(short it, int clicks)
     }
 }
 
+/* the thesaurus file is open, and its index in memory (about 30 KB), only
+ * while its window is */
+static void th_closed(void) { thes_close(); }
+
 void thes_run(DOC *d)
 {
     long a, b, pos;
     char w[WORDMAX];
     tw.act = th_act;
     tw.build = th_build;
+    tw.closed = th_closed;
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
     pos = doc_sel(d, &a, &b) ? a : d->cursor;
     if (!word_at(d, pos, &a, &b, w, WORDMAX) && !(pos > 0 && word_at(d, pos - 1, &a, &b, w, WORDMAX))) {
@@ -833,6 +838,9 @@ static void ix_read(void)
 {
     int i;
     for (i = 0; i < 6; i++) if (dlg_on(iw.gp, ix_f[i])) ix_fmt = i;
+#ifdef EDLITE
+    if (ix_fmt == 1 + FT_MD || ix_fmt == 1 + FT_PT) ix_fmt = 0;
+#endif
     for (i = 0; i < 5; i++) if (dlg_on(iw.gp, ix_c[i])) ix_cs = i;
     ix_join = dlg_on(iw.gp, ix_j[1]);
     ix_into = dlg_on(iw.gp, ix_i[1]);
@@ -844,6 +852,10 @@ static void ix_enable(void)
     for (i = 0; i < 5; i++) set_disabled(&iw, ix_c[i], !chars);
     for (i = 0; i < 2; i++) set_disabled(&iw, ix_j[i], !text);
     set_disabled(&iw, ix_i[1], !live_doc(NULL));
+#ifdef EDLITE
+    set_disabled(&iw, ix_f[1 + FT_MD], 1);      /* EdWord Lite: RTF, 1st Word Plus, text */
+    set_disabled(&iw, ix_f[1 + FT_PT], 1);
+#endif
 }
 
 static int ix_build(void)
@@ -916,6 +928,7 @@ static void i_close_tool(void) { tw_close(&iw); }
 static void i_docgone(DOC *d) { (void)d; if (iw.open) { ix_changed(-1); } }
 const TOOL import_tool = { i_owns, i_msg, i_click, i_key, i_close_tool, i_docgone };
 
+#ifndef EDLITE
 /* ---- Export ------------------------------------------------------------- */
 
 static TWIN ew;
@@ -945,7 +958,13 @@ static void ex_enable(void)
     DOC *d = live_doc(NULL);
     for (i = 0; i < 2; i++) set_disabled(&ew, ex_e[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
     for (i = 0; i < 4; i++) set_disabled(&ew, ex_c[i], ex_fmt != FT_TEXT && ex_fmt != FT_MD);
+#ifdef EDLITE
+    if (ex_fmt == FT_PDF) { ex_fmt = FT_RTF; set_on(&ew, ex_f[FT_RTF], 1); set_on(&ew, ex_f[FT_PDF], 0); }
+    set_disabled(&ew, ex_f[FT_PDF], 1);
+    for (i = 0; i < NPDFRES; i++) set_disabled(&ew, ex_p[i], 1);
+#else
     for (i = 0; i < NPDFRES; i++) set_disabled(&ew, ex_p[i], ex_fmt != FT_PDF);
+#endif
     set_disabled(&ew, ex_go, !d);
     if (ex_fmt == FT_TEXT && !ex_status[0]) strcpy(ex_status, L(S_XF_STYLES));
     else if (ex_fmt != FT_TEXT && !strcmp(ex_status, L(S_XF_STYLES))) ex_status[0] = 0;
@@ -1017,10 +1036,22 @@ static void e_key(short ks, short k) { tw_key(&ew, ks, k); }
 static void e_close_tool(void) { tw_close(&ew); }
 static void e_docgone(DOC *d) { (void)d; if (ew.open) { ex_enable(); tw_redraw(&ew); } }
 const TOOL export_tool = { e_owns, e_msg, e_click, e_key, e_close_tool, e_docgone };
+#else
+/* EdWord Lite saves only its own files: no Export window */
+void export_open(void) {}
+static int  e_owns(short wh) { (void)wh; return 0; }
+static void e_msg(short *m) { (void)m; }
+static void e_click(short x, short y, short c) { (void)x; (void)y; (void)c; }
+static void e_key(short ks, short k) { (void)ks; (void)k; }
+static void e_none(void) {}
+static void e_docgone(DOC *d) { (void)d; }
+const TOOL export_tool = { e_owns, e_msg, e_click, e_key, e_none, e_docgone };
+#endif
 
 /* the document used last changed, or closed: keep the windows up to date */
 void xfer_refresh(void)
 {
+#ifndef EDLITE
     if (ew.open) {
         char old[48];
         int dis = (ew.gp->o[ew.gp->it[ex_go].obj].ob_state & OS_DISABLED) != 0;
@@ -1029,6 +1060,7 @@ void xfer_refresh(void)
         if (strcmp(old, ex_docline) || dis != ((ew.gp->o[ew.gp->it[ex_go].obj].ob_state & OS_DISABLED) != 0))
             tw_redraw(&ew);
     }
+#endif
     if (iw.open) {
         int dis = (iw.gp->o[iw.gp->it[ix_i[1]].obj].ob_state & OS_DISABLED) != 0;
         if (dis != !live_doc(NULL)) ix_changed(-1);
@@ -1096,6 +1128,8 @@ static void pw_page(int n)
     pw.idx = 0;
 }
 
+static const short prt_dpis[5] = { 0, 150, 300, 600, 1200 };   /* Print resolution's buttons */
+
 static int pw_build(void)
 {
     DLG *g;
@@ -1124,10 +1158,17 @@ static int pw_build(void)
     for (i = 0; i < NPDFRES; i++) dlg_set(g, (short)(PF_PDF1 + i), pdf_scale == i + 1);
     dlg_edtext(g, PF_DOCDIR, pw_dd);
     dlg_set(g, PF_BGPRINT, pref_bgprint);
+    for (i = 0; i < 5; i++) dlg_set(g, (short)(PF_PRT0 + i), pref_prtdpi == prt_dpis[i]);
     dlg_set(g, PF_FSSYS, !fsel_own());
     dlg_set(g, PF_FSOWN, fsel_own());
     dlg_tree_end(g);
     tw_untitle(&pw, PF_TITLE);
+#ifdef EDLITE
+    /* EdWord Lite: the system's file selector, and no PDF */
+    set_disabled(&pw, (short)item_of(&pw, PF_FSSYS), 1);
+    set_disabled(&pw, (short)item_of(&pw, PF_FSOWN), 1);
+    for (i = 0; i < NPDFRES; i++) set_disabled(&pw, (short)item_of(&pw, (short)(PF_PDF1 + i)), 1);
+#endif
     pw.def = (short)item_of(&pw, PF_OK);
     pw_lang = ui_lang;
     pw_keep = lay_keep;
@@ -1164,6 +1205,7 @@ static void pw_act(short it, int clicks)
     pref_live = dlg_on(g, PF_LIVE);
     for (i = 0; i < NPDFRES; i++) if (dlg_on(g, (short)(PF_PDF1 + i))) pdf_scale = i + 1;
     pref_bgprint = dlg_on(g, PF_BGPRINT);
+    for (i = 0; i < 5; i++) if (dlg_on(g, (short)(PF_PRT0 + i))) pref_prtdpi = prt_dpis[i];
     pref_fsel = dlg_on(g, PF_FSOWN);
     for (i = 0; i < NLANG; i++)
         if (dlg_on(g, (short)(PF_DICT0 + i)) && i != spell_lang) {   /* another dictionary: loaded when next needed */
@@ -1195,6 +1237,7 @@ static void pw_close_tool(void) { tw_close(&pw); }
 static void pw_docgone(DOC *d) { (void)d; }
 const TOOL prefs_tool = { pw_owns, pw_msg, pw_click, pw_key, pw_close_tool, pw_docgone };
 
+#ifndef EDLITE
 /* ---- the colour theme ---------------------------------------------------
  * On a screen without a palette it can be for the top document's window
  * alone ("This document") or for every window that has none of its own
@@ -1333,3 +1376,8 @@ static void ct_key(short ks, short k) { tw_key(&thw, ks, k); }
 static void ct_close_tool(void) { tw_close(&thw); }
 static void ct_docgone(DOC *d) { (void)d; }
 const TOOL theme_tool = { ct_owns, ct_msg, ct_click, ct_key, ct_close_tool, ct_docgone };
+#else
+/* EdWord Lite: no colour themes */
+void theme_open(void) {}
+const TOOL theme_tool = { e_owns, e_msg, e_click, e_key, e_none, e_docgone };
+#endif

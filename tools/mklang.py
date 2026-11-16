@@ -19,7 +19,7 @@ break. Checks:
     and alert buttons (ids starting AB_) at most 3 buttons of 10 characters;
   - menu titles (MT_) fit the menu bar together in every language.
 """
-import sys, re
+import sys, re, os, struct
 # usage: mklang.py strings.txt lang.h lang.c [--utf8 | --latin1 | --cp1252]
 
 LANGS = ['en', 'de', 'es', 'it', 'fr', 'cs']   # the Atari version's
@@ -98,6 +98,61 @@ def c_string(b):
         else: r += '\\%03o' % x
     return r + '"'
 
+# EdWord Lite (the Atari's low memory build): English is built in, the
+# other languages are read from EDWORDxx.LNG when chosen, one at a time
+LITE_C = r'''#else
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+extern char progdir[256];
+static const char **ltab;       /* the language read from its file */
+static char *lbuf;
+static int lfor = -1;
+
+/* EDWORDxx.LNG: "EDLNG1\n\0", the number of strings (2 bytes), then each
+ * string: 0 (not translated) or 1 and the text with a 0 after it */
+static void lang_load(int lang)
+{
+    static const char *const code[NLANG] = { "", "DE", "ES", "IT", "FR", "CS" };
+    char path[300];
+    FILE *f;
+    long n, i, k;
+    free(ltab); free(lbuf);
+    ltab = NULL; lbuf = NULL;
+    lfor = lang;
+    if (lang <= 0 || lang >= NLANG) return;
+    sprintf(path, "%%sEDWORD%%s.LNG", progdir, code[lang]);
+    if ((f = fopen(path, "rb")) == NULL) return;
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    lbuf = (char *)malloc((size_t)n + 1);
+    ltab = (const char **)calloc(S_COUNT, sizeof(char *));
+    if (!lbuf || !ltab || fread(lbuf, 1, (size_t)n, f) != (size_t)n || n < 10 || memcmp(lbuf, "EDLNG1\n", 7) ||
+        ((unsigned char)lbuf[8] << 8 | (unsigned char)lbuf[9]) != S_COUNT) {
+        fclose(f); free(ltab); free(lbuf); ltab = NULL; lbuf = NULL;
+        return;
+    }
+    fclose(f);
+    lbuf[n] = 0;
+    for (i = 0, k = 10; i < S_COUNT && k < n; i++) {
+        if (lbuf[k++] == 0) continue;
+        ltab[i] = lbuf + k;
+        k += (long)strlen(lbuf + k) + 1;
+    }
+}
+
+const char *L(int id)
+{
+    const char *s = NULL;
+    if (id < 0 || id >= S_COUNT) return "?";
+    if (ui_lang != lfor) lang_load(ui_lang);
+    if (ltab) s = ltab[id];
+    return s ? s : s_en[id];
+}
+#endif
+'''
+
 def main():
     utf8 = '--utf8' in sys.argv          # for the macOS version: strings in UTF-8
     latin1 = '--latin1' in sys.argv      # for the Amiga version: ISO-8859-1
@@ -164,7 +219,10 @@ def main():
             return to_st(s, where, lg) if enc is to_st else enc(s, where)
         f.write('const char *const lang_name[NLANG] = { %s };\n\n' %
                 ', '.join(c_string(encl(names[l], 'names', l)) for l in langs))
+        lite = enc is to_st             # the Atari's low memory build reads the others from files
         for lg in langs:
+            if lite and lg == 'de':
+                f.write('#ifndef EDLITE\n')
             f.write('static const char *const s_%s[S_COUNT] = {\n' % lg)
             for i in ids:
                 s = text[i].get(lg)
@@ -175,6 +233,14 @@ def main():
                 '    if (id < 0 || id >= S_COUNT) return "?";\n'
                 '    s = tab[ui_lang >= 0 && ui_lang < NLANG ? ui_lang : 0][id];\n'
                 '    return s ? s : s_en[id];\n}\n')
+        if lite:
+            f.write(LITE_C % {'n': len(ids)})
+            for lg in langs[1:]:
+                with open(os.path.join(os.path.dirname(os.path.abspath(cout)), 'EDWORD%s.LNG' % lg.upper()), 'wb') as g:
+                    g.write(b'EDLNG1\n\0' + struct.pack('>H', len(ids)))
+                    for i in ids:
+                        t = text[i].get(lg)
+                        g.write(b'\0' if t is None else b'\1' + to_st(t, i, lg) + b'\0')
     missing = {lg: sum(1 for i in ids if lg not in text[i]) for lg in langs}
     print('%d strings; missing translations: %s' % (len(ids), missing))
 

@@ -332,7 +332,7 @@ static void build_menu(void)
     /* the Amiga User Interface Style Guide: Project first, with New,
      * Open, Save, Save As, Print, About and Quit on their standard keys */
     TITLE(S_AMI_PROJECT);
-    ITEM(M_NEW, "N", C_NEW); ITEM(M_OPEN, "O", C_OPEN); ITEM(M_IMPORT, NULL, C_IMPORT); BAR();
+    ITEM(M_NEW, "N", C_NEW); ITEM(M_CLONE, NULL, C_CLONE); ITEM(M_OPEN, "O", C_OPEN); ITEM(M_IMPORT, NULL, C_IMPORT); BAR();
     ITEM(M_SAVEDOC, "S", C_SAVE); ITEM(M_SAVEAS, "A", C_SAVEAS); ITEM(M_EXPORT, NULL, C_EXPORT); BAR();
     ITEM(M_PAGE, NULL, C_PAGE); ITEM(M_HEADFOOT, NULL, C_HEADFOOT); ITEM(M_PREVIEW, NULL, C_PREVIEW);
     ITEM(M_PRINT, "P", C_PRINT); BAR();
@@ -343,9 +343,11 @@ static void build_menu(void)
     indent = 0;
     TITLE(MT_EDIT);
     ITEM(M_UNDO, "Z", C_UNDO); ITEM(M_REDO, "Y", C_REDO); BAR();
-    ITEM(M_CUT, "X", C_CUT); ITEM(M_COPY, "C", C_COPY); ITEM(M_PASTE, "V", C_PASTE); ITEM(M_SELALL, NULL, C_SELALL); BAR();
-    ITEM(M_FIND, "F", C_FIND); ITEM(M_FINDNEXT, "G", C_FINDNEXT); BAR();
-    ITEM(M_PREVPAGE, NULL, C_PREVPAGE); ITEM(M_NEXTPAGE, NULL, C_NEXTPAGE); ITEM(M_GOTOPAGE, NULL, C_GOTOPAGE); BAR();
+    ITEM(M_CUT, "X", C_CUT); ITEM(M_COPY, "C", C_COPY); ITEM(M_PASTE, "V", C_PASTE); ITEM(M_SELALL, NULL, C_SELALL);
+    CITEM(M_COLSEL, NULL, C_COLSEL); BAR();
+    ITEM(M_FIND, "F", C_FIND); ITEM(M_FINDNEXT, "G", C_FINDNEXT); ITEM(M_FINDPREV, NULL, C_FINDPREV); BAR();
+    ITEM(M_PREVPAGE, NULL, C_PREVPAGE); ITEM(M_NEXTPAGE, NULL, C_NEXTPAGE); ITEM(M_GOTOPAGE, NULL, C_GOTOPAGE);
+    ITEM(M_GOTOBM, NULL, C_GOTOBM); BAR();
     ITEM(M_REPAG, NULL, C_REPAG);
 
     indent = 0;
@@ -356,7 +358,7 @@ static void build_menu(void)
     ITEM(M_ROWDEL, NULL, C_ROWDEL); ITEM(M_COLINS, NULL, C_COLINS); ITEM(M_COLDEL, NULL, C_COLDEL);
     ITEM(M_TBLDEL, NULL, C_TBLDEL); ITEM(M_CHART, NULL, C_CHART); BAR();
     ITEM(S_AMI_PICTURE, NULL, C_PICTURE); ITEM(M_DRAWING, NULL, C_DRAWING); BAR();
-    ITEM(M_TOC, NULL, C_TOC); BAR(); ITEM(M_INSFILE, NULL, C_INSFILE);
+    ITEM(M_TOC, NULL, C_TOC); ITEM(M_INSBM, NULL, C_INSBM); BAR(); ITEM(M_INSFILE, NULL, C_INSFILE);
 
     indent = 1;
     TITLE(MT_FONT);
@@ -405,7 +407,8 @@ static void build_menu(void)
 
     indent = 1;
     TITLE(MT_WINDOW);
-    CITEM(M_VDOC, NULL, C_VDOC); CITEM(M_SPLIT, NULL, C_SPLIT); CITEM(M_VCODES, NULL, C_VCODES); BAR();
+    CITEM(M_VDOC, NULL, C_VDOC); CITEM(M_SPLIT, NULL, C_SPLIT); CITEM(M_VCODES, NULL, C_VCODES);
+    CITEM(M_SPLITWIN, NULL, C_SPLITWIN); BAR();
     ITEM(M_ZOOMIN, NULL, C_ZOOMIN); ITEM(M_ZOOMOUT, NULL, C_ZOOMOUT);
     CITEM(M_ZOOMFIT, NULL, C_ZOOMFIT); CITEM(M_ZOOMPAGE, NULL, C_ZOOMPAGE); BAR();
     CITEM(M_TOOLBAR, NULL, C_TOOLBAR); CITEM(M_RULERS, NULL, C_RULERS); CITEM(M_GUIDES, NULL, C_GUIDES); BAR();
@@ -414,7 +417,7 @@ static void build_menu(void)
     ITEM(M_CYCLE, NULL, C_CYCLE); BAR();
     /* as many documents as fit, then "More windows..." */
     rows = (scr_h - desk.g_y) / (hchar + 1) - 1;
-    win_items = rows - 24;
+    win_items = rows - 25;
     if (win_items > MAX_DOCS) win_items = MAX_DOCS;
     if (win_items > 9) win_items = 9;
     if (win_items < 1) win_items = 1;
@@ -564,6 +567,7 @@ void update_menu(DOC *d)
     xfer_refresh();
     for (i = C_VDOC; i <= C_TOOLBAR; i++) enable(i, hasdoc);
     enable(C_RULERS, 1); enable(C_GUIDES, 1);
+    for (i = C_CLONE; i <= C_PVZOOM; i++) enable(i, hasdoc);
     enable(C_ICONIFY, d != NULL); enable(C_BOTTOM, d != NULL);
     for (i = 0; i < NSIZES; i++) enable(C_SIZE0 + i, hasdoc);
     for (i = 0; i < font_items; i++) enable(C_FONT0 + i, hasdoc);
@@ -598,6 +602,8 @@ void update_menu(DOC *d)
     check(C_BULLETS, p && p->list == LIST_BULLET); check(C_NUMBERS, p && p->list == LIST_NUMBER);
     check(C_HEAD1, p && p->toc == 1); check(C_HEAD2, p && p->toc == 2); check(C_HEAD3, p && p->toc == 3);
     check(C_BODY, p && p->toc == 0);
+    check(C_COLSEL, d && d->colmode);
+    check(C_SPLITWIN, d && d->split2);
     check(C_VDOC, d && d->view == VIEW_DOC); check(C_SPLIT, d && d->view == VIEW_SPLIT);
     check(C_VCODES, d && d->view == VIEW_CODES);
     check(C_TOOLBAR, d && d->toolbar);
@@ -645,7 +651,7 @@ void rebuild_menu(void)
 /*  Tool windows                                                      */
 /* ================================================================= */
 
-static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &preview_tool, &draw_tool, NULL };
+static const TOOL *tools[] = { &spell_tool, &find_tool, &thes_tool, &import_tool, &export_tool, &fontsel_tool, &draw_tool, NULL };
 
 int tool_owns(struct Window *w)
 {
@@ -784,6 +790,97 @@ void doc_loaded(DOC *d)
     d->anchor = -1;
     doc_sync_ins(d);
     undo_reset(d);
+}
+
+/* ---- bookmarks ------------------------------------------------------------ */
+
+/* a popup of the ten bookmarks at the mouse; 0-9, 10 Remove, or -1 */
+static int bm_popup(DOC *d, int remove_item)
+{
+    static char txt[11][60];
+    const char *items[11];
+    int i, n = 10;
+    for (i = 0; i < 10; i++) {
+        sprintf(txt[i], L(S_BMARK_N), (i + 1) % 10);
+        if (d->bmark[i] < 0) sprintf(txt[i] + strlen(txt[i]), "  %s", L(S_BM_UNSET));
+        else {
+            char peek[24];
+            long k, j = 0;
+            for (k = d->bmark[i]; k < d->len && j < 20 && !ISEND(d->text[k].ch); k++) peek[j++] = (char)d->text[k].ch;
+            peek[j] = 0;
+            sprintf(txt[i] + strlen(txt[i]), ": %s", lat(peek));
+        }
+        items[i] = txt[i];
+    }
+    if (remove_item) { strcpy(txt[10], L(S_BM_REMOVE)); items[n++] = txt[10]; }
+    return popup(items, n, -1, scr->MouseX, scr->MouseY);
+}
+
+static void bm_goto(DOC *d, int n)
+{
+    long oc = d->cursor, oa = d->anchor;
+    if (n < 0 || n >= NBMARK) return;
+    if (d->bmark[n] < 0) { alert(1, 1, AL_NO_BMARK, AB_OK, (n + 1) % 10); return; }
+    if (d->view == VIEW_PREVIEW) set_view(d, VIEW_DOC);
+    d->colsel = 0;
+    d->anchor = -1;
+    d->cursor = d->bmark[n] <= d->len ? d->bmark[n] : d->len;
+    d->want_x = -1;
+    after_move(d, oc, oa);
+}
+
+/* bookmark n at the caret; again at the same place takes it away */
+static void bm_set(DOC *d, int n)
+{
+    if (n < 0 || n >= NBMARK) return;
+    d->bmark[n] = d->bmark[n] == d->cursor ? -1 : d->cursor;
+    d->dirty = 1;
+    if (d->view != VIEW_DOC) d->codes_stale = 1;
+    set_name(d);
+    set_info(d);
+    if (pref_guides) refresh_text(d);
+}
+
+/* Insert > Bookmark: which one to put at the caret (or take away) */
+static void cmd_insbm(DOC *d)
+{
+    int i, here = 0;
+    for (i = 0; i < NBMARK; i++) if (d->bmark[i] == d->cursor) here = 1;
+    i = bm_popup(d, here);
+    if (i == 10) { for (i = 0; i < NBMARK; i++) if (d->bmark[i] == d->cursor) bm_set(d, i); }
+    else if (i >= 0) { if (d->bmark[i] != d->cursor) bm_set(d, i); }
+}
+
+/* Control-1 to 0 and Amiga-1 to 0 */
+void bm_key(int n, int set)
+{
+    DOC *d = top_doc();
+    if (!d || d->iconified) return;
+    if (d->view != VIEW_DOC && d->view != VIEW_PREVIEW && d->cv.dirty) apply_codes(d);
+    if (set) bm_set(d, n); else bm_goto(d, n);
+}
+
+/* Project > Clone: a copy of the document in a new window, NewDocNN */
+static int clone_no;
+static void cmd_clone(DOC *src)
+{
+    DOC *d;
+    if (src->view != VIEW_DOC && src->view != VIEW_PREVIEW && src->cv.dirty) apply_codes(src);
+    if ((d = new_doc()) == NULL) return;
+    busy(1);
+    if (!doc_clone(d, src)) {
+        busy(0);
+        alert(1, 3, AL_NO_MEMORY, AB_OK);
+        doc_free(d);
+        d->used = 0;
+        return;
+    }
+    busy(0);
+    sprintf(d->base, "NewDoc%02d", ++clone_no % 100);
+    doc_loaded(d);
+    d->cursor = src->cursor <= d->len ? src->cursor : d->len;
+    d->dirty = 1;
+    open_window(d);
 }
 
 static void cmd_new(void)
@@ -1455,7 +1552,11 @@ void do_cmd(int cmd)
     case C_BOTTOM:  send_to_back(d); return;
     case C_SAVE:    if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d); cmd_save(d, 0); return;
     case C_SAVEAS:  if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d); cmd_save(d, 1); return;
-    case C_PREVIEW: preview_open(d); return;
+    case C_PREVIEW: set_view(d, d->view == VIEW_PREVIEW ? VIEW_DOC : VIEW_PREVIEW); return;
+    case C_PVPREV:  preview_goto(d, d->pv_page - 1); return;
+    case C_PVNEXT:  preview_goto(d, d->pv_page + 1); return;
+    case C_PVZOOM:  preview_zoom(d, 0, 0, NULL); return;
+    case C_CLONE:   cmd_clone(d); return;
     case C_PRINT:   cmd_print(d); return;
     }
     if (d->iconified) return;
@@ -1533,7 +1634,8 @@ void do_cmd(int cmd)
     }
     case C_COPY:   clip_copy(d); break;
     case C_CUT:
-        if (doc_sel(d, &a, &b)) { clip_copy(d); doc_delete_sel(d); after_edit(d, a); }
+        if (d->colsel && d->anchor >= 0) { if (clip_copy(d)) block_delete(d); }
+        else if (doc_sel(d, &a, &b)) { clip_copy(d); doc_delete_sel(d); after_edit(d, a); }
         else if (!doc_in_table(d, d->cursor, NULL, NULL)) {
             /* nothing selected: the whole line (paragraph) and its
              * Return, as in qed and other text editors */
@@ -1555,6 +1657,17 @@ void do_cmd(int cmd)
         break;
     case C_FIND:     find_open(d); break;
     case C_FINDNEXT: find_again(d); break;
+    case C_FINDPREV: find_again_dir(d, 1); break;
+    case C_INSBM:    cmd_insbm(d); break;
+    case C_SPLITWIN: split_toggle(d); break;
+    case C_COLSEL:
+        d->colmode = !d->colmode;
+        if (d->anchor >= 0) select_range(d, -1, d->cursor);
+        d->colsel = 0;
+        update_menu(d);
+        set_info(d);
+        break;
+    case C_GOTOBM:   bm_goto(d, bm_popup(d, 0)); break;
     case C_PLAIN:   apply_style(d, AP_PLAIN, 0); break;
     case C_BOLD:    apply_style(d, AP_TOGGLE, A_BOLD); break;
     case C_ITALIC:  apply_style(d, AP_TOGGLE, A_ITALIC); break;
@@ -1595,7 +1708,7 @@ static int special_key(int key, int qual)
     int shift = (qual & KQ_SHIFT) != 0;
     switch (key) {
     case K_F2:  do_cmd(C_REPAG); return 1;
-    case K_F3:  do_cmd(C_FINDNEXT); return 1;
+    case K_F3:  do_cmd(shift ? C_FINDPREV : C_FINDNEXT); return 1;
     case K_F4:  do_cmd(C_VDOC); return 1;
     case K_F5:  do_cmd(C_SPLIT); return 1;
     case K_F6:  do_cmd(C_VCODES); return 1;
@@ -1613,6 +1726,12 @@ void handle_key(struct Window *w, int key, int qual)
     DOC *d;
     if (!(qual & KQ_CTRL) && tool_route_key(w, key, qual)) return;
     if (special_key(key, qual)) return;
+    /* bookmarks: Control-1 to 0 goes to one, Amiga-1 to 0 sets it there */
+    if ((qual & (KQ_CTRL | KQ_AMIGA)) && key >= '0' && key <= '9') {
+        int n = key == '0' ? 9 : key - '1';
+        if (qual & KQ_AMIGA) bm_key(n, 1); else bm_key(n, 0);
+        return;
+    }
     if (qual & KQ_CTRL) {
         /* the menus have the Right Amiga shortcuts; Control is for the
          * cursor keys (the document's ends) and these two */
@@ -1649,6 +1768,10 @@ static int map_key(ULONG cl, UWORD code, UWORD qual)
         return code;
     }
     if (code & IECODE_UP_PREFIX) return 0;
+    /* the digits with Control or Amiga, when the keymap doesn't give them
+     * as characters: the bookmarks */
+    if (code >= 0x01 && code <= 0x0A && (qual & (IEQUALIFIER_CONTROL | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)))
+        return code == 0x0A ? '0' : '0' + code;
     switch (code) {
     case 0x4C: return K_UP;
     case 0x4D: return K_DOWN;

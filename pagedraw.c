@@ -226,7 +226,7 @@ int page_render(DOC *d, int page, int color, BAND *b, int sc, GLYPHFN glyph, voi
     for (i = 0; i < d->a.nobj; i++)
         if (d->a.objs[i].page == page) rs_obj(b, d, &d->a.objs[i], color, sc, 1);
     if (color <= 0) draw_rows(d, page, b, sc);
-    draw_charts(d, page, color, b, sc, glyph, ctx);
+    if (CHARTS) draw_charts(d, page, color, b, sc, glyph, ctx);
     if (page < d->npages) {
         a = d->pgline[page];
         e = d->pgline[page + 1];

@@ -58,6 +58,15 @@ ifdef EDTEST
 TARGET   = EDWTEST.PRG
 OBJDIR   = build/test
 endif
+# EdWord Lite, for an ST with little memory: English built in, the other
+# languages read from EDWORDxx.LNG; the dictionary read from disk as it is
+# needed; it saves EdWord's own files and reads RTF, 1st Word Plus, text
+# and GEM IMG pictures; no PDF, export, clipboard slots, colour themes or
+# file selector of its own
+ifdef LITE
+TARGET   = EDWLITE.PRG
+OBJDIR   = build/lite
+endif
 # The processor check and the strings of its alert run on any ST. The 68k
 # versions link with the 68000 libraries too, so that the C library's start-up
 # runs everywhere and the check gets its turn (EdWord calls nothing in them
@@ -73,6 +82,9 @@ CFLAGS  = -O2 $(CPUFLAGS) -fomit-frame-pointer -Wall -std=gnu89
 
 ifdef EDDIAG
 CFLAGS += -DEDDIAG
+endif
+ifdef LITE
+CFLAGS += -DEDLITE
 endif
 ifdef EDLOG
 CFLAGS += -DEDLOG
@@ -95,11 +107,14 @@ CORE    = doc.o layout.o edit.o undo.o docops.o rtf.o pdf.o pagedraw.o raster.o 
           charset.o text.o codes.o spell.o md.o fwp.o protext.o chart.o prt.o
 GEMOBJ  = gem.o gemwin.o gemdlg.o gemrsc.o gemrend.o gemtheme.o gemtool.o gemtwin.o gemobj.o gemclip.o gemfsel.o \
           demo.o lang.o cpucheck.o
+ifdef LITE
+CORE    := $(filter-out md.o chart.o,$(CORE))
+endif
 OBJS    = $(addprefix $(OBJDIR)/,$(GEMOBJ) $(CORE))
 
 # "make" alone builds every processor's version and DIST; a build for one
 # processor, or with EDLOG, EDDEMO, EDDIAG or EDTEST, just its program
-ifeq ($(CPU)$(EDLOG)$(EDDEMO)$(EDDIAG)$(EDTEST),)
+ifeq ($(CPU)$(EDLOG)$(EDDEMO)$(EDDIAG)$(EDTEST)$(LITE),)
 all: dist
 else
 all: $(TARGET)
@@ -158,11 +173,12 @@ mkdic: tools/mkdic.c charset.c wp.h
 
 clean:
 	rm -f *.o EDWORD.PRG MKDIC.TTP hosttest mkdic
-	rm -rf build EDW030.PRG EDW030F.PRG EDW040.PRG EDWCF.PRG EDWTEST.PRG DIST EDWORD-*.zip
+	rm -rf build EDW030.PRG EDW030F.PRG EDW040.PRG EDWCF.PRG EDWTEST.PRG EDWLITE.PRG DIST EDWORD-*.zip
 
 dist: EDWORD.PRG $(RSCS)
 	$(MAKE) cpus
 	$(MAKE) EDTEST=1
+	$(MAKE) LITE=1
 	sh tools/mkdist.sh
 
 .PHONY: all clean cpus dist FORCE

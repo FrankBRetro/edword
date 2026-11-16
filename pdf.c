@@ -14,6 +14,7 @@
 #include <stdarg.h>
 #include "wp.h"
 
+#ifndef EDLITE
 static void plog(PDFOUT *o, const char *fmt, ...)
 {
     char buf[160];
@@ -47,6 +48,7 @@ static void rle_row(FILE *f, const unsigned char *s, long n, long *cnt)
     }
 }
 
+#endif
 /* the printer's inks for colour pictures, if the page has one */
 unsigned page_inks(DOC *d, int page)
 {
@@ -86,7 +88,7 @@ unsigned page_colours(DOC *d, int page)
     }
     if (hf_visible(d, 0, page) || hf_visible(d, 1, page)) m |= 1;   /* black */
     for (i = 0; i < d->a.ntbl; i++)                                   /* charts */
-        if (d->a.tbls[i].chart && d->cbox[i].page == page) {
+        if (CHARTS && d->a.tbls[i].chart && d->cbox[i].page == page) {
             static CHDATA cd;
             int n = 0, k2;
             if (chart_data(d, i, &cd))
@@ -97,6 +99,7 @@ unsigned page_colours(DOC *d, int page)
     return m;
 }
 
+#ifndef EDLITE
 /* colour pictures go in as images of their own, under the page */
 static int rgb_obj(DOC *d, const OBJ *ob)
 {
@@ -115,6 +118,7 @@ static void write_rgb_image(FILE *f, int num, const IMG *im, long *cnt)
     fputs("\nendstream\nendobj\n", f);
 }
 
+#endif
 const char *const pdf_res_name[NPDFRES] = { "", "150", "300", "600", "1200" };
 static const short pdf_res_dpi[NPDFRES] = { 0, 150, 300, 600, 1200 };
 
@@ -129,6 +133,7 @@ int pdf_res_scale(int choice)
     return s < 1 ? 1 : s > 16 ? 16 : (int)s;
 }
 
+#ifndef EDLITE /* EdWord Lite: PDF comes from printing to XGDOS */
 int pdf_export(DOC *d, const char *path, PDFOUT *o)
 {
     FILE *f;
@@ -291,3 +296,4 @@ int pdf_export(DOC *d, const char *path, PDFOUT *o)
     free(off);
     return !err;
 }
+#endif /* EDLITE */

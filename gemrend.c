@@ -647,7 +647,7 @@ void draw_page(DOC *d, int page, long ox, long oy, long n, long den, const GRECT
         }
     }
     for (i = 0; i < d->a.ntbl; i++)
-        if (d->a.tbls[i].chart && d->cbox[i].page == page && d->cbox[i].w > 0) {
+        if (CHARTS && d->a.tbls[i].chart && d->cbox[i].page == page && d->cbox[i].w > 0) {
             long cy = oy + SP(d->cbox[i].y, &sc);
             if (!clip || (cy <= clip->g_y + clip->g_h && cy + SP(d->cbox[i].h, &sc) >= clip->g_y))
                 draw_vdi_chart(vhandle, d, i, ox, oy, &sc, fg, dark);
@@ -1310,6 +1310,7 @@ typedef struct {
     void (*gauge)(long done, long total);
 } RCTX;
 
+#ifndef EDLITE
 static int render_cb(void *ctx, DOC *d, int page, int color, long y0, long h, long w,
                      unsigned char *bits, long rb)
 {
@@ -1379,6 +1380,13 @@ int export_pdf(DOC *d, const char *path, void (*gauge)(long done, long total))
     edlog("pdf: done, %s", ok ? "ok" : "failed");
     return ok;
 }
+#else
+int export_pdf(DOC *d, const char *path, void (*gauge)(long done, long total))
+{
+    (void)d; (void)path; (void)gauge;
+    return 0;                           /* EdWord Lite: print to XGDOS for a PDF */
+}
+#endif
 
 /* ---- printing through GDOS ----------------------------------------------- */
 
@@ -1534,6 +1542,7 @@ static int prt_open(PCTX *c, int colour)
     c->o.w = work_out[0] + 1L; c->o.h = work_out[1] + 1L;
     c->o.pixw = work_out[3]; c->o.pixh = work_out[4];
     c->o.band = 128;
+    c->o.maxdpi = pref_prtdpi;
     c->o.render = prt_render;
     c->o.out = prt_out;
     c->o.progress = prt_progress;

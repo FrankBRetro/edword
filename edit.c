@@ -245,6 +245,19 @@ void doc_copy(DOC *d)
     if (!doc_insert(clip, 0, d->text + a, b - a)) doc_free(clip);
 }
 
+/* a document (a block's lines, say) as the internal clipboard */
+void doc_copy_doc(const DOC *t)
+{
+    if (!clip) clip = (DOC *)malloc(sizeof(DOC));
+    else doc_free(clip);
+    if (!clip) return;
+    doc_init(clip);
+    clip->a = t->a;
+    if (!doc_insert(clip, 0, t->text, t->len)) doc_free(clip);
+}
+
+DOC *doc_clip(void) { return clip && clip->len ? clip : NULL; }
+
 int doc_paste(DOC *d)
 {
     if (!clip || !clip->len) return 0;

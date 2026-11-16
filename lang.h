@@ -594,6 +594,8 @@ enum {
     AB_CLEAR_CANCEL,
     S_FREE_RAM,
     S_FREE_RAM2,
+    S_PRINT_RES,
+    S_PRINTER_RES,
     S_COUNT
 };
 

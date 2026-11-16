@@ -24,11 +24,13 @@ typedef struct {
     void (*act)(short item, int clicks);
     void (*build)(void);
     void (*changed)(void);              /* a cycle gadget or check box changed */
+    void (*closed)(void);               /* it is closing                       */
 } TWIN;
 
 static void tw_close(TWIN *t)
 {
     if (!t->open) return;
+    if (t->closed) t->closed();
     dlg_fetch(&t->g);
     if (t->g.win) {
         RemoveGList(t->g.win, t->g.glist, -1);
@@ -140,10 +142,13 @@ static void f_say(int text, long n)
     tw_redraw(&fw);
 }
 
+static int f_dir = -1;          /* Find Next / Previous: forward 0, back 1; -1 as the window says */
+
 static int f_find(DOC *d)
 {
     long from, e, s, a, b;
     int flags = f_flags();
+    if (f_dir >= 0) flags = (flags & ~FIND_BACK) | (f_dir ? FIND_BACK : 0);
     if (!f_what[0]) return 0;
     if (doc_sel(d, &a, &b)) from = flags & FIND_BACK ? a : b;
     else from = d->cursor;
@@ -196,12 +201,18 @@ void find_open(DOC *d)
     tw_open(&fw, S_FIND_TITLE, 1);
 }
 
-void find_again(DOC *d)
+/* Find Next (F3, Amiga-G) and Previous (Shift-F3, Amiga-Shift-G): the
+ * last text searched for, whether the window is open or not */
+void find_again_dir(DOC *d, int back)
 {
     if (!f_what[0]) { find_open(d); return; }
     if (!fw.g.nit) { fw.act = f_act; fw.build = f_build; f_build(); }
+    f_dir = back;
     f_find(d);
+    f_dir = -1;
 }
+
+void find_again(DOC *d) { find_again_dir(d, 0); }
 
 static int  f_owns(struct Window *w) { return fw.open && w == fw.g.win; }
 static void f_msg(struct IntuiMessage *m) { tw_msg(&fw, m); }
@@ -607,12 +618,17 @@ static void th_act(short it, int clicks)
     }
 }
 
+/* the thesaurus file is open, and its index in memory, only while its
+ * window is */
+static void th_closed(void) { thes_close(); }
+
 void thes_run(DOC *d)
 {
     long a, b, pos;
     char w[WORDMAX];
     tw.act = th_act;
     tw.build = th_build;
+    tw.closed = th_closed;
     if (d->view != VIEW_DOC && d->cv.dirty) apply_codes(d);
     pos = doc_sel(d, &a, &b) ? a : d->cursor;
     if (!word_at(d, pos, &a, &b, w, WORDMAX) && !(pos > 0 && word_at(d, pos - 1, &a, &b, w, WORDMAX))) {

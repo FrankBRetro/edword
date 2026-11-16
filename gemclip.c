@@ -266,6 +266,7 @@ char *clip_get_text(long *n)
     return (char *)b;
 }
 
+#ifndef EDLITE
 /* ---- the clipboard's ten slots ------------------------------------------- */
 
 /* Each slot is a file in the clipboard folder, EDSLOT1.RTF to EDSLOT0.RTF,
@@ -555,6 +556,16 @@ int slots_save(DOC *d)
     if (ok) d->dirty = 0;
     return ok;
 }
+
+#else
+/* EdWord Lite: no slots */
+int slot_copy(DOC *d, int n) { (void)d; (void)n; return 0; }
+int slot_paste(DOC *d, int n) { (void)d; (void)n; return 0; }
+void slots_clear(void) {}
+void slot_peek(int n, char *out, int max) { (void)n; (void)max; out[0] = 0; }
+int slots_fill(DOC *d) { (void)d; return 0; }
+int slots_save(DOC *d) { (void)d; return 0; }
+#endif
 
 /* ---- Insert > File ------------------------------------------------------ */
 

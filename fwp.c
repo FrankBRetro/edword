@@ -28,6 +28,7 @@
 #define F_FOOT    0x18
 /* pica: 7.2 points a character */
 static int ch2pt(long n) { return (int)((n * 72 + 5) / 10); }
+static int pt2ch(long p) __attribute__((unused));
 static int pt2ch(long p) { return (int)((p * 10 + (p >= 0 ? 36 : -36)) / 72); }
 
 /* does this look like a 1st Word Plus file? */
@@ -226,6 +227,7 @@ int fwp_import(DOC *d, const char *path)
     return 1;
 }
 
+#ifndef EDLITE /* EdWord Lite saves only its own files */
 /* ================================================================= */
 /*  Export                                                            */
 /* ================================================================= */
@@ -408,3 +410,4 @@ int fwp_export(DOC *d, const char *path)
     fclose(f);
     return !err;
 }
+#endif /* EDLITE */

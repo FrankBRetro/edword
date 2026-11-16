@@ -660,6 +660,7 @@ int md_import(DOC *d, const char *path, int cs)
     return m.ok;
 }
 
+#ifndef EDLITE /* EdWord Lite saves only its own files */
 /* ================================================================= */
 /*  Export                                                            */
 /* ================================================================= */
@@ -885,3 +886,4 @@ int md_export(DOC *d, const char *path, int crlf, int cs)
     if (cs == CS_UTF8 && !crlf) return 1;
     return file_transcode(path, cs == CS_AUTO ? CS_UTF8 : cs, crlf);
 }
+#endif /* EDLITE */

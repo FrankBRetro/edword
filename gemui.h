@@ -94,7 +94,7 @@ extern DOC  *docs[MAX_DOCS];
 extern char  progdir[256];
 extern const short sizes[];
 extern int   pref_date, pref_toolbar, pref_paper, pref_land;
-extern int   pref_autosave, pref_asmin, pref_asmode, pref_display, pref_live, pref_bgprint, pref_fsel;
+extern int   pref_autosave, pref_asmin, pref_asmode, pref_display, pref_live, pref_bgprint, pref_fsel, pref_prtdpi;
 int   fsel_own(void);           /* EdWord's own file selector is the one used */
 int   xgdos_loaded(void);
 extern char  pref_docdir[128], tpl_name[48], tpl_addr[3][48], tpl_title[48];

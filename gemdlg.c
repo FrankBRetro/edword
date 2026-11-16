@@ -1699,6 +1699,10 @@ int dlg_objprops(DOC *d, OBJ *o)
         dlg_set(&g, shape = DDP_WSHAPE, o->wrap == WR_SHAPE);
         dlg_set(&g, DDP_FRAME, o->border);
         del = DDP_DEL; edt = DDP_EDIT; ok = DDP_OK; g.cancel = DDP_CANCEL;
+#ifdef EDLITE
+        dlg_hide(&g, DDP_EDIT);             /* no drawing window in EdWord Lite */
+        edt = -2;
+#endif
     } else {
         dlg_edtext(&g, DPP_X, xb); dlg_edtext(&g, DPP_Y, yb); dlg_edtext(&g, DPP_W, wb); dlg_edtext(&g, DPP_H, hb);
         dlg_edtext(&g, DPP_PAGE, pb);
