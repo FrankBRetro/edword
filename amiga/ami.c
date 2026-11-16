@@ -340,11 +340,12 @@ static void build_menu(void)
     ITEM(S_AMI_HELP, NULL, C_HELP); ITEM(M_ABOUT, "?", C_ABOUT); BAR();
     ITEM(M_QUIT, "Q", C_QUIT);
 
-    indent = 0;
+    indent = 1;
     TITLE(MT_EDIT);
     ITEM(M_UNDO, "Z", C_UNDO); ITEM(M_REDO, "Y", C_REDO); BAR();
     ITEM(M_CUT, "X", C_CUT); ITEM(M_COPY, "C", C_COPY); ITEM(M_PASTE, "V", C_PASTE); ITEM(M_SELALL, NULL, C_SELALL);
     CITEM(M_COLSEL, NULL, C_COLSEL); BAR();
+    ITEM(M_CUTSLOT, NULL, C_CUTSLOT); ITEM(M_COPYSLOT, NULL, C_COPYSLOT); ITEM(M_PASTESLOT, NULL, C_PASTESLOT); BAR();
     ITEM(M_FIND, "F", C_FIND); ITEM(M_FINDNEXT, "G", C_FINDNEXT); ITEM(M_FINDPREV, NULL, C_FINDPREV); BAR();
     ITEM(M_PREVPAGE, NULL, C_PREVPAGE); ITEM(M_NEXTPAGE, NULL, C_NEXTPAGE); ITEM(M_GOTOPAGE, NULL, C_GOTOPAGE);
     ITEM(M_GOTOBM, NULL, C_GOTOBM); BAR();
@@ -401,6 +402,7 @@ static void build_menu(void)
     TITLE(MT_TOOLS);
     ITEM(M_SPELL, "K", C_SPELL); CITEM(M_LIVESPELL, NULL, C_LIVESPELL); ITEM(M_THES, NULL, C_THES);
     ITEM(M_SUMMARY, NULL, C_SUMMARY); BAR();
+    ITEM(M_SLOTS, NULL, C_SLOTS); ITEM(M_CLEARSLOTS, NULL, C_CLEARSLOTS); BAR();
     ITEM(M_UDLOAD, NULL, C_UDLOAD); ITEM(M_UDNEW, NULL, C_UDNEW); BAR();
     for (i = 0; i < MAX_UDICT; i++) DITEM_(pad(60 + i, L(S_NO_UDICT), 26), C_UD0 + i);
 
@@ -567,7 +569,8 @@ void update_menu(DOC *d)
     xfer_refresh();
     for (i = C_VDOC; i <= C_TOOLBAR; i++) enable(i, hasdoc);
     enable(C_RULERS, 1); enable(C_GUIDES, 1);
-    for (i = C_CLONE; i <= C_PVZOOM; i++) enable(i, hasdoc);
+    for (i = C_CLONE; i <= C_PASTESLOT; i++) enable(i, hasdoc);
+    enable(C_SLOTS, 1); enable(C_CLEARSLOTS, 1);
     enable(C_ICONIFY, d != NULL); enable(C_BOTTOM, d != NULL);
     for (i = 0; i < NSIZES; i++) enable(C_SIZE0 + i, hasdoc);
     for (i = 0; i < font_items; i++) enable(C_FONT0 + i, hasdoc);
@@ -860,6 +863,78 @@ void bm_key(int n, int set)
     if (set) bm_set(d, n); else bm_goto(d, n);
 }
 
+/* ---- the clipboard's slots ------------------------------------------------- */
+
+/* a popup of the ten slots at the mouse; 0-9, or -1 */
+static int slot_popup(void)
+{
+    static char txt[10][64];
+    const char *items[10];
+    int i;
+    for (i = 0; i < 10; i++) {
+        char peek[28];
+        sprintf(txt[i], L(S_SLOT_N), (i + 1) % 10);
+        slot_peek(i, peek, sizeof peek);
+        sprintf(txt[i] + strlen(txt[i]), ": %s", peek[0] ? peek : L(S_SLOT_EMPTY));
+        items[i] = txt[i];
+    }
+    return popup(items, 10, -1, scr->MouseX, scr->MouseY);
+}
+
+static void cmd_slot(DOC *d, int cmd)
+{
+    long a, b;
+    int n;
+    if (cmd != C_PASTESLOT && d->selobj < 0 && !(d->colsel && d->anchor >= 0) && !doc_sel(d, &a, &b)) return;
+    if ((n = slot_popup()) < 0) return;
+    if (cmd == C_PASTESLOT) { slot_paste(d, n); return; }
+    if (!slot_copy(d, n) || cmd != C_CUTSLOT) return;
+    if (d->selobj >= 0) do_cmd(C_OBJDEL);
+    else if (d->colsel && d->anchor >= 0) block_delete(d);
+    else if (doc_sel(d, &a, &b)) { doc_delete_sel(d); after_edit(d, a); }
+}
+
+/* Tools > Clipboard Slots: the ten slots in a document; Save writes them.
+ * top: the window to the front (else just brought up to date) */
+static void slots_window(int top)
+{
+    DOC *d;
+    int i;
+    for (i = 0; i < MAX_DOCS; i++)
+        if (DOC_USED(i) && docs[i]->slotdoc) {
+            d = docs[i];
+            if (!d->dirty) {                    /* as the slots are now */
+                int j;
+                doc_delete(d, 0, d->len);
+                img_cache_free(d);
+                for (j = 0; j < d->nimg; j++) img_free(&d->imgs[j]);
+                d->nimg = 0;
+                d->a.nobj = 0;
+                d->selobj = -1;
+                slots_fill(d);
+                doc_changed(d);
+                d->dirty = 0;
+                set_name(d);
+            }
+            if (!top) return;
+            if (d->iconified) uniconify(d);
+            activate_doc(d);
+            return;
+        }
+    if (!top) return;
+    if ((d = new_doc()) == NULL) return;
+    doc_prefs(d);
+    stc(d->base, L(S_SLOTS_TITLE), sizeof d->base);
+    d->slotdoc = 1;
+    busy(1);
+    i = slots_fill(d);
+    busy(0);
+    if (!i) { alert(1, 3, AL_NO_MEMORY, AB_OK); doc_free(d); d->used = 0; return; }
+    doc_loaded(d);
+    d->dirty = 0;
+    open_window(d);
+}
+
 /* Project > Clone: a copy of the document in a new window, NewDocNN */
 static int clone_no;
 static void cmd_clone(DOC *src)
@@ -1083,7 +1158,16 @@ static void show_help(void)
 static int cmd_save(DOC *d, int ask)
 {
     int ok;
+    if (d->slotdoc && !ask) {                  /* the clipboard's slots: back to their files */
+        busy(1);
+        ok = slots_save(d);
+        busy(0);
+        if (!ok) { alert(1, 3, AL_CANT_SAVE, AB_OK); return 0; }
+        set_name(d);
+        return 1;
+    }
     if (ask || !d->path[0]) if (!save_as(d)) return 0;
+    d->slotdoc = 0;
     busy_begin(L(S_SAVING));
     ok = rtf_export(d, d->path);
     busy_end();
@@ -1527,6 +1611,10 @@ void do_cmd(int cmd)
             update_menu(d);
         }
         return;
+    case C_SLOTS:  slots_window(1); return;
+    case C_CLEARSLOTS:
+        if (alert(2, 2, AL_CLEAR_SLOTS, AB_CLEAR_CANCEL) == 1) { slots_clear(); slots_window(0); }
+        return;
     case C_ICONALL: {
         int i;
         for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i)) iconify(docs[i]);
@@ -1660,6 +1748,7 @@ void do_cmd(int cmd)
     case C_FINDPREV: find_again_dir(d, 1); break;
     case C_INSBM:    cmd_insbm(d); break;
     case C_SPLITWIN: split_toggle(d); break;
+    case C_CUTSLOT: case C_COPYSLOT: case C_PASTESLOT: cmd_slot(d, cmd); break;
     case C_COLSEL:
         d->colmode = !d->colmode;
         if (d->anchor >= 0) select_range(d, -1, d->cursor);
@@ -2583,6 +2672,7 @@ int main(int argc, char *argv[])
     c13_progdir(progdir, sizeof progdir, argc == 0 ? _WBenchMsg : NULL);
 #endif
     load_prefs();
+    slots_clear();              /* the clipboard's slots last while EdWord runs */
     set_language(pref_lang >= 0 ? pref_lang : system_language());
     spell_lang = pref_spell >= 0 ? pref_spell : ui_lang;
     /* pictures keep their colours (for the screen and PDFs) with 2 MB or
@@ -2654,6 +2744,7 @@ out:
     spell_free_all();
     thes_close();
     doc_clip_free();
+    slots_clear();
     edlog("exit: screen");
     screen_down();
     edlog("exit: screen down");

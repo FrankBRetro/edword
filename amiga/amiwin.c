@@ -1190,7 +1190,7 @@ static void set_title(DOC *d)
     if (d->iconified) sprintf(w->title, "%.12s", lat(d->base));
     else {
         /* edited or saved by the name, where it's seen */
-        const char *st = lat(d->dirty ? L(S_I_EDITED) : d->path[0] ? L(S_I_SAVED) : "");
+        const char *st = lat(d->dirty ? L(S_I_EDITED) : d->path[0] || d->slotdoc ? L(S_I_SAVED) : "");
         sprintf(w->title, "%.40s%s%s%s  %.200s", lat(d->base), st[0] ? " [" : "", st, st[0] ? "]" : "", d->info);
     }
     SetWindowTitles(w->w, (UBYTE *)w->title, (UBYTE *)-1);

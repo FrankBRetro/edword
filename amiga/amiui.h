@@ -56,6 +56,7 @@ enum {
     C_CASCADE, C_ICONIFY, C_ICONALL, C_BOTTOM, C_CYCLE, C_WINMORE,
     C_OBJPROP, C_OBJDEL, C_OBJEDIT, C_ZOOMFIT, C_ZOOMPAGE, C_THEME, C_ICONS, C_HELP,
     C_CLONE, C_FINDPREV, C_COLSEL, C_GOTOBM, C_INSBM, C_SPLITWIN, C_PVPREV, C_PVNEXT, C_PVZOOM,
+    C_CUTSLOT, C_COPYSLOT, C_PASTESLOT, C_SLOTS, C_CLEARSLOTS,
     C_LAST,
     C_FONT0 = 120, C_SIZE0 = 220, C_COLOR0 = 270, C_UD0 = 280, C_WIN0 = 290
 };
@@ -439,6 +440,14 @@ void  obj_draw_handles(DOC *d, GRECT *tp);
 int   obj_key(DOC *d, int key, int qual);
 void  cmd_picture(DOC *d);
 int   picture_insert(DOC *d, const char *path);
+int   picture_add(DOC *d, const char *path);  /* added, not selected: its object, or -1 */
+/* amiclip.c: the clipboard's ten slots, files in T: while EdWord runs */
+int   slot_copy(DOC *d, int n);
+int   slot_paste(DOC *d, int n);
+void  slots_clear(void);
+void  slot_peek(int n, char *out, int max);
+int   slots_fill(DOC *d);
+int   slots_save(DOC *d);
 void  cmd_drawing(DOC *d);
 void  obj_props(DOC *d);
 void  obj_delete(DOC *d);

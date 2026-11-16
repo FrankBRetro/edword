@@ -331,20 +331,22 @@ static int dt_load(const char *path, IMG *im)
     return ok;
 }
 
-/* insert a picture: IFF ILBM, PNG or GEM IMG, or anything datatypes read */
-int picture_insert(DOC *d, const char *path)
+/* a picture added under the caret's line, text flowing around it: IFF
+ * ILBM, PNG or GEM IMG, or anything datatypes read; its object's number,
+ * or -1 */
+int picture_add(DOC *d, const char *path)
 {
     IMG im;
     OBJ o;
-    int k, i;
-    if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return 0; }
+    int k;
+    if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return -1; }
     busy_begin(L(S_LOADING_PIC));
     k = img_load(path, &im);
     if (!k) k = dt_load(path, &im);
     busy_end();
-    if (!k) { alert(1, 3, AL_AMI_CANT_READ_PIC, AB_OK); return 0; }
+    if (!k) { alert(1, 3, AL_AMI_CANT_READ_PIC, AB_OK); return -1; }
     k = doc_img_add(d, &im);
-    if (k < 0) { img_free(&im); return 0; }
+    if (k < 0) { img_free(&im); return -1; }
     {
         const char *b = strrchr(path, '/');
         if (!b) b = strrchr(path, ':');
@@ -355,7 +357,13 @@ int picture_insert(DOC *d, const char *path)
     o.img = (short)k;
     o.wrap = WR_BOX;
     place_new(d, &o, px2pt_x(im.w), px2pt_y(im.h));
-    i = doc_obj_add(d, &o);
+    return doc_obj_add(d, &o);
+}
+
+/* insert a picture, selected */
+int picture_insert(DOC *d, const char *path)
+{
+    int i = picture_add(d, path);
     if (i < 0) return 0;
     d->selobj = i;
     d->anchor = -1;
