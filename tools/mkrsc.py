@@ -487,6 +487,7 @@ def dlg_about(L):
     g.text(L('S_ABOUT_EWR')); g.nl()
     g.text(L('S_ABOUT_LINE3')); g.nl()
     g.text(L('S_ABOUT_THES')); g.nl()
+    g.text(b'(c) 2026 Francis C Bullen - MIT licence'); g.nl()
     g.text(blank(62), 'MEMORY')
     g.button(L('S_BTN_OK'), 'OK', DEFAULT)
     return g.build('ABOUT')

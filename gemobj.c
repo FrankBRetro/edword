@@ -439,6 +439,7 @@ static short pal_rgb[256][3];                  /* each pen, 0-255 */
 static unsigned char pal_px[256];              /* each pen's pixel value */
 static unsigned short *pal_cube;               /* 32768: pen + 1, 0 not known yet */
 static int   pal_skip = -1;                    /* a pen the display mode changed */
+static int   pal_tint = -1;                    /* GEM's pens had the theme's colours */
 
 #ifdef PCGEM
 /* PC GEM's VDI doesn't copy from one bitmap in memory to another, so each
@@ -526,6 +527,20 @@ static int pal_nearest(int r, int g, int b)
         pal_skip = skip;
     }
     if (pal_cube && skip != pal_skip) { memset(pal_cube, 0, 32768 * sizeof(unsigned short)); pal_skip = skip; }
+    if (theme_tints_gem() != pal_tint) {        /* the theme took GEM's pens, or gave them back */
+        pal_tint = theme_tints_gem();
+        if (pal_cube) memset(pal_cube, 0, 32768 * sizeof(unsigned short));
+        if (!pal_tint) {                        /* their real colours again */
+            static const short gp[3] = { 0, 8, 9 };
+            short rgb[3], j, k;
+            for (j = 0; j < 3; j++)
+                if (gp[j] < pal_n) {
+                    vq_color(vhandle, gp[j], 1, rgb);
+                    for (k = 0; k < 3; k++)
+                        pal_rgb[gp[j]][k] = (short)((rgb[k] < 0 ? 0 : rgb[k] > 1000 ? 1000 : rgb[k]) * 255L / 1000);
+                }
+        }
+    }
     if (!pal_cube || !pal_cube[idx]) {
         long best = 0x7fffffffL;
         int i, bi = 0, cr = (r & ~7) | 4, cg = (g & ~7) | 4, cb = (b & ~7) | 4;
@@ -534,6 +549,7 @@ static int pal_nearest(int r, int g, int b)
             long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
             if (i == skip) continue;
             if (pal_n >= 256 && i >= TH_PEN0 && i < TH_PEN0 + TH_NROLES) continue;   /* the colour theme's */
+            if (pal_tint && (i == 0 || i == 8 || i == 9)) continue;   /* GEM's, in the theme's colours */
             if (dd < best) { best = dd; bi = i; }
         }
         if (!pal_cube) return bi;
@@ -727,7 +743,7 @@ static void draw_shape(const DOC *d, const SHAPE *s, long ox, long oy, long n, l
     if (s->fill != FL_NONE) {
         vsf_perimeter(vhandle, 0);
         if (s->fill == FL_WHITE) {
-            vswr_mode(vhandle, MD_REPLACE); vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, 0);
+            vswr_mode(vhandle, MD_REPLACE); vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, (short)page_white());
         } else if (s->fill == FL_GREY) {
             vswr_mode(vhandle, MD_TRANS); vsf_interior(vhandle, FIS_PATTERN); vsf_style(vhandle, 4); vsf_color(vhandle, (short)pen);
         } else {
@@ -954,7 +970,7 @@ static void dw_draw(GRECT *area)
             vr_recfl(vhandle, p);
             if (o) {
                 long bw = tw2px_x(o->w) * dw.num / dw.den, bh = tw2px_y(o->h) * dw.num / dw.den;
-                vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, 0);
+                vsf_interior(vhandle, FIS_SOLID); vsf_color(vhandle, (short)page_white());
                 p[0] = (short)dw.cx; p[1] = (short)dw.cy; p[2] = (short)(dw.cx + bw - 1); p[3] = (short)(dw.cy + bh - 1);
                 vswr_mode(vhandle, MD_REPLACE);
                 vr_recfl(vhandle, p);

@@ -1284,8 +1284,11 @@ static int ct_build(void)
     dlg_set(g, DTH_THISDOC, th_wid >= 0);
     dlg_set(g, DTH_ALLDOCS, th_wid < 0);
     if (!th_per) {                               /* a palette: one theme for all */
+        /* shown as chosen (not greyed out, which looked as if neither
+           applied), and it can't be changed */
         g->o[DTH_THISDOC].ob_state |= OS_DISABLED;
-        g->o[DTH_ALLDOCS].ob_state |= OS_DISABLED;
+        g->o[DTH_THISDOC].ob_flags &= ~OF_SELECTABLE;
+        g->o[DTH_ALLDOCS].ob_flags &= ~(OF_SELECTABLE | OF_TOUCHEXIT | OF_EXIT);
     }
     theme_preview_pens();
     for (i = 0; i < TH_NROLES; i++)

@@ -520,9 +520,9 @@
 #define DAB_TITLE 1
 #define DAB_VERSION 2
 #define DAB_LINE1 3
-#define DAB_MEMORY 7
-#define DAB_OK 8
-#define DAB_COUNT 9
+#define DAB_MEMORY 8
+#define DAB_OK 9
+#define DAB_COUNT 10
 
 /* TEXTIMP */
 #define DTXI_ROOT 0

@@ -1383,6 +1383,8 @@ void dlg_about(void)
     dlg_text(&g, L(S_ABOUT_LINE3));
     dlg_row(&g);
     dlg_text(&g, L(S_ABOUT_THES));
+    dlg_row(&g);
+    dlg_text(&g, "(c) 2026 Francis C Bullen - MIT licence");
     dlg_button(&g, L(S_BTN_OK), OF_EXIT | OF_DEFAULT);
     dlg_end(&g);
     dlg_run(&g);

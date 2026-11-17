@@ -41,18 +41,25 @@ KITPORT = pgaes pgvdi
 
 OBJS = $(addprefix obj/,$(addsuffix .o,$(CORE) $(FRONT) $(PORT) $(KITPORT) pgcpu))
 
+# everything is rebuilt when the options change (EDLOG=1 or not, the
+# version): a log build's objects call edlog, which a release build lacks
+obj/flags: FORCE
+	@mkdir -p obj
+	@echo '$(CFLAGS) | $(KITFLAGS)' | cmp -s - $@ || echo '$(CFLAGS) | $(KITFLAGS)' > $@
+FORCE:
+
 EDWORD.APP: $(OBJS)
 	$(DJCC) -o edword.exe $(OBJS) $(GK)/LIB/LIBGEM.A
 	cp edword.exe $@
 
-obj/%.o: ../%.c $(wildcard ../*.h) $(wildcard include/*.h include/mint/*.h)
+obj/%.o: ../%.c $(wildcard ../*.h) $(wildcard include/*.h include/mint/*.h) obj/flags
 	@mkdir -p obj
 	$(DJCC) $(CFLAGS) -c -o $@ $<
-obj/pgrsc.o obj/pgtos.o obj/pglinear.o: obj/%.o: %.c
+obj/pgrsc.o obj/pgtos.o obj/pglinear.o: obj/%.o: %.c obj/flags
 	@mkdir -p obj
 	$(DJCC) $(CFLAGS) -c -o $@ $<
 # these two talk to the bindings, so they see the kit's headers, not ours
-obj/pgaes.o obj/pgvdi.o: obj/%.o: %.c pgkit.h $(GKINC)/.fixed
+obj/pgaes.o obj/pgvdi.o: obj/%.o: %.c pgkit.h $(GKINC)/.fixed obj/flags
 	@mkdir -p obj
 	$(DJCC) $(KITFLAGS) -c -o $@ $<
 $(GKINC)/.fixed: $(wildcard $(GK)/INCLUDE/*.H)
@@ -64,7 +71,7 @@ $(GKINC)/.fixed: $(wildcard $(GK)/INCLUDE/*.H)
 	done
 	touch $@
 
-obj/pgcpu.o: pgcpu.c
+obj/pgcpu.o: pgcpu.c obj/flags
 	@mkdir -p obj
 	$(DJCC) $(CFLAGS) -c -o $@ $<
 
@@ -102,4 +109,4 @@ install: EDWORD.APP
 clean:
 	rm -rf obj dist edword.exe EDWORD.APP rsctest
 
-.PHONY: clean rsctest dist install
+.PHONY: clean rsctest dist install FORCE

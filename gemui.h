@@ -10,7 +10,7 @@
 #include "lang.h"
 
 #ifndef ED_VERSION
-#define ED_VERSION "3.1.0"   /* one more on every commit */
+#define ED_VERSION "3.2.0"   /* one more on every commit */
 #endif
 #ifndef ED_ABOUT
 #define ED_ABOUT ""
@@ -214,6 +214,8 @@ void  codes_clip(DOC *d, int cmd);
 int   codes_focus(DOC *d);
 int   codes_insert_code(DOC *d, const char *code);
 int   ed_bg(void);
+int   theme_tints_gem(void);            /* PC GEM: pens 0, 8, 9 are the theme's */
+int   page_white(void);                 /* the pages' white pen (PC GEM themes: not 0) */
 int   ed_fg(void);
 void  display_apply(void);
 void  display_restore(void);

@@ -199,6 +199,7 @@ short vsf_perimeter(short h, short on);
 short vst_color(short h, short c);
 short vst_font(short h, short id);
 short vst_point(short h, short pt, short *cw, short *ch, short *bw, short *bh);
+short pg_pen_hw(short h, short pen);           /* PC GEM: a pen's colour register */
 void  vst_height(short h, short height, short *cw, short *ch, short *bw, short *bh);
 short vst_arbpt(short h, short pt, short *cw, short *ch, short *bw, short *bh);
 short vst_effects(short h, short e);

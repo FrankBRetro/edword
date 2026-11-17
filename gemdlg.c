@@ -1055,9 +1055,14 @@ int popup2(const char **items, int n, int cur, int cur2, short x, short y)
         return r >= 1 ? r - 1 : -1;
     }
 #endif
-    do graf_mkstate(&mx, &my, &mb, &ks); while (mb & 1);         /* release the click */
+    /* the mouse through events, not by polling graf_mkstate: GEM/3 on the
+       PC (and TOS 1.x) only update the buttons graf_mkstate reports when
+       an event is taken, so a polling loop never saw the click there   */
+    evnt_button(1, 1, 0, &mx, &my, &mb, &ks);              /* the click that opened it: let go */
     for (;;) {
-        graf_mkstate(&mx, &my, &mb, &ks);
+        short msg[8], key, clicks, ev;
+        ev = evnt_multi(MU_BUTTON | MU_TIMER, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        msg, 20L, &mx, &my, &mb, &ks, &key, &clicks);
         o = objc_find(t, 0, 1, mx, my);
         if (o < 1 || (t[o].ob_state & OS_DISABLED)) o = -1;
         if (o != hl) {
@@ -1065,10 +1070,9 @@ int popup2(const char **items, int n, int cur, int cur2, short x, short y)
             if (o > 0) objc_change(t, o, 0, bx, by, bw, bh, OS_SELECTED, 1);
             hl = o;
         }
-        if (mb & 1) break;
-        evnt_timer(20L);
+        if (ev & MU_BUTTON) break;
     }
-    do graf_mkstate(&mx, &my, &mb, &ks); while (mb & 1);
+    evnt_button(1, 1, 0, &mx, &my, &mb, &ks);              /* and this one */
     form_dial(FMD_FINISH, 0, 0, 0, 0, bx, by, bw, bh);
     wind_update(END_MCTRL);
     wind_update(END_UPDATE);

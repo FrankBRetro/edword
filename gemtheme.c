@@ -38,6 +38,8 @@ void theme_apply(void) {}
 void theme_preview_pens(void) {}
 void theme_init(void) {}
 void theme_exit(void) {}
+int  page_white(void) { return 0; }
+int  theme_tints_gem(void) { return 0; }
 void theme_load(const char *key, const char *val) { (void)key; (void)val; }
 void theme_save(void *fp) { (void)fp; }
 void theme_bevel(short x, short y, short w, short h, int pressed) { (void)x; (void)y; (void)w; (void)h; (void)pressed; }
@@ -152,6 +154,91 @@ void theme_pick(int id)
     memcpy(theme_rgb, themes[id].c, sizeof theme_rgb);
 }
 
+#ifdef PCGEM
+/* PC GEM runs one program at a time, so EdWord's theme can colour GEM's
+ * own 3D look too: GEM/3 draws it with pen 8 (light grey: the face of
+ * buttons, menus and dialogs) and pen 9 (dark grey: the shadow edge);
+ * the light edge is white, pen 0, which the pages use too, so it stays.
+ * They are put back when the theme is the plain one and when EdWord
+ * quits. */
+static short sys_saved[3][3];               /* pens 8, 9 and 0 as GEM had them */
+static int sys_ok;
+
+/* The menus, alerts and text fields are GEM's white, pen 0, which the
+ * pages use too. To tint them (pen 0 takes the theme's light edge) the
+ * pages move to a pen of their own kept pure white. EdWord shows a
+ * selection by inverting the screen: on a palette screen that turns the
+ * colour register r into 255 - r, so the page's pen is one whose inverse
+ * register belongs to another free pen, which is made black (white
+ * selected still turns black). Pens 16-249: GEM's own are 0-15, the
+ * theme's 250-255. In high or true colour inverting white gives black
+ * anyway. */
+static int page_pen, page_ink;               /* 0: none, the pages are pen 0 */
+static short page_saved[2][3];
+
+static void find_page_pens(int planes)
+{
+    static const short white[3] = { 1000, 1000, 1000 }, black[3] = { 0, 0, 0 };
+    short hw[256];
+    int p, q;
+    page_pen = page_ink = 0;
+    if (direct) page_pen = TH_PEN0 - 1;
+    else if (planes == 8) {
+        for (p = 0; p < 256; p++) hw[p] = pg_pen_hw(vhandle, (short)p);
+        for (p = TH_PEN0 - 1; p >= 16 && !page_pen; p--) {
+            if (hw[p] < 0) continue;
+            for (q = 16; q < TH_PEN0; q++)
+                if (q != p && hw[q] == (hw[p] ^ 0xFF)) { page_pen = p; page_ink = q; break; }
+        }
+    }
+    edlog("themes: pages in pen %d%s", page_pen, page_ink ? " (its inverse made black)" : "");
+    if (!page_pen) return;
+    vq_color(vhandle, page_pen, 1, page_saved[0]);
+    vs_color(vhandle, page_pen, (short *)white);
+    if (page_ink) {
+        vq_color(vhandle, page_ink, 1, page_saved[1]);
+        vs_color(vhandle, page_ink, (short *)black);
+    }
+}
+
+static void sys_pens(int on)
+{
+    static const int role[3] = { TH_FACE, TH_DARK, TH_LIGHT };
+    static const int pen[3] = { 8, 9, 0 };
+    short rgb[3];
+    int i, k;
+    if (!sys_ok) return;
+    for (i = 0; i < 3; i++) {
+        if (i == 2 && !page_pen) break;      /* no white of the pages' own */
+        if (on) for (k = 0; k < 3; k++) rgb[k] = (short)(theme_rgb[role[i]][k] * 1000L / 255);
+        else for (k = 0; k < 3; k++) rgb[k] = sys_saved[i][k];
+        vs_color(vhandle, pen[i], rgb);
+    }
+}
+#endif
+
+/* GEM's own pens (0, 8 and 9) have the theme's colours: pictures keep
+ * off them */
+int theme_tints_gem(void)
+{
+#ifdef PCGEM
+    return sys_ok && theme_on();
+#else
+    return 0;
+#endif
+}
+
+/* the pages' white: pen 0, or on PC GEM with a theme the pen kept white
+ * while pen 0 is the theme's */
+int page_white(void)
+{
+#ifdef PCGEM
+    if (page_pen && theme_on()) return page_pen;
+#endif
+    return 0;
+}
+
+
 /* the theme's colours in its pens, or the pens back as they were */
 void theme_apply(void)
 {
@@ -165,6 +252,9 @@ void theme_apply(void)
         else for (k = 0; k < 3; k++) rgb[k] = saved[i][k];
         vs_color(vhandle, TH_PEN0 + i, rgb);
     }
+#ifdef PCGEM
+    sys_pens(theme_on());
+#endif
 }
 
 /* the colours being chosen in the pens, for the theme dialog's picture,
@@ -198,6 +288,13 @@ void theme_init(void)
     if (!can) return;
     for (i = 0; i < TH_NROLES; i++) vq_color(vhandle, TH_PEN0 + i, 1, saved[i]);
     saved_ok = 1;
+#ifdef PCGEM
+    vq_color(vhandle, 8, 1, sys_saved[0]);
+    vq_color(vhandle, 9, 1, sys_saved[1]);
+    vq_color(vhandle, 0, 1, sys_saved[2]);
+    sys_ok = 1;
+    find_page_pens(ext[4]);
+#endif
     if (theme_id) theme_apply();
 }
 
@@ -206,6 +303,11 @@ void theme_exit(void)
     int i;
     if (!saved_ok) return;
     for (i = 0; i < TH_NROLES; i++) vs_color(vhandle, TH_PEN0 + i, saved[i]);
+#ifdef PCGEM
+    sys_pens(0);
+    if (page_pen) vs_color(vhandle, page_pen, page_saved[0]);
+    if (page_ink) vs_color(vhandle, page_ink, page_saved[1]);
+#endif
 }
 
 /* the preferences: "theme=N" and "themergb=" six R,G,B triples */

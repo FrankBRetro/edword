@@ -318,6 +318,7 @@ static void about(void)
     o[@"ApplicationName"] = @"EdWord";
     o[@"ApplicationVersion"] = @ED_VERSION;
     o[@"Version"] = @ED_VERSION;
+    o[@"Copyright"] = @"\u00A9 2026 Francis C Bullen - MIT licence";
     o[@"Credits"] = [[NSAttributedString alloc] initWithString:credits
         attributes:@{ NSFontAttributeName: [NSFont systemFontOfSize:11] }];
     [NSApp orderFrontStandardAboutPanelWithOptions:o];

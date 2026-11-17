@@ -81,7 +81,22 @@ static void driver_limits(short h)
           (long)pContrl, wo[14], wo[15], max_pts, max_in);
 }
 
-void  pg_v_opnwk(short *wi, short *h, short *wo) { big_arrays(); v_opnwk(wi, h, wo); if (*h > 0) driver_limits(*h); }
+/* A device GEM/3 can't open leaves the handle from the call before in
+ * the binding's reply: EdWord's printing got the screen's own handle
+ * back, drew the page on the screen and then closed it with v_clswk,
+ * which shut the screen driver down. A handle that is one already open
+ * (the screen's) means it didn't open. */
+void  pg_v_opnwk(short *wi, short *h, short *wo)
+{
+    big_arrays();
+    *h = 0;
+    v_opnwk(wi, h, wo);
+    if (*h > 0 && (*h == probe_h || *h == 1)) {
+        *h = 0;
+        return;
+    }
+    if (*h > 0) driver_limits(*h);
+}
 void  pg_v_opnvwk(short *wi, short *h, short *wo)
 {
     big_arrays();
@@ -166,6 +181,19 @@ short pg_vq_color(short h, short i, short f, short *rgb)
     return i;
 }
 void  pg_vq_extnd(short h, short f, short *wo) { vq_extnd(h, f, wo); }
+
+/* the hardware colour register a pen draws with (-1: not known); EdWord's
+ * theme looks for two pens whose registers are each other's inverse */
+short pg_pen_hw(short h, short pen)
+{
+    short c[12], in[2], out[8];
+    memset(c, 0, sizeof c);
+    c[0] = 26; c[3] = 2; c[6] = h;
+    in[0] = pen; in[1] = 1;
+    out[0] = -1;
+    raw_call(c, in, NULL, out, NULL);
+    return c[4] > 0 && out[0] >= 0 && out[0] < 256 ? out[0] : -1;
+}
 
 /* GEM/3 has no vq_scrninfo: say "no answer" the way the front end checks */
 void  pg_vq_scrninfo(short h, short *wo) { (void)h; wo[0] = -1; wo[1] = -1; wo[2] = 0; }
@@ -362,7 +390,27 @@ short pg_vqt_width(short h, short ch, short *cw, short *ld, short *rd)
 {
     return vqt_width(h, (BYTE)ch, cw, ld, rd);
 }
-short pg_vqt_name(short h, short n, char *name) { return vqt_name(h, n, (BYTE *)name); }
+/* The name, and (XGDOS) whether it is an outline font: intout[33], which
+ * GEM/3's binding leaves out, so EdWord thought every font a bitmap one
+ * and sized them with vst_point - the nearest of a few sizes, so text
+ * came out too big when small and too small when big. */
+short pg_vqt_name(short h, short n, char *name)
+{
+    if (xgdos_here()) {
+        short c[12], in[1], o[64], p[16];
+        int i;
+        memset(c, 0, sizeof c);
+        memset(o, 0, sizeof o);
+        c[0] = 130; c[3] = 1; c[6] = h;
+        in[0] = n;
+        raw_call(c, in, NULL, o, p);
+        for (i = 0; i < 32; i++)
+            name[i] = (char)o[1 + i];
+        name[32] = (char)(c[4] >= 34 ? o[33] : 0);
+        return o[0];
+    }
+    return vqt_name(h, n, (BYTE *)name);
+}
 
 /* XGDOS: its advance; no outlines: the cell width */
 void  pg_vqt_advance(short h, short ch, short *ax, short *ay, short *rx, short *ry)

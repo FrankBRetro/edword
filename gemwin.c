@@ -76,7 +76,7 @@ static void xor_box(long x1, long y1, long x2, long y2)
  * set to amber while the mode is on and put back afterwards. */
 static short amber_saved[3], amber_set;
 
-int ed_bg(void) { return pref_display == DISP_NORMAL ? 0 : 1; }
+int ed_bg(void) { return pref_display == DISP_NORMAL ? page_white() : 1; }
 
 int ed_fg(void)
 {
