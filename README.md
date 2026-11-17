@@ -40,6 +40,20 @@ it says so in an alert and quits, instead of crashing. EdWord's work is in
 whole numbers, so the gain is in the faster instructions rather than the
 FPU.
 
+## New in 3.1.0
+**PC GEM:**
+- **Colour pictures on 16 and 256 colour screens** (the FreeGEM VGA and
+  VESA drivers): pictures are dithered to the screen's own colours and drawn
+  a strip at a time, in the memory layout each driver really uses. Works
+  around three driver faults: red and blue swapped when colours are set,
+  v_get_pixel answering the pen instead of the pixel, and copies narrower
+  than 8 pixels running away (on the 256-colour drivers).
+- The status line uses the system font at 12 points, like the menus.
+- The toolbar icons are the right way round.
+- The About box says EdWord is for Atari compatible computers and PC GEM.
+
+**Atari:** the version number goes up with the PC GEM one; nothing else changes.
+
 ## New in 3.0.15 and 3.0.16
 **Atari:**
 - **Print preview is a view of the document** (File ▸ Print Preview, ^⇧P,

@@ -151,6 +151,7 @@ void vdi(VDIPB *pb);
 #define vst_rotation     pg_vst_rotation
 #define vsf_udpat        pg_vsf_udpat
 #define vqt_attributes   pg_vqt_attributes
+#define vqt_fontinfo     pg_vqt_fontinfo
 #define vst_scratch      pg_vst_scratch
 #define vst_error        pg_vst_error
 #define vst_charmap      pg_vst_charmap
@@ -234,5 +235,6 @@ short vsm_height(short h, short height);
 short vst_rotation(short h, short angle);
 void  vsf_udpat(short h, short *pat, short planes);
 void  vqt_attributes(short h, short *attr);
+short vqt_fontinfo(short h, short *minade, short *maxade, short *dist, short *maxw, short *effects);
 
 #endif

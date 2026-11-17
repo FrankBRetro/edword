@@ -4,7 +4,8 @@
  *
  * EdWord's resource files are Atari ones (big-endian, made by
  * tools/mkrsc.py). Rather than have PC GEM load them, they're read here
- * into normal 32-bit memory with the byte order swapped and the offsets
+ * into normal 32-bit memory with the byte order swapped (but not in the
+ * images: see below) and the offsets
  * made into pointers, and the coordinates fixed (rsrc_obfix) for the
  * system font. The trees then live where the front end can change them
  * freely; pgaes.c copies a tree down to GEM's memory when GEM needs it.
@@ -23,9 +24,12 @@ static long rawlen;
 static OBJECT  *objs;
 static TEDINFO *teds;
 static BITBLK  *bits;
-static short   *imgs;          /* image data, native byte order */
+static short   *imgs;          /* image data, in the file's byte order */
 static OBJECT **trees;
-static int nobj, nted, nbb, ntree;
+static ICONBLK *icons;
+static char **frstr;          /* free strings (R_FRSTR) */
+static BITBLK **frimg;        /* free images (R_FRIMG) */
+static int nobj, nted, nbb, ntree, nib, nfrstr, nfrimg;
 
 static unsigned short be16(long o) { return (unsigned short)((raw[o] << 8) | raw[o + 1]); }
 static long be32(long o) { return ((long)raw[o] << 24) | ((long)raw[o + 1] << 16) | ((long)raw[o + 2] << 8) | raw[o + 3]; }
@@ -66,8 +70,10 @@ short rc_intersect(const GRECT *a, GRECT *b)
 void pg_rsrc_freeall(void)
 {
     free(raw); free(objs); free(teds); free(bits); free(imgs); free(trees);
+    free(icons); free(frstr); free(frimg);
     raw = NULL; objs = NULL; teds = NULL; bits = NULL; imgs = NULL; trees = NULL;
-    nobj = nted = nbb = ntree = 0;
+    icons = NULL; frstr = NULL; frimg = NULL;
+    nobj = nted = nbb = ntree = nib = nfrstr = nfrimg = 0;
 }
 
 short rsrc_free(void) { pg_rsrc_freeall(); return 1; }
@@ -82,7 +88,7 @@ static char *strat(long off)
 short rsrc_load(const char *name)
 {
     FILE *f;
-    long o_obj, o_ted, o_bb, o_imd, o_tree, n_imd, i;
+    long o_obj, o_ted, o_ib, o_bb, o_frstr, o_frimg, o_imd, o_tree, n_imd, i;
     pg_rsrc_freeall();
     if (!(f = fopen(name, "rb"))) return 0;
     fseek(f, 0, SEEK_END); rawlen = ftell(f); fseek(f, 0, SEEK_SET);
@@ -90,8 +96,13 @@ short rsrc_load(const char *name)
     if (fread(raw, 1, rawlen, f) != (size_t)rawlen) { fclose(f); pg_rsrc_freeall(); return 0; }
     fclose(f);
     raw[rawlen] = 0;
-    o_obj = be16(2); o_ted = be16(4); o_bb = be16(8); o_imd = be16(14); o_tree = be16(18);
-    nobj = be16(20); ntree = be16(22); nted = be16(24); nbb = be16(28);
+    o_obj = be16(2); o_ted = be16(4); o_ib = be16(6); o_bb = be16(8); o_frstr = be16(10);
+    o_imd = be16(14); o_frimg = be16(16); o_tree = be16(18);
+    nobj = be16(20); ntree = be16(22); nted = be16(24); nib = be16(26); nbb = be16(28);
+    nfrstr = be16(30); nfrimg = be16(32);
+    if (o_ib + 34L * nib > rawlen) nib = 0;
+    if (o_frstr + 4L * nfrstr > rawlen) nfrstr = 0;
+    if (o_frimg + 4L * nfrimg > rawlen) nfrimg = 0;
     if (be16(34) > rawlen || o_obj + 24L * nobj > rawlen || o_ted + 28L * nted > rawlen ||
         o_bb + 14L * nbb > rawlen || o_tree + 4L * ntree > rawlen) { pg_rsrc_freeall(); return 0; }
     n_imd = (o_obj < o_ted ? o_obj : o_ted) - o_imd;     /* image data runs up to the next section */
@@ -101,9 +112,15 @@ short rsrc_load(const char *name)
     bits  = (BITBLK *)calloc(nbb ? nbb : 1, sizeof(BITBLK));
     imgs  = (short *)calloc(n_imd / 2 + 1, sizeof(short));
     trees = (OBJECT **)calloc(ntree ? ntree : 1, sizeof(OBJECT *));
-    if (!objs || !teds || !bits || !imgs || !trees) { pg_rsrc_freeall(); return 0; }
+    icons = (ICONBLK *)calloc(nib ? nib : 1, sizeof(ICONBLK));
+    frstr = (char **)calloc(nfrstr ? nfrstr : 1, sizeof(char *));
+    frimg = (BITBLK **)calloc(nfrimg ? nfrimg : 1, sizeof(BITBLK *));
+    if (!objs || !teds || !bits || !imgs || !trees || !icons || !frstr || !frimg) { pg_rsrc_freeall(); return 0; }
 
-    for (i = 0; i < n_imd / 2; i++) imgs[i] = (short)be16(o_imd + 2 * i);
+    /* image data stays in the file's (Atari) byte order: PC GEM's AES and
+     * VDI read bitmaps a byte at a time, leftmost pixels first, as the ST
+     * does - swapped, each 16 pixels came out with their halves exchanged */
+    memcpy(imgs, raw + o_imd, (size_t)(n_imd & ~1L));
     for (i = 0; i < nted; i++) {
         long p = o_ted + 28 * i;
         TEDINFO *t = &teds[i];
@@ -118,6 +135,24 @@ short rsrc_load(const char *name)
         b->bi_pdata = (d >= o_imd && d < o_imd + n_imd) ? imgs + (d - o_imd) / 2 : NULL;
         b->bi_wb = (short)be16(p + 4); b->bi_hl = (short)be16(p + 6); b->bi_x = (short)be16(p + 8);
         b->bi_y = (short)be16(p + 10); b->bi_color = (short)be16(p + 12);
+    }
+    for (i = 0; i < nib; i++) {
+        long p = o_ib + 34 * i, m = be32(p), d = be32(p + 4);
+        ICONBLK *b = &icons[i];
+        b->ib_pmask = (m >= o_imd && m < o_imd + n_imd) ? imgs + (m - o_imd) / 2 : NULL;
+        b->ib_pdata = (d >= o_imd && d < o_imd + n_imd) ? imgs + (d - o_imd) / 2 : NULL;
+        b->ib_ptext = strat(be32(p + 8));
+        b->ib_char = (short)be16(p + 12);
+        b->ib_xchar = (short)be16(p + 14); b->ib_ychar = (short)be16(p + 16);
+        b->ib_xicon = (short)be16(p + 18); b->ib_yicon = (short)be16(p + 20);
+        b->ib_wicon = (short)be16(p + 22); b->ib_hicon = (short)be16(p + 24);
+        b->ib_xtext = (short)be16(p + 26); b->ib_ytext = (short)be16(p + 28);
+        b->ib_wtext = (short)be16(p + 30); b->ib_htext = (short)be16(p + 32);
+    }
+    for (i = 0; i < nfrstr; i++) frstr[i] = strat(be32(o_frstr + 4 * i));
+    for (i = 0; i < nfrimg; i++) {
+        long b = be32(o_frimg + 4 * i);
+        frimg[i] = (b >= o_bb && b < o_bb + 14L * nbb && (b - o_bb) % 14 == 0) ? &bits[(b - o_bb) / 14] : NULL;
     }
     for (i = 0; i < nobj; i++) {
         long p = o_obj + 24 * i, spec = be32(p + 12);
@@ -135,6 +170,10 @@ short rsrc_load(const char *name)
             break;
         case G_BUTTON: case G_STRING: case G_TITLE:
             o->ob_spec.free_string = strat(spec);
+            break;
+        case G_ICON:
+            o->ob_spec.iconblk = (spec >= o_ib && spec < o_ib + 34L * nib && (spec - o_ib) % 34 == 0)
+                               ? &icons[(spec - o_ib) / 34] : NULL;
             break;
         default:                                   /* G_BOX, G_IBOX, G_BOXCHAR: the spec is a value */
             o->ob_spec.index = spec;
@@ -158,6 +197,9 @@ short rsrc_gaddr(short type, short index, void *addr)
     case R_OBJECT:  if (index >= 0 && index < nobj) *out = &objs[index]; break;
     case R_TEDINFO: if (index >= 0 && index < nted) *out = &teds[index]; break;
     case R_BITBLK:  if (index >= 0 && index < nbb) *out = &bits[index]; break;
+    case R_ICONBLK: if (index >= 0 && index < nib) *out = &icons[index]; break;
+    case R_FRSTR:   if (index >= 0 && index < nfrstr) *out = &frstr[index]; break;   /* char ** */
+    case R_FRIMG:   if (index >= 0 && index < nfrimg) *out = &frimg[index]; break;  /* BITBLK ** */
     }
     return *out != NULL;
 }

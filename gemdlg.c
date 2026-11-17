@@ -1767,6 +1767,9 @@ void dlg_about(void)
 #endif
     dlg_str(&g, DAB_VERSION, vline);
     if (ED_ABOUT[0]) dlg_str(&g, DAB_LINE1, (char *)ED_ABOUT);
+#ifdef PCGEM
+    else dlg_str(&g, DAB_LINE1, (char *)L(S_ABOUT_PCGEM));    /* the RSC says "Atari compatible computers" */
+#endif
     {   /* the memory free now: the biggest blocks of ST RAM and of Fast RAM */
         static char mline[90];
 #ifndef PCGEM

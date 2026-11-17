@@ -129,9 +129,9 @@ extern short aes_global[15];
 #define TOUCHEXIT OF_TOUCHEXIT
 #define HIDETREE OF_HIDETREE
 #define INDIRECT OF_INDIRECT
-#define FL3DIND OF_FL3DIND
-#define FL3DBAK OF_FL3DBAK
-#define FL3DACT OF_FL3DACT
+#define FL3DIND 0x0200
+#define FL3DBAK 0x0400
+#define FL3DACT 0x0600
 /* states */
 #define OS_NORMAL 0x00
 #define OS_SELECTED 0x01
@@ -409,7 +409,9 @@ short shel_envrn(char **value, const char *name);
 
 
 /* ---- more of GEMLib (Fbench) --------------------------------------------- */
-#define _AESversion    (aes_global[0])
+#define _AESversion    (aes_global[0])   /* 0x0120 on purpose: see pgaes.c */
+extern short pg_aes_version;      /* the AES's real global[0] (0: not known) */
+extern short pg_aes_numapps;      /* and its global[1] */
 #define _AESnumapps    (aes_global[1])
 #ifndef SWM_NEWMSG
 #define SWM_NEWMSG     9
@@ -423,12 +425,16 @@ short shel_envrn(char **value, const char *name);
 #define _appl_yield    pg_appl_yield
 #define rsrc_obfix     pg_rsrc_obfix
 #define rc_intersect   pg_rc_intersect
+#define shel_read      pg_shel_read
+#define shel_find      pg_shel_find
 short evnt_button(short clicks, short mask, short state, short *mx, short *my,
                   short *button, short *kstate);
 short menu_register(short apid, const char *name);
 short appl_yield(void);
 short rsrc_obfix(OBJECT *tree, short obj);
 short rc_intersect(const GRECT *src, GRECT *dst);
+short shel_read(char *cmd, char *tail);
+short shel_find(char *path);
 
 /* GEMLib's GRECT forms */
 static __inline__ short wind_get_grect(short h, short f, GRECT *r)

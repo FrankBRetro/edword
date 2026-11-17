@@ -48,6 +48,15 @@ long  Fsnext(void);
 long  Fcreate(const char *name, short attr);
 long  Fwrite(short fh, long n, const void *buf);
 long  Fclose(short fh);
+/* more GEMDOS (FView) */
+long  Fopen(const char *name, short mode);
+long  Fread(short fh, long n, void *buf);
+long  Fseek(long off, short fh, short whence);
+long  Fdelete(const char *name);
+long  Fattrib(const char *name, short set, short attr);
+void *Mxalloc(long size, short mode);
+long  Mfree(void *block);
+void *Logbase(void);
 unsigned short Tgetdate(void);
 unsigned short Tgettime(void);
 short Setcolor(short n, short c);

@@ -110,6 +110,33 @@ long Fcreate(const char *name, short attr)
 long Fwrite(short fh, long n, const void *buf) { return write(fh, buf, n); }
 long Fclose(short fh) { return close(fh); }
 
+/* GEMDOS errors as TOS gives them: EFILNF -33, EACCDN -36 */
+long Fopen(const char *name, short mode)
+{
+    static const int how[3] = { O_RDONLY, O_WRONLY, O_RDWR };
+    int fh = open(name, how[(mode & 3) < 3 ? (mode & 3) : 0] | O_BINARY);
+    return fh < 0 ? -33 : fh;
+}
+long Fread(short fh, long n, void *buf) { long r = read(fh, buf, n); return r < 0 ? -1 : r; }
+long Fseek(long off, short fh, short whence) { return lseek(fh, off, whence); }
+long Fdelete(const char *name) { return unlink(name) ? -33 : 0; }
+
+/* only asks (set 0): the DOS attributes, or EFILNF */
+long Fattrib(const char *name, short set, short attr)
+{
+    struct ffblk f;
+    (void)attr;
+    if (set) return -36;
+    if (findfirst(name, &f, FA_RDONLY | FA_HIDDEN | FA_SYSTEM | FA_DIREC | FA_ARCH)) return -33;
+    return f.ff_attrib;
+}
+
+/* GEMDOS memory: Malloc/Mxalloc hand out nothing on the PC (programs use
+ * malloc); Mxalloc(-1) says how much is free, as Malloc(-1) does */
+void *Mxalloc(long size, short mode) { (void)mode; return size == -1L ? Malloc(-1L) : NULL; }
+long  Mfree(void *block) { (void)block; return 0; }
+void *Logbase(void) { return NULL; }      /* no screen memory a program can write to */
+
 unsigned short Tgetdate(void)
 {
     struct dosdate_t d;

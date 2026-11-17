@@ -440,6 +440,45 @@ static unsigned char pal_px[256];              /* each pen's pixel value */
 static unsigned short *pal_cube;               /* 32768: pen + 1, 0 not known yet */
 static int   pal_skip = -1;                    /* a pen the display mode changed */
 
+#ifdef PCGEM
+/* PC GEM's VDI doesn't copy from one bitmap in memory to another, so each
+ * pen's pixel value comes from the screen instead: drawn on the top-left
+ * pixel and read back with v_get_pixel, the pixel put back afterwards. */
+int pal_init(void)
+{
+    short ext[57], rgb[3], pxy[8], r4[4], pel, idx, i, k;
+    unsigned short sv[8];
+    MFDB scr, save;
+    vq_extnd(vhandle, 1, ext);
+    if (ext[4] < 2 || ext[4] > 8) return 0;
+    pal_planes = ext[4];
+    pal_n = 1 << pal_planes;
+    memset(&scr, 0, sizeof scr); memset(&save, 0, sizeof save);
+    save.fd_addr = sv; save.fd_w = 16; save.fd_h = 1; save.fd_wdwidth = 1; save.fd_nplanes = (short)pal_planes;
+    pxy[0] = pxy[1] = pxy[3] = 0; pxy[2] = 15;
+    pxy[4] = pxy[5] = pxy[7] = 0; pxy[6] = 15;
+    wind_update(BEG_UPDATE);
+    graf_mouse(M_OFF, NULL);
+    vs_clip(vhandle, 0, NULL);
+    vro_cpyfm(vhandle, S_ONLY, pxy, &scr, &save);           /* keep what's there */
+    vswr_mode(vhandle, MD_REPLACE);
+    vsf_interior(vhandle, FIS_SOLID);
+    vsf_perimeter(vhandle, 0);
+    r4[0] = r4[1] = r4[2] = r4[3] = 0;
+    for (i = 0; i < pal_n; i++) {
+        vq_color(vhandle, i, 1, rgb);
+        for (k = 0; k < 3; k++) pal_rgb[i][k] = (short)((rgb[k] < 0 ? 0 : rgb[k] > 1000 ? 1000 : rgb[k]) * 255L / 1000);
+        vsf_color(vhandle, i);
+        vr_recfl(vhandle, r4);
+        pel = idx = 0;
+        v_get_pixel(vhandle, 0, 0, &pel, &idx);
+        pal_px[i] = (unsigned char)pel;
+    }
+    vro_cpyfm(vhandle, S_ONLY, pxy, &save, &scr);           /* put it back */
+    vsf_color(vhandle, 1);
+    graf_mouse(M_ON, NULL);
+    wind_update(END_UPDATE);
+#else
 int pal_init(void)
 {
     short ext[57], rgb[3], pxy[8], col[2], i, k;
@@ -450,7 +489,8 @@ int pal_init(void)
     pal_planes = ext[4];
     pal_n = 1 << pal_planes;
     memset(&src, 0, sizeof src); memset(&dm, 0, sizeof dm); memset(&sm, 0, sizeof sm);
-    one[0] = 0x8000;
+    ((unsigned char *)one)[0] = 0x80;     /* the leftmost pixel, in byte order: */
+    ((unsigned char *)one)[1] = 0;        /* the same on the ST and the PC */
     src.fd_addr = one; src.fd_w = 16; src.fd_h = 1; src.fd_wdwidth = 1; src.fd_nplanes = 1;
     dm.fd_addr = dev; dm.fd_w = 16; dm.fd_h = 1; dm.fd_wdwidth = 1; dm.fd_nplanes = (short)pal_planes;
     sm = dm; sm.fd_addr = std; sm.fd_stand = 1;
@@ -465,11 +505,13 @@ int pal_init(void)
         vrt_cpyfm(vhandle, MD_REPLACE, pxy, &src, &dm, col);
         vr_trnfm(vhandle, &dm, &sm);
         pal_px[i] = 0;
-        for (k = 0; k < pal_planes; k++) if (std[k] & 0x8000) pal_px[i] |= (unsigned char)(1 << k);
+        for (k = 0; k < pal_planes; k++)
+            if (((unsigned char *)&std[k])[0] & 0x80) pal_px[i] |= (unsigned char)(1 << k);
     }
+#endif
     /* every pen the same pixel: the VDI didn't draw into memory */
     for (i = 1; i < pal_n && pal_px[i] == pal_px[0]; i++) ;
-    if (i == pal_n) return 0;
+    if (i == pal_n) { edlog("colour pictures: every pen reads back the same pixel"); return 0; }
     edlog("colour pictures on %d pens, pen 1 is pixel %d", pal_n, pal_px[1]);
     pal_ok = 1;
     return 1;
@@ -526,8 +568,12 @@ static unsigned char *pal_form(const unsigned char *rgb, long w, long h, MFDB *o
                 e1[(x + 2) * 3 + k] += (short)err;
             }
             px = pal_px[pen];
+            /* standard format is 16-bit words, leftmost pixel in bit 15, in
+             * the machine's own byte order (high byte first on the ST, low
+             * byte first on the PC) */
             for (k = 0; k < pal_planes; k++)
-                if (px & (1 << k)) std[k * pl + y * wd * 2 + (x >> 3)] |= (unsigned char)(0x80 >> (x & 7));
+                if (px & (1 << k))
+                    ((unsigned short *)(std + k * pl + y * wd * 2))[x >> 4] |= (unsigned short)(0x8000 >> (x & 15));
         }
         t = e0; e0 = e1; e1 = t;
     }

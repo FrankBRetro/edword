@@ -1048,6 +1048,13 @@ es: Un procesador de textos para ordenadores compatibles Atari.
 it: Un elaboratore di testi per computer compatibili Atari.
 fr: Un traitement de texte pour ordinateurs compatibles Atari.
 cs: Textový editor pro počítače kompatibilní s Atari.
+@S_ABOUT_PCGEM
+en: A word processor for Atari compatible computers and PC GEM.
+de: Eine Textverarbeitung für Atari-kompatible Computer und PC GEM.
+es: Un procesador de textos para compatibles Atari y PC GEM.
+it: Un elaboratore di testi per compatibili Atari e PC GEM.
+fr: Un traitement de texte pour compatibles Atari et PC GEM.
+cs: Textový editor pro počítače kompatibilní s Atari a PC GEM.
 @S_ABOUT_EWR
 en: Documents are saved as EdWord (.EWR) and exported as RTF or PDF.
 de: Dokumente werden als EdWord (.EWR) gesichert, Export als RTF oder PDF.

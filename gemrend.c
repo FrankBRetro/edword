@@ -90,7 +90,13 @@ void set_sys_font(void)
     cur_h = vhandle;
     style_reset();
     vst_font(vhandle, 1);
+#ifdef PCGEM
+    /* PC GEM: the menus' font is the system font at 12 points (8x16);
+     * vst_height 13 there picks the 8x8 font doubled */
+    vst_point(vhandle, hchar >= 16 ? 12 : 9, &dmy, &dmy, &dmy, &dmy);
+#else
     vst_height(vhandle, hchar >= 16 ? 13 : 6, &dmy, &dmy, &dmy, &dmy);
+#endif
     vst_effects(vhandle, 0);
     vst_color(vhandle, 1);
     vst_alignment(vhandle, 0, 0, &dmy, &dmy);           /* left, baseline */

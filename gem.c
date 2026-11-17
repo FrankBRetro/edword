@@ -61,7 +61,11 @@ void eddiag(const char *fmt, ...)
 
 #ifdef EDLOG
 static char logpath[300];
+#ifdef PCGEM
+static int  log_lines, log_max = 20000;  /* the PC layer logs a lot */
+#else
 static int  log_lines, log_max = 500;
+#endif
 
 void edlog_more(void) { log_max = log_lines + 4000; }
 
@@ -2237,6 +2241,7 @@ int main(int argc, char *argv[])
         long fr = (long)Malloc(-1L);
         img_rgb_max = 0;
         if (fr >= 2000000L && pal_init()) img_rgb_max = fr / 4 > 8000000L ? 8000000L : fr / 4;
+        edlog("free memory %ld bytes", fr);
     }
     edlog("colour pictures: up to %ld bytes", img_rgb_max);
     sys_asc = hchar >= 16 ? 13 : 6;

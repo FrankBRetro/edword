@@ -16,6 +16,7 @@
  * takes its most careful paths - no 3D objects, no appl_getinfo, no
  * WF_BOTTOM/ICONIFY, menus kept small - which is what GEM/3 can do.
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/movedata.h>
@@ -24,11 +25,15 @@
 #ifdef EDLOG
 void edlog(const char *fmt, ...);
 #define PGLOG(...) edlog(__VA_ARGS__)
+static int pg_calls;            /* tree calls logged: the first 200 only */
+#define PGLOG_CALL(...) do { if (pg_calls < 200) { pg_calls++; edlog(__VA_ARGS__); } } while (0)
 #else
 #define PGLOG(...) ((void)0)
+#define PGLOG_CALL(...) ((void)0)
 #endif
 
 short aes_global[15];
+short pg_aes_version, pg_aes_numapps;    /* what this GEM's AES really says */
 short pg_wchar = 8, pg_hchar = 16, pg_scr_w = 640, pg_scr_h = 480;
 
 /* ---- trees down to GEM and back --------------------------------------- */
@@ -66,7 +71,7 @@ LPTREE pg_tree_down(OBJECT *tree, PG_LOW **keep)
     {
         LONG sz = dj_tree_size32(tree);
         tr = dos_alloc(sz);
-        PGLOG("pg: tree %p: %d objects, %ld bytes -> DOS %05lx, %d USERDEF", (void *)tree, i + 1, sz, (long)tr, n);
+        PGLOG_CALL("pg: tree %p: %d objects, %ld bytes -> DOS %05lx, %d USERDEF", (void *)tree, i + 1, sz, (long)tr, n);
         if (!tr) return 0;
     }
     dj_tree_32to16(tree, tr);
@@ -144,9 +149,9 @@ void pg_tree_up(OBJECT *tree, LPTREE tr, PG_LOW *k, int copyback)
 #define TREE_CALL(tree, copyback, call) do { \
         PG_LOW *k_; LPTREE tr = pg_tree_down(tree, &k_); \
         if (!tr) return 0; \
-        PGLOG("pg: %s", #call); \
+        PGLOG_CALL("pg: %s", #call); \
         rv = (call); \
-        PGLOG("pg:   -> %d", rv); \
+        PGLOG_CALL("pg:   -> %d", rv); \
         pg_tree_up(tree, tr, k_, copyback); \
     } while (0)
 
@@ -156,6 +161,12 @@ short pg_appl_init(void)
 {
     WORD wc, hc, wb, hb, x, y, w, h;
     short id = appl_init(NULL);
+    extern LPWORD pGlobal;              /* the bindings' global array, in DOS memory */
+    pg_aes_version = pg_aes_numapps = 0;
+    if (id >= 0 && pGlobal) {
+        dosmemget(pGlobal, 2, &pg_aes_version);
+        dosmemget(pGlobal + 2, 2, &pg_aes_numapps);
+    }
     memset(aes_global, 0, sizeof aes_global);
     aes_global[0] = 0x0120;
     aes_global[1] = 1;
@@ -434,6 +445,34 @@ short pg_shel_write(short mode, short graphic, short aes, const void *cmd, const
 {
     (void)mode; (void)graphic; (void)aes; (void)cmd; (void)tail;
     return 0;                     /* GEM/3 can't start a program alongside */
+}
+
+/* the program's own path (DJGPP keeps it in argv[0]) and an empty tail */
+short pg_shel_read(char *cmd, char *tail)
+{
+    extern char **__crt0_argv;
+    char *p;
+    strcpy(cmd, __crt0_argv && __crt0_argv[0] ? __crt0_argv[0] : "");
+    for (p = cmd; *p; p++) if (*p == '/') *p = '\\';
+    if (tail) tail[0] = tail[1] = 0;
+    return 1;
+}
+
+/* a file in the current folder, else beside the program; the full path
+ * goes back in path (as the AES's shel_find does with its search) */
+short pg_shel_find(char *path)
+{
+    char t[260], *s;
+    const char *name = path;
+    FILE *f;
+    if ((s = strrchr(path, '\\')) || (s = strrchr(path, '/'))) name = s + 1;
+    if ((f = fopen(path, "rb")) != NULL) { fclose(f); return 1; }
+    pg_shel_read(t, NULL);
+    if ((s = strrchr(t, '\\')) != NULL) {
+        strcpy(s + 1, name);
+        if ((f = fopen(t, "rb")) != NULL) { fclose(f); strcpy(path, t); return 1; }
+    }
+    return 0;
 }
 
 short pg_shel_envrn(char **value, const char *name)

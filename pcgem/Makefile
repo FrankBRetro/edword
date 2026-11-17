@@ -3,6 +3,7 @@
 #
 #   source ../../PC-GEM/scripts/djgppenv.sh     (or set DJCC and GEMKIT yourself)
 #   make -C pcgem                               -> pcgem/EDWORD.APP
+#   make -C pcgem install                       ... and into DOSBox-X's C:\EDWORD
 #
 # The Atari front end (../gem*.c) and the core are compiled unchanged:
 # pcgem/include holds GEMLib-style gem.h, vdi.h and osbind.h, implemented by
@@ -44,7 +45,7 @@ EDWORD.APP: $(OBJS)
 	$(DJCC) -o edword.exe $(OBJS) $(GK)/LIB/LIBGEM.A
 	cp edword.exe $@
 
-obj/%.o: ../%.c ../wp.h
+obj/%.o: ../%.c $(wildcard ../*.h) $(wildcard include/*.h include/mint/*.h)
 	@mkdir -p obj
 	$(DJCC) $(CFLAGS) -c -o $@ $<
 obj/pgrsc.o obj/pgtos.o obj/pglinear.o: obj/%.o: %.c
@@ -89,7 +90,16 @@ dist: EDWORD.APP
 	cd dist && zip -r -X ../EDWORD-$(VER)-PCGEM.zip EDWORD
 	@echo "pcgem/EDWORD-$(VER)-PCGEM.zip ready"
 
+# into DOSBox-X's C: (C:\EDWORD): the program with its own resource files,
+# dictionaries and thesaurus, so they always match, and CWSDPMI
+PCGEMC ?= $(HOME)/work/vibe/PC-GEM/dos/C
+install: EDWORD.APP
+	@test -f $(CWSDPMI)/CWSDPMI.EXE || { echo "CWSDPMI.EXE not found: set CWSDPMI"; exit 1; }
+	mkdir -p $(PCGEMC)/EDWORD
+	cp EDWORD.APP ../EDWORD*.RSC ../dict/*.DIC ../dict/EDWORD.THS ../dict/COPYING.THS $(PCGEMC)/EDWORD/
+	test -f $(PCGEMC)/EDWORD/CWSDPMI.EXE || cp $(CWSDPMI)/CWSDPMI.EXE $(PCGEMC)/EDWORD/
+
 clean:
 	rm -rf obj dist edword.exe EDWORD.APP rsctest
 
-.PHONY: clean rsctest dist
+.PHONY: clean rsctest dist install
