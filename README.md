@@ -12,10 +12,15 @@ colour. The other versions are described in this file.
 
 ## Installing
 Copy `EDWORD.PRG`, its resource files (`EDWORD.RSC`, `EDWORDDE.RSC`,
-`EDWORDES.RSC`, `EDWORDIT.RSC`, `EDWORDFR.RSC`), `dict/EDWORD.DIC`,
+`EDWORDES.RSC`, `EDWORDIT.RSC`, `EDWORDFR.RSC`, `EDWORDCS.RSC`), `dict/EDWORD.DIC`,
 `dict/EDWORD.THS` and the manuals into one folder, with the spelling dictionaries for the other languages you want
-(`EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC`). Load GDOS first (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS or
+(`EDWORDDE.DIC`, `EDWORDES.DIC`, `EDWORDIT.DIC`, `EDWORDFR.DIC`, `EDWORDCS.DIC`). Load GDOS first (SpeedoGDOS, FSMGDOS, NVDI, FontGDOS, AMCGDOS, XGDOS or
 G+Plus); without it you only get the system font.
+
+For an ST with little memory there is **EdWord Lite** (`EDWLITE.PRG`, see
+below); it goes in the same folder with the language files
+`EDWORDDE.LNG`, `EDWORDES.LNG`, `EDWORDIT.LNG`, `EDWORDFR.LNG` and
+`EDWORDCS.LNG`.
 
 ### Versions for faster processors
 `EDWORD.PRG` runs on every Atari. For faster machines there are versions
@@ -34,6 +39,78 @@ Each one checks the processor (and FPU) as it starts; on one it can't run on
 it says so in an alert and quits, instead of crashing. EdWord's work is in
 whole numbers, so the gain is in the faster instructions rather than the
 FPU.
+
+## New in 3.0.15 and 3.0.16
+**Atari:**
+- **Print preview is a view of the document** (File ▸ Print Preview, ^⇧P,
+  or the toolbar's button), in the document's own window, with its own bar:
+  back to the document, previous and next page, zoom, Print and PDF, and
+  the page number. Edits made meanwhile show once you pause.
+- **Split window** (View ▸ Split Window, ^⇧Y, or the toolbar): two panes,
+  one above the other, each with its own scroll, in the page view, the split
+  view or Quick Edit. Drag the bar between them by its grip; dragged to the
+  top or the bottom the split goes. Click in a pane to work in it.
+- **Ten clipboard slots**: Edit ▸ Cut to Slot, Copy to Slot and Paste from
+  Slot (^⇧X, ^⇧C, ^⇧V) pop up the ten slots with the start of each. A slot
+  holds text, a column block, or a picture or drawing. Tools ▸ Clipboard
+  Slots… shows all ten in a document, one heading each; saving it writes
+  them back. Tools ▸ Clear Clipboard Slots… empties them. The slots are files
+  in the clipboard folder and last only while EdWord runs.
+- **Bookmarks**: Insert ▸ Bookmark… (^⇧M) sets one of ten at the cursor,
+  View ▸ Go to Bookmark… (^⇧B) goes to one; Alt+1–0 go to them and
+  Alt+Shift+1–0 set them. Each shows as a small flag with the guides, is a
+  `[Mark n]` code in the codes view, and is kept in RTF files (as a
+  bookmark other programs read too).
+- **Column (block) select**: drag with Alt held, or turn on Edit ▸ Column
+  Select (^⇧K), to select a rectangle of text across lines; Cut, Copy, Paste,
+  Delete and the slots work on it.
+- **Find Previous** (Edit menu, Shift+F3 or ^⇧G); Find Next and Find Previous work
+  with the Find window closed.
+- **Clone** (File ▸ Clone): a copy of the document in a new window,
+  named NewDoc01, NewDoc02…
+- **Edited or Saved** shows in the status line, and *Printing n/m* while a
+  document prints in the background.
+- **Background printing** (Preferences ▸ Documents, when XGDOS is loaded):
+  each print job goes to its own file and prints a band at a time while
+  you carry on; a job keeps its own copy of the document.
+- **Print resolution** (Preferences ▸ Documents): the printer's own, or at
+  most 150, 300, 600 or 1200 dpi (faster, coarser drafts).
+- **Dialogs and alerts are windows over their document**, and several can
+  be open at once (each document's own); a document can't be closed while
+  one of its dialogs is open.
+- **EdWord's own file selector**, laid out like TOS 4's (drives A–U, U for
+  MiNT), opens as a sheet on its document's window: it moves with the
+  window, can be resized, and greys the document behind it until it is
+  answered. With a file selector of its own installed (an `FSEL` cookie, or
+  MagiC) the system's is used; Preferences ▸ Documents chooses.
+- **Free memory** in the About box.
+- **Faster cursor movement**: the menus are updated only where something
+  changed, and a held cursor key's repeats are taken together.
+- **Less memory**: the tool windows, charts, freehand drawing, colour
+  picture lookup and progress bar take their memory only while they are in
+  use, and the thesaurus only while its window is open.
+- **Menus rearranged** to stay inside TOS's menu limits: page navigation and
+  Go to Bookmark in the View menu, Repaginate, the clipboard slots and the
+  colour theme in the Tools menu.
+
+**EdWord Lite** (`EDWLITE.PRG`, `make LITE=1`): for a 1 MB ST, or a 4 MB one
+with GDOS loaded. About 175 KB smaller in memory than EdWord, and the
+spelling dictionary stays on disk and is read as it is needed (about 30 KB
+in memory instead of 340 KB–1 MB). English is built in; the other languages
+come from the `EDWORDxx.LNG` files, one at a time. It saves EdWord's own
+files and reads RTF, 1st Word Plus, text and GEM IMG pictures. It has no
+PDF export (print to XGDOS's PDF driver instead), no export, clipboard
+slots, colour themes, file selector of its own, drawing window, bookmarks,
+charts or split window; their menu items are greyed. Documents with
+drawings, charts or bookmarks keep them when Lite saves. It keeps its
+settings in `EDWLITE.INF` (from `EDWORD.INF` the first time).
+
+**Amiga:** print preview as a view, split window, bookmarks (Control+1–0
+go, Amiga+1–0 set), column select (Alt+drag), Find Previous, Clone, the ten
+clipboard slots (files in `T:`, or `RAM:` without a `T:`) and Edited/Saved in
+the title, as on the Atari. **EdWord13 now starts on Kickstart 1.2 and 1.3**:
+it used exec's StackSwap, which only 2.0 has, and crashed at once (Guru
+0000000B).
 
 ## New in 3.0
 - **One Font menu** with the fonts and the point sizes together; Style menu
@@ -99,7 +176,7 @@ FPU.
   they take the 3D look; under MagiC the check boxes, radio buttons and
   edit fields are MagiC's own. On 16 colours and more the toolbar's icons
   are in colour.
-- **Colour themes (ST, 256 colours and more)**: View > Colour Theme... picks
+- **Colour themes (ST, 256 colours and more)**: Tools > Colour Theme... picks
   one of the Windows 95 schemes, under other names (Aubergine, Blush,
   Classic, Damson, Drizzle, Dune, Harvest, Lagoon, Lavender, Nautical, Pine,
   Shale, Squash, Sycamore, Tempest, Terracotta), or each of its six colours
@@ -113,7 +190,7 @@ FPU.
   a buffer a quarter of the screen's size and don't check it, so
   tools/mkrsc.py refuses a menu too big for it in any language. The table's
   rows and columns are in Table Settings, the headings in the Style menu
-  and Repaginate in the View menu.
+  and Repaginate in the Tools menu.
 - **Pictures placed to the pixel**: positions and sizes are kept in twips
   (1/20 point), so a picture or drawing lands on the screen pixel you drop
   it on at any zoom; Shift+arrow keys move a selected one by one pixel.
@@ -198,9 +275,9 @@ FPU.
   their own with 16 pens or more); on the Mac through the standard print dialog; on the Amiga
   through `printer.device` with the Preferences printer; on Windows through
   the Windows Print dialog.
-- **Page navigation**: Previous page, Next page and Go to page… in the Edit
-  menu (Mac: View menu), with keys on every platform.
-- **Repaginate** (Edit menu, F2; Mac: View menu, ⌥⌘R) lays every page out
+- **Page navigation**: Previous page, Next page and Go to page… in the View
+  menu (Amiga and Windows: Edit menu), with keys on every platform.
+- **Repaginate** (ST: Tools menu, F2; Amiga and Windows: Edit menu; Mac: View menu, ⌥⌘R) lays every page out
   again and brings the table of contents' page numbers up to date.
 - **Page breaks**: Insert ▸ Page Break, Control+Return (Ctrl+Enter on
   Windows, ⌘Return on the Mac) and a new toolbar button; Control+Shift+Return
@@ -238,14 +315,15 @@ FPU.
   toolbar or the menu (remembered in Preferences). Double-click a ruler for
   Indents (top) or Page layout (left).
 - **ST: dialogs and progress bars in windows.** Every dialog and gauge is a
-  movable window; Undo/Esc cancels, Alternate + the underlined letter picks a
-  button. Only one dialog at a time; asking for another brings the open one
-  to the front. If the AES has no free window, the old modal dialog is used.
+  movable window over its document, titled with the document's name;
+  Undo/Esc cancels, Alternate + the underlined letter picks a button.
+  Several can be open at once (up to four), alerts too. If the AES has no
+  free window, the old modal dialog is used.
 - **Progress bars (ST, Amiga and Windows)** for opening, importing, saving and
   exporting documents, loading pictures and loading a dictionary. The bar
   only appears when the job takes more than a third of a second.
 - **ST: window positions are remembered** for the session: a document,
-  dialog, tool window or the preview reopens where it was last closed.
+  dialog or tool window reopens where it was last closed.
 - **ST: 3D dialogs.** Under an AES with 3D objects (TOS 4, MagiC, XaAES,
   N.AES, MyAES) dialogs use the 3D flags, and MagiC's object extensions
   (`WHITEBAK` check boxes and round radio buttons, underlined shortcut
@@ -275,6 +353,10 @@ FPU.
 | ^N / ^O | New / Open | ^U | Close window |
 | ^S / ^⇧S | Save / Save as | ^W | Next window |
 | ^P / ^⇧P | Print / Print preview | ^Q | Quit |
+| ⇧F3 or ^⇧G | Find previous | ^⇧Y | Split window |
+| ^⇧K | Column select | | |
+| ^⇧X / ^⇧C / ^⇧V | Cut / Copy / Paste with a slot | ^⇧M / ^⇧B | Set / Go to bookmark |
+| Alt+1–0 | Go to bookmark | Alt+⇧1–0 | Set bookmark |
 | ^F | Find and Replace | ^G or F3 | Find again |
 | ^↑ / ^↓ | Previous / Next page | ^J | Go to page |
 | ^B / ^I / ^⇧U | Bold / Italic / Underline | ^⇧F | Font selector |
@@ -620,9 +702,10 @@ colours, with EdWord set to each language in turn, to take the screenshots
 | `gemdlg.c` | the self-laying-out dialog builder, popups, alerts and all dialogs |
 | `gemtwin.c` | Find and Replace, Spelling and Thesaurus windows; the spelling popup |
 | `gemobj.c` | pictures and drawings: selecting, moving, resizing, the drawing window |
-| `gemtool.c` | font selector and print preview windows |
+| `gemtool.c` | font selector window; the print preview view |
+| `gemfsel.c` | EdWord's own file selector (a sheet on its document's window) |
 | `gemtheme.c` | colour themes for the toolbars, status line, rulers and desk |
-| `gemclip.c` | GEM clipboard, Insert > File, auto-save |
+| `gemclip.c` | GEM clipboard, the ten clipboard slots, Insert > File, auto-save |
 | `gemrend.c` | GDOS/Speedo fonts, metrics, page drawing, PDF glyphs |
 | `tools/icons.h` | toolbar icons (made into EDWORD*.RSC by mkrsc.py) |
 | `demo.c` | the screenshot script (EDDEMO builds only) and the test build's runner (EDTEST) |
@@ -641,7 +724,7 @@ colours, with EdWord set to each language in turn, to take the screenshots
 | `chart.c` | charts of a table's numbers (whole-number maths) |
 | `spell.c`, `thes.c` | spelling checker, thesaurus |
 | `charset.c` | ST / Windows-1252 / Unicode, letter case, colours |
-| `lang/strings.txt` | every user interface string in five languages |
+| `lang/strings.txt` | every user interface string in six languages (made into `lang.c`, and `EDWORDxx.LNG` for EdWord Lite) |
 | `tools/` | `mkdic.c`, `mkthes.py`, `mklang.py` |
 | `manual/` | manual sources, screenshots, builder, demo script and files |
 | `mac/` | macOS version (Cocoa) |
@@ -675,7 +758,8 @@ colours, with EdWord set to each language in turn, to take the screenshots
   (and on the Amiga with plenty of memory); a colour picture saved on such
   a machine still opens, dithered, everywhere else. EmuTOS doesn't answer
   `vq_scrninfo`, so there only the Falcon's own high-colour mode is used.
-- The Amiga clipboard takes text only (no pictures yet).
+- The Amiga clipboard takes text only (no pictures yet); the clipboard
+  slots take pictures.
 
 ## Licence
 EdWord is free software under the MIT licence: Copyright (c) 2026 Francis C
