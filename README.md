@@ -3,9 +3,7 @@
 (also for PC GEM on DOS, macOS, the Amiga and Windows: see below)
 
 Runs in ST medium and ST high resolution (and any mode 640 pixels wide or
-more). Written in C for `m68k-atari-mint-gcc` + gemlib. There is no resource
-file: menus and dialogs are built in code and lay themselves out, so they fit
-in every language.
+more). Written in C for `m68k-atari-mint-gcc` + gemlib. 
 
 The full user documentation of the Atari version, with screenshots of a
 256-colour screen, is in `manual/MANUALEN.PDF` (also `MANUALDE`, `MANUALES`,
