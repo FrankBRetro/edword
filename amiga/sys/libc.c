@@ -34,6 +34,7 @@ long  ami_arglen;
 
 int main(int argc, char **argv);
 int ami_bigstack(int (*fn)(void), struct StackSwapStruct *ss);
+int ami_newstack(int (*fn)(void), void *top);
 void ami_free_all(void);
 void ami_close_files(void);
 
@@ -90,7 +91,9 @@ int ami_startup(void)
             ss.stk_Lower = stack;
             ss.stk_Upper = (ULONG)stack + stsize;
             ss.stk_Pointer = (APTR)(ss.stk_Upper);
-            rc = ami_bigstack(call_main, &ss);
+            /* StackSwap is 2.0's (exec 37); before it, sp is just moved */
+            if (SysBase->LibNode.lib_Version >= 37) rc = ami_bigstack(call_main, &ss);
+            else rc = ami_newstack(call_main, (void *)ss.stk_Upper);
             FreeMem(stack, stsize);
         }
         ami_close_files();

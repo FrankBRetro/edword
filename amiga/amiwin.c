@@ -1851,10 +1851,14 @@ int open_window(DOC *d)
     }
     d->info[0] = 0;
     doc_sync_ins(d);
+    edlog("window: opened");
     set_name(d);
+    edlog("window: title");
     set_sliders(d);
     set_info(d);
+    edlog("window: info");
     refresh_all(d);
+    edlog("window: drawn");
     update_menu(d);
     return 1;
 }

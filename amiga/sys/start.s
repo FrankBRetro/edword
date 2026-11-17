@@ -30,6 +30,22 @@ ami_bigstack:
         movem.l (sp)+,d2-d7/a2-a6
         rts
 
+| int ami_newstack(int (*fn)(void), void *top)
+| runs fn with sp at top: for Kickstart 1.2/1.3, which have no StackSwap
+| (the task's stack bounds are left as they were; nothing before 2.0
+| checks them)
+        .globl  ami_newstack
+ami_newstack:
+        movem.l d2-d7/a2-a6,-(sp)
+        move.l  48(sp),a3
+        move.l  52(sp),d0
+        move.l  sp,a2
+        move.l  d0,sp
+        jsr     (a3)
+        move.l  a2,sp
+        movem.l (sp)+,d2-d7/a2-a6
+        rts
+
 | hook entry for C: calls h_SubEntry(hook a0, object a2, message a1)
         .globl  ami_hookentry
 ami_hookentry:

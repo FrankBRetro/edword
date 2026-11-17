@@ -1887,7 +1887,23 @@ static struct timerequest *treq;
 static int tbusy, topen;
 ULONG timer_sig;
 
-#ifdef EDLOG
+#if defined(EDLOG) && defined(AMI13)
+/* Workbench 1.3: no PROGDIR: or E-clock; the log goes to SYS:EdWord13.log */
+struct Device *TimerBase;
+void edlog(const char *fmt, ...)
+{
+    static FILE *f;
+    char buf[200];
+    va_list ap;
+    if (!f) f = fopen("SYS:EdWord13.log", "w");
+    if (!f) return;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    fprintf(f, "%s\n", buf);
+    fflush(f);
+}
+#elif defined(EDLOG)
 /* a log of how long things take, in PROGDIR:EdWord.log ("make EDLOG=1") */
 struct Device *TimerBase;
 static ULONG efreq;
@@ -2352,6 +2368,7 @@ static void open_wbarg(struct WBArg *a)
 static int screen_up(void)
 {
     if (!open_screen()) return 0;
+    edlog("screen: open");
     dri = GetScreenDrawInfo(scr);
     vi = GetVisualInfo(scr, TAG_END);
     sysfont = OpenFont(&sysattr);
@@ -2371,12 +2388,15 @@ static int screen_up(void)
     desk.g_w = scr_w;
     desk.g_h = (short)(scr_h - desk.g_y);
     gfx_init();
+    edlog("screen: graphics");
     wchar = (short)((sys_width("abcdefghijklmnopqrstuvwxyz ABCDEFGHIJ0123456789") + 23) / 47);
     if (wchar < 4) wchar = 8;
 
     busy(1);
     fonts_load();
+    edlog("screen: menus next");
     if (!make_strip()) { busy(0); return 0; }
+    edlog("screen: menus made");
     if (!on_wb) backdrop = open_ewin((struct TagItem *)(ULONG[]){ WA_Left, 0, WA_Top, (ULONG)desk.g_y, WA_Width, (ULONG)scr_w,
                          WA_Height, (ULONG)desk.g_h, WA_Backdrop, TRUE, WA_Borderless, TRUE,
                          WA_SimpleRefresh, TRUE, WA_NoCareRefresh, TRUE, WA_Activate, TRUE, TAG_END },
@@ -2663,18 +2683,24 @@ int main(int argc, char *argv[])
 
     sprintf(sysname, "EdWord %s", ED_VERSION);
     if (!open_libs()) { close_libs(); return 20; }
+    edlog("start: libraries");
     pick_app_name();
     rexx_init();
+    edlog("start: arexx");
     font_cap_init();
+    edlog("start: font caps");
 #ifdef AMI13
     c13_init();
     AslBase = &c13_asl;
     c13_progdir(progdir, sizeof progdir, argc == 0 ? _WBenchMsg : NULL);
 #endif
     load_prefs();
+    edlog("start: prefs");
     slots_clear();              /* the clipboard's slots last while EdWord runs */
+    edlog("start: slots cleared");
     set_language(pref_lang >= 0 ? pref_lang : system_language());
     spell_lang = pref_spell >= 0 ? pref_spell : ui_lang;
+    edlog("start: language");
     /* pictures keep their colours (for the screen and PDFs) with 2 MB or
      * more to spare */
     {
@@ -2683,6 +2709,8 @@ int main(int argc, char *argv[])
     }
     idcmp_port = CreateMsgPort();
     if (!idcmp_port || !timer_init()) goto out;
+    edlog("start: timer");
+    edlog("start: screen next");
     if (!screen_up()) {
         struct EasyStruct es;
         char t[160], *p;
@@ -2694,6 +2722,7 @@ int main(int argc, char *argv[])
         goto out;
     }
     update_menu(NULL);
+    edlog("start: menus");
 
     if (argc == 0 && _WBenchMsg) {
         int i;
@@ -2703,7 +2732,9 @@ int main(int argc, char *argv[])
         for (i = 1; i < argc; i++) open_path(argv[i], text_name(argv[i]));
     }
     if (pref_live) spell_ensure(1);
+    edlog("start: new document next");
     if (!top_doc()) cmd_new();
+    edlog("start: document open");
 
     rc = 0;
     while (!quit_now) {
