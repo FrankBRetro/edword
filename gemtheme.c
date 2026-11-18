@@ -35,11 +35,15 @@ void theme_set_window(int slot, int id, unsigned char rgb[TH_NROLES][3]) { (void
 int  theme_pen(int role) { return TH_PEN0 + role; }
 void theme_pick(int id) { (void)id; }
 void theme_apply(void) {}
+int  theme_top(int slot) { (void)slot; return 0; }
+void theme_active(int on) { (void)on; }
 void theme_preview_pens(void) {}
 void theme_init(void) {}
 void theme_exit(void) {}
 int  page_white(void) { return 0; }
+int  theme_sys;
 int  theme_tints_gem(void) { return 0; }
+int  theme_sys_possible(void) { return 0; }
 void theme_load(const char *key, const char *val) { (void)key; (void)val; }
 void theme_save(void *fp) { (void)fp; }
 void theme_bevel(short x, short y, short w, short h, int pressed) { (void)x; (void)y; (void)w; (void)h; (void)pressed; }
@@ -79,26 +83,42 @@ unsigned char theme_rgb[TH_NROLES][3];
 static short saved[TH_NROLES][3];
 static int   saved_ok, can, rgb_read, direct;
 
-/* On a screen without a palette (high and true colour) a pen's colour
- * only counts when something is drawn, so each document window can have
- * a theme of its own: its colours are put in the pens before EdWord draws
- * in it (theme_for) and everyone's after (theme_global). A palette
- * screen shows every pen's new colour at once, so there one theme is for
- * all. */
+/* Each document window can have a theme of its own. On a screen without
+ * a palette (high and true colour) a pen's colour only counts when
+ * something is drawn: its colours are put in the pens before EdWord draws
+ * in it (theme_for) and everyone's after (theme_global). A palette screen
+ * shows every pen's new colour at once, so there the pens hold the theme
+ * of the document on top (theme_top), as FView does with its pictures'
+ * palettes: the other windows show it too until they come to the top. */
 typedef struct { int id; unsigned char rgb[TH_NROLES][3]; } WTHEME;
 static WTHEME wth[MAX_DOCS];                     /* id -1: as the others */
 static int    ctx = -1;                          /* the window being drawn, -1 none */
+static int    top = -1;                          /* palette: the document whose theme is in the pens */
 static unsigned char loaded[TH_NROLES][3];
 static int    loaded_ok;
 
 const char *theme_name(int id) { return id >= 0 && id < NTHEMES ? themes[id].name : ""; }
 int theme_possible(void) { return can; }
-int theme_per_window(void) { return can && direct; }
+int theme_per_window(void) { return can; }
+
+/* the theme in force: the window being drawn's (high and true colour), the
+ * top document's (a palette), else the one for all */
+static int cur_id(void)
+{
+    if (ctx >= 0) return wth[ctx].id;
+    if (!direct && top >= 0 && top < MAX_DOCS && wth[top].id >= 0) return wth[top].id;
+    return theme_id;
+}
+static unsigned char (*cur_rgb(void))[3]
+{
+    if (ctx >= 0) return wth[ctx].rgb;
+    if (!direct && top >= 0 && top < MAX_DOCS && wth[top].id >= 0) return wth[top].rgb;
+    return theme_rgb;
+}
 int theme_on(void)
 {
     if (!can) return 0;
-    if (ctx >= 0) return wth[ctx].id != 0;
-    return theme_id != 0;
+    return cur_id() != 0;
 }
 
 static void load_pens(unsigned char rgb[TH_NROLES][3])
@@ -117,7 +137,16 @@ static void load_pens(unsigned char rgb[TH_NROLES][3])
 /* drawing in a document window: its own theme, if it has one */
 void theme_for(int slot)
 {
-    if (!direct || slot < 0 || slot >= MAX_DOCS || wth[slot].id < 0) { theme_global(); return; }
+    /* High and true colour: the pens are everyone's, and another program
+     * may have set them since EdWord last drew - its window moved over
+     * one of EdWord's, say, without EdWord ever losing the front - so the
+     * theme's colours go in again before each redraw */
+    if (direct) loaded_ok = 0;
+    if (!direct || slot < 0 || slot >= MAX_DOCS || wth[slot].id < 0) {
+        if (direct && theme_on()) { ctx = -1; load_pens(theme_rgb); }
+        theme_global();
+        return;
+    }
     ctx = slot;
     if (wth[slot].id) load_pens(wth[slot].rgb);
 }
@@ -154,107 +183,192 @@ void theme_pick(int id)
     memcpy(theme_rgb, themes[id].c, sizeof theme_rgb);
 }
 
+/* "Theme system pens" (in the Colour Theme window): the theme colours
+ * the AES's own 3D look as well - the AES draws it (GEM/3 on the PC,
+ * TOS 4, and others that follow it) with pen 8 (light grey: the face of
+ * buttons, menus and dialogs) and pen 9 (dark grey: the shadow edge) -
+ * and its menus, alerts and fields, which are pen 0, white (pen 0 takes
+ * the theme's light edge, which is the 3D look's light edge too). On by
+ * default on PC GEM, where nothing else runs beside EdWord; off on the
+ * Atari, where every program's windows share these pens. All put back
+ * with the plain Atari theme, with the option off and when EdWord quits. */
 #ifdef PCGEM
-/* PC GEM runs one program at a time, so EdWord's theme can colour GEM's
- * own 3D look too: GEM/3 draws it with pen 8 (light grey: the face of
- * buttons, menus and dialogs) and pen 9 (dark grey: the shadow edge);
- * the light edge is white, pen 0, which the pages use too, so it stays.
- * They are put back when the theme is the plain one and when EdWord
- * quits. */
-static short sys_saved[3][3];               /* pens 8, 9 and 0 as GEM had them */
-static int sys_ok;
+int theme_sys = 1;
+#else
+int theme_sys = 0;
+#endif
+static short sys_saved[3][3];               /* pens 8, 9 and 0 as they were */
+static int sys_ok, sys_on;
 
-/* The menus, alerts and text fields are GEM's white, pen 0, which the
- * pages use too. To tint them (pen 0 takes the theme's light edge) the
- * pages move to a pen of their own kept pure white. EdWord shows a
- * selection by inverting the screen: on a palette screen that turns the
- * colour register r into 255 - r, so the page's pen is one whose inverse
- * register belongs to another free pen, which is made black (white
- * selected still turns black). Pens 16-249: GEM's own are 0-15, the
- * theme's 250-255. In high or true colour inverting white gives black
- * anyway. */
-static int page_pen, page_ink;               /* 0: none, the pages are pen 0 */
+/* With pen 0 tinted the pages move to a pen of their own kept pure white.
+ * EdWord shows a selection by inverting the screen: on a palette screen
+ * that turns pixel value p into its complement, so the page's pen is one
+ * whose complement belongs to another free pen, which is made black
+ * (white selected still turns black). Pens 16-249: the system's own are
+ * 0-15, the theme's 250-255. In high or true colour inverting white gives
+ * black anyway. Found once; the pens are only changed while in use. */
+static int page_pen, page_ink;               /* 0: none, the pages stay pen 0 */
 static short page_saved[2][3];
 
 static void find_page_pens(int planes)
 {
-    static const short white[3] = { 1000, 1000, 1000 }, black[3] = { 0, 0, 0 };
-    short hw[256];
-    int p, q;
+    int px[256], p, q;
     page_pen = page_ink = 0;
-    if (direct) page_pen = TH_PEN0 - 1;
-    else if (planes == 8) {
-        for (p = 0; p < 256; p++) hw[p] = pg_pen_hw(vhandle, (short)p);
+    if (planes == 8 && !direct) {
+        for (p = 0; p < 256; p++) px[p] = pen_pixel(p);
         for (p = TH_PEN0 - 1; p >= 16 && !page_pen; p--) {
-            if (hw[p] < 0) continue;
+            if (px[p] < 0) continue;
             for (q = 16; q < TH_PEN0; q++)
-                if (q != p && hw[q] == (hw[p] ^ 0xFF)) { page_pen = p; page_ink = q; break; }
+                if (q != p && px[q] == (px[p] ^ 0xFF)) { page_pen = p; page_ink = q; break; }
         }
     }
-    edlog("themes: pages in pen %d%s", page_pen, page_ink ? " (its inverse made black)" : "");
-    if (!page_pen) return;
-    vq_color(vhandle, page_pen, 1, page_saved[0]);
-    vs_color(vhandle, page_pen, (short *)white);
-    if (page_ink) {
-        vq_color(vhandle, page_ink, 1, page_saved[1]);
-        vs_color(vhandle, page_ink, (short *)black);
-    }
+    edlog("themes: pages in pen %d%s with system pens themed", page_pen,
+          page_ink ? " (its inverse made black)" : "");
+    if (page_pen) vq_color(vhandle, page_pen, 1, page_saved[0]);
+    if (page_ink) vq_color(vhandle, page_ink, 1, page_saved[1]);
 }
 
 static void sys_pens(int on)
 {
     static const int role[3] = { TH_FACE, TH_DARK, TH_LIGHT };
     static const int pen[3] = { 8, 9, 0 };
+    static const short white[3] = { 1000, 1000, 1000 }, black[3] = { 0, 0, 0 };
     short rgb[3];
     int i, k;
-    if (!sys_ok) return;
+    if (!sys_ok || (!on && !sys_on)) return;
+    /* the pages' own white first, so nothing is drawn white in pen 0 */
+    if (on && !sys_on) {
+        if (page_pen) { vs_color(vhandle, page_pen, (short *)white); pal_pen_changed(page_pen); }
+        if (page_ink) { vs_color(vhandle, page_ink, (short *)black); pal_pen_changed(page_ink); }
+    }
     for (i = 0; i < 3; i++) {
         if (i == 2 && !page_pen) break;      /* no white of the pages' own */
-        if (on) for (k = 0; k < 3; k++) rgb[k] = (short)(theme_rgb[role[i]][k] * 1000L / 255);
+        if (on) for (k = 0; k < 3; k++) rgb[k] = (short)(cur_rgb()[role[i]][k] * 1000L / 255);
         else for (k = 0; k < 3; k++) rgb[k] = sys_saved[i][k];
         vs_color(vhandle, pen[i], rgb);
     }
+    if (!on) {
+        if (page_pen) { vs_color(vhandle, page_pen, page_saved[0]); pal_pen_changed(page_pen); }
+        if (page_ink) { vs_color(vhandle, page_ink, page_saved[1]); pal_pen_changed(page_ink); }
+    }
+    sys_on = on;
 }
-#endif
 
-/* GEM's own pens (0, 8 and 9) have the theme's colours: pictures keep
+/* the system's pens (0, 8 and 9) have the theme's colours: pictures keep
  * off them */
 int theme_tints_gem(void)
 {
-#ifdef PCGEM
-    return sys_ok && theme_on();
-#else
-    return 0;
-#endif
+    return sys_on;
 }
 
-/* the pages' white: pen 0, or on PC GEM with a theme the pen kept white
- * while pen 0 is the theme's */
+/* the pages' white: pen 0, or with the system pens themed the pen kept
+ * white while pen 0 is the theme's */
 int page_white(void)
 {
-#ifdef PCGEM
-    if (page_pen && theme_on()) return page_pen;
-#endif
-    return 0;
+    return sys_on && page_pen ? page_pen : 0;
 }
 
+/* While another program is in front (MultiTOS, MagiC) the pens EdWord
+ * changed are given back, so that program's windows, menus and dialogs
+ * have the system's colours (and a palette screen the colours it had);
+ * they are EdWord's again when one of its windows is on top. A pen
+ * another program has set since (FView's pictures do) is left alone. */
+static int suspended;
+
+static int pen_is(int pen, const short want[3])
+{
+    short cur[3];
+    int k;
+    vq_color(vhandle, pen, 0, cur);
+    for (k = 0; k < 3; k++)
+        if (cur[k] - want[k] > 8 || want[k] - cur[k] > 8) return 0;
+    return 1;
+}
+
+static void give_back(int pen, const short ours[3], const short orig[3])
+{
+    if (pen_is(pen, ours)) vs_color(vhandle, pen, (short *)orig);
+}
+
+static void theme_suspend(void)
+{
+    static const int role[3] = { TH_FACE, TH_DARK, TH_LIGHT };
+    static const int pen[3] = { 8, 9, 0 };
+    static const short white[3] = { 1000, 1000, 1000 }, black[3] = { 0, 0, 0 };
+    short ours[3];
+    int i, k;
+    if (theme_on() && !direct)                   /* EdWord's own pens: palette only */
+        for (i = 0; i < TH_NROLES; i++) {
+            for (k = 0; k < 3; k++) ours[k] = (short)(cur_rgb()[i][k] * 1000L / 255);
+            give_back(TH_PEN0 + i, ours, saved[i]);
+        }
+    if (sys_on) {
+        for (i = 0; i < 3; i++) {
+            if (i == 2 && !page_pen) break;
+            for (k = 0; k < 3; k++) ours[k] = (short)(cur_rgb()[role[i]][k] * 1000L / 255);
+            give_back(pen[i], ours, sys_saved[i]);
+        }
+        if (page_pen) give_back(page_pen, white, page_saved[0]);
+        if (page_ink) give_back(page_ink, black, page_saved[1]);
+        sys_on = 0;
+    }
+    loaded_ok = 0;
+}
+
+/* EdWord in front (1) or another program (0) */
+void theme_active(int on)
+{
+    if (!can || !saved_ok || on == !suspended) return;
+    edlog("themes: EdWord %s (theme %d, system pens %d)", on ? "in front again" : "behind another program",
+          theme_on() ? cur_id() : 0, sys_on);
+    if (!on) {
+        theme_suspend();
+        suspended = 1;
+    } else {
+        suspended = 0;
+        theme_apply();
+    }
+}
 
 /* the theme's colours in its pens, or the pens back as they were */
 void theme_apply(void)
 {
     short rgb[3];
     int i, k;
-    if (!can) return;
+    if (!can || suspended) return;
     loaded_ok = 0;
     ctx = -1;
     for (i = 0; i < TH_NROLES; i++) {
-        if (theme_on()) for (k = 0; k < 3; k++) rgb[k] = (short)(theme_rgb[i][k] * 1000L / 255);
+        if (theme_on()) for (k = 0; k < 3; k++) rgb[k] = (short)(cur_rgb()[i][k] * 1000L / 255);
         else for (k = 0; k < 3; k++) rgb[k] = saved[i][k];
         vs_color(vhandle, TH_PEN0 + i, rgb);
     }
-#ifdef PCGEM
-    sys_pens(theme_on());
-#endif
+    sys_pens(theme_on() && theme_sys && !direct);
+}
+
+/* "Theme system pens" can be had: palette screens only - in high and true
+ * colour what is already on the screen keeps its old colours, so the
+ * system's menus and windows came out in a mixture */
+int theme_sys_possible(void) { return can && !direct; }
+
+/* a palette screen: the document on top has changed - its theme into the
+ * pens. 1 if the screen needs drawing again (a theme on or off changes
+ * what is drawn, not just its colours) */
+int theme_top(int slot)
+{
+    int was, id, rgbchg;
+    unsigned char old[TH_NROLES][3];
+    if (!can || direct || slot == top) return 0;
+    was = theme_on() ? cur_id() : 0;
+    memcpy(old, cur_rgb(), sizeof old);
+    top = slot;
+    id = theme_on() ? cur_id() : 0;
+    rgbchg = memcmp(old, cur_rgb(), sizeof old) != 0;
+    if ((was != 0) == (id != 0) && (!id || !rgbchg)) return 0;   /* the same */
+    edlog("themes: document %d on top: theme %d (was %d)%s", slot, id, was,
+          (was != 0) != (id != 0) ? ", everything drawn again" : "");
+    theme_apply();
+    return (was != 0) != (id != 0);
 }
 
 /* the colours being chosen in the pens, for the theme dialog's picture,
@@ -288,26 +402,20 @@ void theme_init(void)
     if (!can) return;
     for (i = 0; i < TH_NROLES; i++) vq_color(vhandle, TH_PEN0 + i, 1, saved[i]);
     saved_ok = 1;
-#ifdef PCGEM
     vq_color(vhandle, 8, 1, sys_saved[0]);
     vq_color(vhandle, 9, 1, sys_saved[1]);
     vq_color(vhandle, 0, 1, sys_saved[2]);
     sys_ok = 1;
     find_page_pens(ext[4]);
-#endif
     if (theme_id) theme_apply();
 }
 
 void theme_exit(void)
 {
     int i;
-    if (!saved_ok) return;
+    if (!saved_ok || suspended) return;      /* given back already */
     for (i = 0; i < TH_NROLES; i++) vs_color(vhandle, TH_PEN0 + i, saved[i]);
-#ifdef PCGEM
     sys_pens(0);
-    if (page_pen) vs_color(vhandle, page_pen, page_saved[0]);
-    if (page_ink) vs_color(vhandle, page_ink, page_saved[1]);
-#endif
 }
 
 /* the preferences: "theme=N" and "themergb=" six R,G,B triples */
@@ -317,6 +425,8 @@ void theme_load(const char *key, const char *val)
         int v = atoi(val);
         if (v >= 0 && v < NTHEMES) theme_pick(v);
         else if (v == THEME_CUSTOM) theme_id = THEME_CUSTOM;
+    } else if (!strcmp(key, "themesys")) {
+        theme_sys = atoi(val) != 0;
     } else if (!strcmp(key, "themergb")) {
         int i, k, v;
         rgb_read = 1;
@@ -335,7 +445,7 @@ void theme_save(void *fp)
 {
     FILE *f = (FILE *)fp;
     int i;
-    fprintf(f, "theme=%d\nthemergb=", theme_id);
+    fprintf(f, "theme=%d\nthemesys=%d\nthemergb=", theme_id, theme_sys);
     for (i = 0; i < TH_NROLES; i++)
         fprintf(f, "%d,%d,%d%s", theme_rgb[i][0], theme_rgb[i][1], theme_rgb[i][2], i + 1 < TH_NROLES ? "," : "\n");
 }

@@ -3815,6 +3815,13 @@ es: Todos los documentos
 it: Tutti i documenti
 fr: Tous les documents
 cs: Všechny dokumenty
+@S_THEME_SYSPENS
+en: Theme the system's menus and 3D look too
+de: Auch Menüs und 3D-Look des Systems färben
+es: Colorear también menús y aspecto 3D del sistema
+it: Colora anche menu e aspetto 3D del sistema
+fr: Colorer aussi les menus et le relief du système
+cs: Obarvit i nabídky a 3D vzhled systému
 @S_THEME_HINT
 en: Colours 0-255. The toolbars, rulers and the desk around the pages.
 de: Farben 0-255. Symbolleisten, Lineale und der Rand um die Seiten.

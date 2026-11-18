@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "gemui.h"
 
 #define HS 4                        /* half size of a handle, pixels */
@@ -312,6 +313,9 @@ int picture_add(DOC *d, const char *path)
     OBJ o;
     int k;
     if (d->a.nobj >= MAX_OBJS || d->nimg >= MAX_IMGS) { alert(1, 3, AL_TOO_MANY_OBJS, AB_OK); return -1; }
+    /* the windows drawn again first where the file selector was, so the
+       gauge doesn't sit over what it left behind while the picture loads */
+    pump_redraws();
     busy_begin(L(S_LOADING_PIC));
     k = img_load(path, &im);
     busy_end();
@@ -437,7 +441,11 @@ int tc_init(void)
 static int   pal_ok, pal_planes, pal_n;
 static short pal_rgb[256][3];                  /* each pen, 0-255 */
 static unsigned char pal_px[256];              /* each pen's pixel value */
-static unsigned short *pal_cube;               /* 32768: pen + 1, 0 not known yet */
+/* 4 bits a channel: 4096 cells, each found once (the dithering's error
+   diffusion makes up the finer steps); 15 bits took up to a minute on an
+   ST-class CPU for a photograph, finding the nearest of 256 pens 30000 times */
+#define PAL_CUBE 4096
+static unsigned short *pal_cube;               /* PAL_CUBE: pen + 1, 0 not known yet */
 static int   pal_skip = -1;                    /* a pen the display mode changed */
 static int   pal_tint = -1;                    /* GEM's pens had the theme's colours */
 
@@ -518,18 +526,39 @@ int pal_init(void)
     return 1;
 }
 
+/* a pen's pixel value on a palette screen (-1 if not known), for the
+   theme's choice of a pen for the pages (gemtheme.c) */
+int pen_pixel(int pen)
+{
+    if (!pal_ok && !pal_init()) return -1;
+    return pen >= 0 && pen < pal_n ? pal_px[pen] : -1;
+}
+
+/* a pen's colour changed (the theme gave it another): read it again, and
+   the colours already matched to the pens are forgotten */
+void pal_pen_changed(int pen)
+{
+    short rgb[3], k;
+    if (!pal_ok || pen < 0 || pen >= pal_n) return;
+    vq_color(vhandle, pen, 1, rgb);
+    for (k = 0; k < 3; k++) pal_rgb[pen][k] = (short)((rgb[k] < 0 ? 0 : rgb[k] > 1000 ? 1000 : rgb[k]) * 255L / 1000);
+    if (pal_cube) memset(pal_cube, 0, PAL_CUBE * sizeof(unsigned short));
+    edlog("colour pictures: pen %d changed, colours matched again", pen);
+}
+
 static int pal_nearest(int r, int g, int b)
 {
-    unsigned idx = (unsigned)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+    unsigned idx = (unsigned)(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4));
     int skip = pref_display == DISP_AMBER && pal_n >= 16 ? 6 : -1;
     if (!pal_cube) {                            /* 64K: only once a colour picture is shown */
-        pal_cube = (unsigned short *)calloc(32768, sizeof(unsigned short));
+        pal_cube = (unsigned short *)calloc(PAL_CUBE, sizeof(unsigned short));
         pal_skip = skip;
     }
-    if (pal_cube && skip != pal_skip) { memset(pal_cube, 0, 32768 * sizeof(unsigned short)); pal_skip = skip; }
+    if (pal_cube && skip != pal_skip) { memset(pal_cube, 0, PAL_CUBE * sizeof(unsigned short)); pal_skip = skip; }
     if (theme_tints_gem() != pal_tint) {        /* the theme took GEM's pens, or gave them back */
         pal_tint = theme_tints_gem();
-        if (pal_cube) memset(pal_cube, 0, 32768 * sizeof(unsigned short));
+        edlog("colour pictures: system pens %s, colours matched again", pal_tint ? "themed" : "back");
+        if (pal_cube) memset(pal_cube, 0, PAL_CUBE * sizeof(unsigned short));
         if (!pal_tint) {                        /* their real colours again */
             static const short gp[3] = { 0, 8, 9 };
             short rgb[3], j, k;
@@ -543,10 +572,12 @@ static int pal_nearest(int r, int g, int b)
     }
     if (!pal_cube || !pal_cube[idx]) {
         long best = 0x7fffffffL;
-        int i, bi = 0, cr = (r & ~7) | 4, cg = (g & ~7) | 4, cb = (b & ~7) | 4;
+        int i, bi = 0;
+        short cr = (short)((r & ~15) | 8), cg = (short)((g & ~15) | 8), cb = (short)((b & ~15) | 8);
         for (i = 0; i < pal_n; i++) {
-            long dr = cr - pal_rgb[i][0], dg = cg - pal_rgb[i][1], db = cb - pal_rgb[i][2];
-            long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+            /* 16-bit differences: the 68000's own multiply */
+            short dr = (short)(cr - pal_rgb[i][0]), dg = (short)(cg - pal_rgb[i][1]), db = (short)(cb - pal_rgb[i][2]);
+            long dd = (long)(dr * dr) * 3 + (long)(dg * dg) * 4 + (long)(db * db) * 2;
             if (i == skip) continue;
             if (pal_n >= 256 && i >= TH_PEN0 && i < TH_PEN0 + TH_NROLES) continue;   /* the colour theme's */
             if (pal_tint && (i == 0 || i == 8 || i == 9)) continue;   /* GEM's, in the theme's colours */
@@ -558,39 +589,79 @@ static int pal_nearest(int r, int g, int b)
     return pal_cube[idx] - 1;
 }
 
+/* One row of a picture dithered to the pens (Floyd-Steinberg): s its R G
+ * B, e0 this row's carried errors (x16), e1 the next row's (cleared
+ * here), into row y of std (standard format, plane after plane of pl
+ * bytes, wd words a row). The row's place in each plane worked out once:
+ * per pixel only shifts and adds - long multiplies are a library call on
+ * the 68000, and this ran eight of them a pixel. */
+static void pal_row(const unsigned char *s, long w, short *e0, short *e1,
+                    unsigned char *std, long pl, long wd, long y)
+{
+    unsigned short *row[8];
+    long x;
+    int k;
+    for (k = 0; k < pal_planes && k < 8; k++)
+        row[k] = (unsigned short *)(std + k * pl + y * wd * 2);
+    memset(e1, 0, (size_t)(w + 2) * 3 * sizeof(short));
+    for (x = 0; x < w; x++, s += 3) {
+        short c0, c1, c2, *ea = e0 + (x + 1) * 3, *eb = e0 + (x + 2) * 3, *f = e1 + x * 3;
+        short d0, d1, d2;
+        int pen, px;
+        unsigned short bit, *wp;
+        c0 = (short)(s[0] + (ea[0] >> 4)); if (c0 < 0) c0 = 0; else if (c0 > 255) c0 = 255;
+        c1 = (short)(s[1] + (ea[1] >> 4)); if (c1 < 0) c1 = 0; else if (c1 > 255) c1 = 255;
+        c2 = (short)(s[2] + (ea[2] >> 4)); if (c2 < 0) c2 = 0; else if (c2 > 255) c2 = 255;
+        pen = pal_nearest(c0, c1, c2);
+        d0 = (short)(c0 - pal_rgb[pen][0]); d1 = (short)(c1 - pal_rgb[pen][1]); d2 = (short)(c2 - pal_rgb[pen][2]);
+        eb[0] += (short)(d0 * 7); eb[1] += (short)(d1 * 7); eb[2] += (short)(d2 * 7);
+        f[0] += (short)(d0 * 3); f[1] += (short)(d1 * 3); f[2] += (short)(d2 * 3);
+        f[3] += (short)(d0 * 5); f[4] += (short)(d1 * 5); f[5] += (short)(d2 * 5);
+        f[6] += d0; f[7] += d1; f[8] += d2;
+        /* standard format is 16-bit words, leftmost pixel in bit 15, in
+         * the machine's own byte order (high byte first on the ST, low
+         * byte first on the PC) */
+        px = pal_px[pen];
+        bit = (unsigned short)(0x8000 >> (x & 15));
+        for (k = 0; px && k < pal_planes; k++, px >>= 1)
+            if (px & 1) { wp = row[k] + (x >> 4); *wp |= bit; }
+    }
+}
+
+/* the pens' colours as they are now: another program (FView showing a
+ * picture, under MultiTOS or MagiC) may have changed the palette since
+ * EdWord read it */
+static void pal_refresh(long w, long h)
+{
+    short rgb[3], i, k, v, chg = 0;
+    for (i = 0; i < pal_n; i++) {
+        vq_color(vhandle, i, 1, rgb);
+        for (k = 0; k < 3; k++) {
+            v = (short)((rgb[k] < 0 ? 0 : rgb[k] > 1000 ? 1000 : rgb[k]) * 255L / 1000);
+            if (v != pal_rgb[i][k]) { pal_rgb[i][k] = v; chg = 1; }
+        }
+    }
+    if (chg && pal_cube) memset(pal_cube, 0, PAL_CUBE * sizeof(unsigned short));
+    edlog("colour picture %ldx%ld: dithering to %d pens%s ...", w, h, pal_n,
+          chg ? " (the palette had changed)" : "");
+    edlog("  pens 0-3: %d,%d,%d %d,%d,%d %d,%d,%d %d,%d,%d  16: %d,%d,%d  128: %d,%d,%d",
+          pal_rgb[0][0], pal_rgb[0][1], pal_rgb[0][2], pal_rgb[1][0], pal_rgb[1][1], pal_rgb[1][2],
+          pal_rgb[2][0], pal_rgb[2][1], pal_rgb[2][2], pal_rgb[3][0], pal_rgb[3][1], pal_rgb[3][2],
+          pal_n > 16 ? pal_rgb[16][0] : 0, pal_n > 16 ? pal_rgb[16][1] : 0, pal_n > 16 ? pal_rgb[16][2] : 0,
+          pal_n > 128 ? pal_rgb[128][0] : 0, pal_n > 128 ? pal_rgb[128][1] : 0, pal_n > 128 ? pal_rgb[128][2] : 0);
+}
+
 /* w x h pixels of R G B, dithered to the pens, in the screen's format */
 static unsigned char *pal_form(const unsigned char *rgb, long w, long h, MFDB *out)
 {
-    long wd = (w + 15) / 16, pl = wd * 2 * h, x, y;
+    long wd = (w + 15) / 16, pl = wd * 2 * h, y;
     unsigned char *std = (unsigned char *)calloc((size_t)(pl * pal_planes), 1), *dev;
     short *e0 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short)), *e1 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short)), *t;
     MFDB sm;
-    if (!std || !e0 || !e1) { free(std); free(e0); free(e1); return NULL; }
+    if (!std || !e0 || !e1) { free(std); free(e0); free(e1); edlog("colour picture %ldx%ld: no memory", w, h); return NULL; }
+    pal_refresh(w, h);
     for (y = 0; y < h; y++) {
-        const unsigned char *s = rgb + y * w * 3;
-        memset(e1, 0, (size_t)(w + 2) * 3 * sizeof(short));
-        for (x = 0; x < w; x++) {
-            int c[3], k, pen, px;
-            for (k = 0; k < 3; k++) {
-                int v = s[x * 3 + k] + e0[(x + 1) * 3 + k] / 16;
-                c[k] = v < 0 ? 0 : v > 255 ? 255 : v;
-            }
-            pen = pal_nearest(c[0], c[1], c[2]);
-            for (k = 0; k < 3; k++) {
-                int err = c[k] - pal_rgb[pen][k];
-                e0[(x + 2) * 3 + k] += (short)(err * 7);
-                e1[x * 3 + k] += (short)(err * 3);
-                e1[(x + 1) * 3 + k] += (short)(err * 5);
-                e1[(x + 2) * 3 + k] += (short)err;
-            }
-            px = pal_px[pen];
-            /* standard format is 16-bit words, leftmost pixel in bit 15, in
-             * the machine's own byte order (high byte first on the ST, low
-             * byte first on the PC) */
-            for (k = 0; k < pal_planes; k++)
-                if (px & (1 << k))
-                    ((unsigned short *)(std + k * pl + y * wd * 2))[x >> 4] |= (unsigned short)(0x8000 >> (x & 15));
-        }
+        pal_row(rgb + y * w * 3, w, e0, e1, std, pl, wd, y);
         t = e0; e0 = e1; e1 = t;
     }
     free(e0); free(e1);
@@ -601,7 +672,9 @@ static unsigned char *pal_form(const unsigned char *rgb, long w, long h, MFDB *o
     sm.fd_stand = 1; sm.fd_nplanes = (short)pal_planes;
     *out = sm;
     out->fd_addr = dev; out->fd_stand = 0;
+    edlog("  ... dithered; vr_trnfm ...");
     vr_trnfm(vhandle, &sm, out);
+    edlog("  ... in the screen's format");
     free(std);
     return dev;
 }
@@ -617,6 +690,19 @@ static struct {
 } cache[NCACHE];
 static long cache_clock;
 
+/* a fitted colour picture into the cache (the least used one goes) */
+static void cache_store(DOC *d, const unsigned char *src, long w, long h, const MFDB *m)
+{
+    int i, lru = 0;
+    for (i = 1; i < NCACHE; i++)
+        if (!cache[i].d || cache[i].use < cache[lru].use) lru = i;
+    if (!cache[lru].d) for (i = 0; i < NCACHE; i++) if (!cache[i].d) { lru = i; break; }
+    if (cache[lru].d) { free(cache[lru].m.fd_addr); cache[lru].d = NULL; }
+    cache[lru].d = d; cache[lru].src = src; cache[lru].w = w; cache[lru].h = h; cache[lru].colour = 1;
+    cache[lru].use = ++cache_clock;
+    cache[lru].m = *m;
+}
+
 void img_cache_free(DOC *d)
 {
     int i;
@@ -628,6 +714,139 @@ void img_cache_free(DOC *d)
 }
 
 /* colour: the picture in the screen's own pixels */
+/* Fitting a colour picture to a palette (pal_form) takes a while on an
+ * ST, TT or Falcon, and inside a redraw the mouse is hidden and the
+ * screen held all that time - it looked frozen. So a redraw doesn't do
+ * it: the picture is drawn in black and white meanwhile and noted here,
+ * and pictures_work(), called from the event loop outside any redraw,
+ * fits it with the busy bee showing and draws the window again. */
+/* The fitting itself, a slice of rows at a time between events, so EdWord
+ * (and under MultiTOS everything else) carries on meanwhile; the picture
+ * stays black and white until it is done, then its window is drawn again */
+static struct {
+    int    on;
+    DOC   *d;
+    GRECT  r;                                    /* on the screen, last drawn there */
+    const unsigned char *src;
+    long   w, h, y, wd, pl;
+    unsigned char *rgb, *std;
+    short *e0, *e1;
+} job;
+
+static int pic_deferred;                       /* scaled() left it for later */
+#define NPEND 4
+static struct { DOC *d; const IMG *im; long w, h; GRECT r; } pend[NPEND];
+static GRECT pic_at;                            /* where the picture being drawn goes */
+static int npend;
+
+static int pend_add(DOC *d, const IMG *im, long w, long h)
+{
+    int i;
+    if (job.on && job.d == d && job.src == im->bits && job.w == w && job.h == h) {
+        job.r = pic_at;                              /* being fitted: where it is now */
+        return 1;
+    }
+    for (i = 0; i < npend; i++)
+        if (pend[i].d == d && pend[i].im == im && pend[i].w == w && pend[i].h == h) {
+            pend[i].r = pic_at;
+            return 1;
+        }
+    if (npend >= NPEND) return 0;
+    pend[npend].d = d; pend[npend].im = im; pend[npend].w = w; pend[npend].h = h;
+    pend[npend].r = pic_at;
+    npend++;
+    return 1;
+}
+
+static MFDB *scaled(DOC *d, const IMG *im, long w, long h, int colour);
+
+static void cache_store(DOC *d, const unsigned char *src, long w, long h, const MFDB *m);
+
+static void job_free(void)
+{
+    free(job.rgb); free(job.std); free(job.e0); free(job.e1);
+    job.rgb = job.std = NULL; job.e0 = job.e1 = NULL;
+    job.on = 0;
+}
+
+static void job_start(void)
+{
+    DOC *d = pend[0].d;
+    const IMG *im = pend[0].im;
+    long w = pend[0].w, h = pend[0].h;
+    GRECT r = pend[0].r;
+    int i;
+    for (i = 1; i < npend; i++) pend[i - 1] = pend[i];
+    npend--;
+    for (i = 0; i < NCACHE; i++)                 /* fitted already */
+        if (cache[i].d == d && cache[i].src == im->bits && cache[i].w == w && cache[i].h == h && cache[i].colour)
+            return;
+    memset(&job, 0, sizeof job);
+    job.d = d; job.src = im->bits; job.w = w; job.h = h; job.r = r;
+    job.wd = (w + 15) / 16; job.pl = job.wd * 2 * h;
+    job.rgb = img_scale_rgb(im, w, h);
+    job.std = (unsigned char *)calloc((size_t)(job.pl * pal_planes), 1);
+    job.e0 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short));
+    job.e1 = (short *)calloc((size_t)(w + 2) * 3, sizeof(short));
+    if (!job.rgb || !job.std || !job.e0 || !job.e1) {
+        edlog("colour picture %ldx%ld: no memory, black and white", w, h);
+        job_free();
+        return;
+    }
+    pal_refresh(w, h);
+    job.on = 1;
+    edlog("colour picture %ldx%ld: fitting it between events", w, h);
+}
+
+static void job_finish(void)
+{
+    MFDB sm, m;
+    unsigned char *dev = (unsigned char *)malloc((size_t)(job.pl * pal_planes));
+    int i, open = 0;
+    if (dev) {
+        memset(&sm, 0, sizeof sm);
+        sm.fd_addr = job.std; sm.fd_w = (short)(job.wd * 16); sm.fd_h = (short)job.h;
+        sm.fd_wdwidth = (short)job.wd; sm.fd_stand = 1; sm.fd_nplanes = (short)pal_planes;
+        m = sm;
+        m.fd_addr = dev; m.fd_stand = 0;
+        vr_trnfm(vhandle, &sm, &m);
+        cache_store(job.d, job.src, job.w, job.h, &m);
+        edlog("  ... fitted, in the screen's format");
+    }
+    for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i) && docs[i] == job.d) open = 1;
+    {   /* just the picture drawn again: a whole window, its text and
+           all, held the screen (and hid the mouse) far longer */
+        DOC *d = job.d;
+        GRECT r = job.r;
+        job_free();
+        if (open && dev) {
+            if (r.g_w > 0 && r.g_h > 0) redraw_area(d, &r);
+            else refresh_all(d);
+        }
+    }
+}
+
+/* colour pictures waiting or being fitted: the event loop shouldn't wait */
+int pictures_busy(void) { return job.on || npend > 0; }
+
+/* the colour pictures a redraw left in black and white: a slice of the
+ * fitting (about a tenth of a second) each time round the event loop */
+void pictures_work(void)
+{
+    clock_t t0;
+    short *t;
+    if (!job.on && npend) job_start();
+    if (!job.on) return;
+    t0 = clock();
+    while (job.y < job.h) {
+        pal_row(job.rgb + job.y * job.w * 3, job.w, job.e0, job.e1, job.std, job.pl, job.wd, job.y);
+        t = job.e0; job.e0 = job.e1; job.e1 = t;
+        job.y++;
+        if ((long)(clock() - t0) * 10 >= CLOCKS_PER_SEC) break;
+    }
+    if (job.y >= job.h) job_finish();
+}
+
 static MFDB *scaled(DOC *d, const IMG *im, long w, long h, int colour)
 {
     int i, lru = 0;
@@ -640,6 +859,9 @@ static MFDB *scaled(DOC *d, const IMG *im, long w, long h, int colour)
             return &cache[i].m;
         }
     if (w < 1 || h < 1 || w > 4000 || h > 4000) return NULL;
+    if (colour && pal_ok) {                       /* later, not in a redraw */
+        if (pend_add(d, im, w, h)) { pic_deferred = 1; return NULL; }
+    }
     for (i = 1; i < NCACHE; i++)
         if (!cache[i].d || cache[i].use < cache[lru].use) lru = i;
     if (!cache[lru].d) for (i = 0; i < NCACHE; i++) if (!cache[i].d) { lru = i; break; }
@@ -784,8 +1006,12 @@ void draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
         MFDB *m, scr;
         for (f = 0; f < 8 && colour; f++)
             if (nocol[f].src == d->imgs[o->img].bits && nocol[f].w == w && nocol[f].h == h) colour = 0;
+        pic_deferred = 0;
+        pic_at.g_x = (short)x; pic_at.g_y = (short)y; pic_at.g_w = (short)w; pic_at.g_h = (short)h;
         m = scaled(d, &d->imgs[o->img], w, h, colour);
-        if (!m && colour) {
+        if (!m && colour && pic_deferred)       /* being fitted: black and white meanwhile */
+            m = scaled(d, &d->imgs[o->img], w, h, colour = 0);
+        else if (!m && colour) {
             nocol[nnc].src = d->imgs[o->img].bits; nocol[nnc].w = w; nocol[nnc].h = h;
             nnc = (nnc + 1) & 7;
             m = scaled(d, &d->imgs[o->img], w, h, colour = 0);
@@ -796,8 +1022,11 @@ void draw_vdi_obj(DOC *d, const OBJ *o, long ox, long oy, long n, long den)
             pxy[0] = 0; pxy[1] = 0; pxy[2] = (short)(w - 1); pxy[3] = (short)(h - 1);
             pxy[4] = (short)x; pxy[5] = (short)y; pxy[6] = (short)(x + w - 1); pxy[7] = (short)(y + h - 1);
             col[0] = 1; col[1] = 0;
+            static int nlog;
+            if (nlog < 30) { nlog++; edlog("picture: copying %ldx%ld to %d,%d (%s) ...", w, h, (int)x, (int)y, colour ? "colour" : "mono"); }
             if (colour) vro_cpyfm(vhandle, S_ONLY, pxy, m, &scr);
             else vrt_cpyfm(vhandle, MD_TRANS, pxy, m, &scr, col);
+            if (nlog <= 30) edlog("  ... copied");
         } else {
             /* no memory: a crossed box */
             short p[4];

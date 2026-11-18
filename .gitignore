@@ -20,3 +20,4 @@ pcgem/rsctest
 # files set aside for deleting, and release notes (they go on GitHub)
 _to_delete/
 RELEASE-*.md
+flags.stamp

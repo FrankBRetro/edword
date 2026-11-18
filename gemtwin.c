@@ -1239,9 +1239,10 @@ const TOOL prefs_tool = { pw_owns, pw_msg, pw_click, pw_key, pw_close_tool, pw_d
 
 #ifndef EDLITE
 /* ---- the colour theme ---------------------------------------------------
- * On a screen without a palette it can be for the top document's window
- * alone ("This document") or for every window that has none of its own
- * ("All documents"); on a palette screen it is for all. While the window
+ * It can be for the top document's window alone ("This document") or for
+ * every window that has none of its own ("All documents", the choice the
+ * window opens with). On a palette screen a document's own theme shows
+ * while it is on top. While the window
  * is open, theme_id and theme_rgb hold the theme being edited (the
  * picture shows them); the one for all is kept aside and put back unless
  * OK or Apply made it the new one. */
@@ -1253,7 +1254,7 @@ static const short th_fo[TH_NROLES][3] = {
 static char th_f[TH_NROLES][3][4], th_pick[24];
 static USERBLK th_pv;
 static unsigned char th_grgb[TH_NROLES][3], th_wrgb[TH_NROLES][3];
-static int th_gid, th_per, th_slot, th_wid, th_shown, th_kept;
+static int th_gid, th_per, th_slot, th_wid, th_shown, th_kept, th_gsys;
 
 /* the fields and the popup's text from theme_id and theme_rgb */
 static void ct_fields(void)
@@ -1263,6 +1264,9 @@ static void ct_fields(void)
         for (k = 0; k < 3; k++) sprintf(th_f[i][k], "%d", theme_rgb[i][k]);
     sprintf(th_pick, "%.17s", theme_id == THEME_CUSTOM ? L(S_THEME_CUSTOM) : theme_name(theme_id));
     dlg_str(thw.gp, DTH_PICK, th_pick);
+    /* the Atari theme is the system's own colours: nothing to theme */
+    if (theme_id == 0 || !theme_sys_possible()) thw.gp->o[DTH_SYSPENS].ob_state |= OS_DISABLED;
+    else thw.gp->o[DTH_SYSPENS].ob_state &= ~OS_DISABLED;
 }
 
 static int ct_build(void)
@@ -1272,6 +1276,7 @@ static int ct_build(void)
     int i, k;
     if (!theme_possible()) return 0;
     th_gid = theme_id;
+    th_gsys = theme_sys;
     th_per = theme_per_window() && d;
     th_slot = d ? d->slot : -1;
     th_wid = th_per ? theme_window(th_slot, th_wrgb) : -1;
@@ -1281,15 +1286,16 @@ static int ct_build(void)
     g = thw.gp;
     theme_userdef(&g->o[DTH_PREVIEW], &th_pv, 2);   /* the picture of it */
     if (th_wid >= 0) { theme_id = th_wid; memcpy(theme_rgb, th_wrgb, sizeof th_wrgb); }   /* this window's own */
-    dlg_set(g, DTH_THISDOC, th_wid >= 0);
-    dlg_set(g, DTH_ALLDOCS, th_wid < 0);
-    if (!th_per) {                               /* a palette: one theme for all */
+    dlg_set(g, DTH_THISDOC, 0);                  /* All documents unless chosen */
+    dlg_set(g, DTH_ALLDOCS, 1);
+    if (!th_per) {                               /* no document: the theme for all */
         /* shown as chosen (not greyed out, which looked as if neither
            applied), and it can't be changed */
         g->o[DTH_THISDOC].ob_state |= OS_DISABLED;
         g->o[DTH_THISDOC].ob_flags &= ~OF_SELECTABLE;
         g->o[DTH_ALLDOCS].ob_flags &= ~(OF_SELECTABLE | OF_TOUCHEXIT | OF_EXIT);
     }
+    dlg_set(g, DTH_SYSPENS, theme_sys && theme_sys_possible());
     theme_preview_pens();
     for (i = 0; i < TH_NROLES; i++)
         for (k = 0; k < 3; k++) dlg_edtext(g, th_fo[i][k], th_f[i][k]);
@@ -1302,14 +1308,25 @@ static int ct_build(void)
 
 /* closing without OK: the theme as it was (on screen too, if Apply or
  * the popup showed another) */
+/* everything drawn again in the new colours: on a palette screen the pens
+ * change on the screen by themselves, but in high and true colour what is
+ * there keeps its colours - the windows, the menu bar and the desktop
+ * (the system pens) are redrawn */
+static void theme_redraw_all(void)
+{
+    form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+    menu_bar_redraw();
+}
+
 static void ct_closed(void)
 {
     if (th_kept) return;
     theme_id = th_gid;
+    theme_sys = th_gsys;
     memcpy(theme_rgb, th_grgb, sizeof th_grgb);
     if (th_per) theme_set_window(th_slot, th_wid, th_wid >= 0 ? th_wrgb : NULL);
     theme_apply();
-    if (th_shown) form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+    if (th_shown) theme_redraw_all();
 }
 
 static void ct_act(short it, int clicks)
@@ -1326,6 +1343,7 @@ static void ct_act(short it, int clicks)
         return;
     }
     if (o != DTH_APPLY && o != DTH_OK) { tw_close(&thw); return; }
+    if (!(g->o[DTH_SYSPENS].ob_state & OS_DISABLED)) theme_sys = dlg_on(g, DTH_SYSPENS);
     /* the colours as typed: a theme of its own if they're not one */
     for (i = 0; i < TH_NROLES; i++)
         for (k = 0; k < 3; k++) {
@@ -1351,13 +1369,15 @@ static void ct_act(short it, int clicks)
     theme_apply();
     if (o == DTH_OK) {
         th_kept = 1;
+        th_gsys = theme_sys;
         tw_close(&thw);
         theme_done();
+        menu_bar_redraw();
         return;
     }
     /* Apply: seen on the screen, the window stays for more */
     th_shown = 1;
-    form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+    theme_redraw_all();
     theme_id = eid;                              /* still editing it */
     memcpy(theme_rgb, erg, sizeof erg);
     theme_preview_pens();

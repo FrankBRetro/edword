@@ -756,10 +756,11 @@
 #define DTH_R5 45
 #define DTH_G5 47
 #define DTH_B5 49
-#define DTH_APPLY 52
-#define DTH_CANCEL 53
-#define DTH_OK 54
-#define DTH_COUNT 55
+#define DTH_SYSPENS 52
+#define DTH_APPLY 54
+#define DTH_CANCEL 55
+#define DTH_OK 56
+#define DTH_COUNT 57
 
 /* TOOLBAR */
 #define TBO_ROOT 0

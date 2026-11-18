@@ -1219,17 +1219,32 @@ void redraw_area(DOC *d, GRECT *area)
     scr.g_x = 0; scr.g_y = 0; scr.g_w = scr_w; scr.g_h = scr_h;
     a = *area;
     if (!rc_inter(&scr, &a)) return;
+#ifdef EDLOG
+    clock_t t0 = clock();
+    int nr = 0;
+#endif
     wind_update(BEG_UPDATE);
     graf_mouse(M_OFF, NULL);
     theme_for(d->slot);                          /* this window's colour theme */
     wind_get(d->wh, WF_FIRSTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     while (r.g_w && r.g_h) {
-        if (rc_inter(&a, &r)) draw_window(d, &r);
+        if (rc_inter(&a, &r)) {
+            draw_window(d, &r);
+#ifdef EDLOG
+            nr++;
+#endif
+        }
         wind_get(d->wh, WF_NEXTXYWH, &r.g_x, &r.g_y, &r.g_w, &r.g_h);
     }
     theme_global();
     graf_mouse(M_ON, NULL);
     wind_update(END_UPDATE);
+#ifdef EDLOG
+    {   /* slow redraws, to find what holds the screen */
+        long ms = (long)(clock() - t0) * 1000L / CLOCKS_PER_SEC;
+        if (ms >= 250) edlog("redraw: window %d, %dx%d area in %d pieces: %ld ms", d->wh, a.g_w, a.g_h, nr, ms);
+    }
+#endif
 }
 
 void refresh_all(DOC *d)

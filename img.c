@@ -184,6 +184,25 @@ static const unsigned char vdi16[16][3] = {
     { 0, 0, 128 }, { 0, 128, 128 }, { 128, 128, 0 }, { 128, 0, 128 }
 };
 
+/* The pixel value each VDI pen draws with on a 2, 4 or 8 plane screen
+ * (pen 1, black, is the highest value; the ST's order): (X)IMG palettes
+ * and the VDI colours are listed by pen, the picture's pixels are values */
+static unsigned vdi2pix(unsigned pen, unsigned planes)
+{
+    static const unsigned char v2p4[16] = { 0, 15, 1, 2, 4, 6, 3, 5, 7, 8, 9, 10, 12, 14, 11, 13 };
+    static const unsigned char v2p2[4] = { 0, 3, 1, 2 };
+    switch (planes) {
+    case 1: return pen ? 1 : 0;
+    case 2: return v2p2[pen & 3];
+    case 3: case 4: return pen < 16 ? (unsigned)v2p4[pen] & ((1u << planes) - 1) : pen;
+    case 8:
+        if (pen < 16) return pen == 1 ? 255 : v2p4[pen];
+        if (pen == 255) return 15;
+        return pen;
+    }
+    return pen;
+}
+
 static int gem_img(const unsigned char *b, long n, IMG *im)
 {
     unsigned hlen, nplanes, patlen, w, h, i;
@@ -203,11 +222,20 @@ static int gem_img(const unsigned char *b, long n, IMG *im)
     chunky = nplanes == 16 || nplanes == 24 || nplanes == 32;
     if (!chunky && (nplanes < 1 || nplanes > 8)) return 0;
 
-    /* the palette: XIMG's, else the VDI colours or a grey ramp */
+    /* the palette: XIMG's, else the VDI colours or a grey ramp; the VDI
+       colours (and an XIMG palette) are listed by pen, pal[] is by pixel
+       value - pen 1 (black) is the highest value, so pictures came out in
+       the wrong colours (FView's prefs call this "VDI order", its default) */
     for (i = 0; i < 256; i++) {
         unsigned nc = nplanes <= 8 ? 1u << nplanes : 0, g;
         if (nplanes == 1) g = i ? 0 : 255;
-        else if (nplanes <= 4 && i < 16) { pal[i][0] = vdi16[i][0]; pal[i][1] = vdi16[i][1]; pal[i][2] = vdi16[i][2]; continue; }
+        else if (nplanes <= 4 && i < 16) {
+            if (i < nc) {
+                unsigned px = vdi2pix(i, nplanes);
+                pal[px][0] = vdi16[i][0]; pal[px][1] = vdi16[i][1]; pal[px][2] = vdi16[i][2];
+            }
+            continue;
+        }
         else g = nc > 1 ? 255 - (i * 255) / (nc - 1) : 255;
         pal[i][0] = pal[i][1] = pal[i][2] = (unsigned char)g;
     }
@@ -228,10 +256,11 @@ static int gem_img(const unsigned char *b, long n, IMG *im)
         unsigned nc = 1u << nplanes;
         for (i = 0; i < nc && 22 + i * 6 + 6 <= hlen * 2u; i++) {
             const unsigned char *c = b + 22 + i * 6;
+            unsigned px = vdi2pix(i, nplanes);
             int ch;
             for (ch = 0; ch < 3; ch++) {
                 long v = (long)rd16(c + 2 * ch) * 255 / 1000;
-                pal[i][ch] = (unsigned char)(v > 255 ? 255 : v);
+                pal[px][ch] = (unsigned char)(v > 255 ? 255 : v);
             }
         }
     }

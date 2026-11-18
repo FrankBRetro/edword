@@ -563,6 +563,7 @@ def dlg_theme(L):
             g.edit(bytes([c]), 3, None, digits(3), b'', '%s%d' % (chr(c), i))
     g.nl(); g.label(L('S_APPLY_TO'))
     g.radio(9, L('S_THEME_THISDOC'), 'THISDOC'); g.radio(9, L('S_THEME_ALLDOCS'), 'ALLDOCS')
+    g.nl(); g.label(b''); g.check(L('S_THEME_SYSPENS'), 'SYSPENS')
     g.nl(); g.text(L('S_THEME_HINT'))
     g.button(L('S_APPLY'), 'APPLY')
     g.button(L('S_CANCEL'), 'CANCEL')

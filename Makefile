@@ -147,7 +147,13 @@ FORCE:
 $(OBJDIR)/lang.o $(OBJDIR)/cpucheck.o: CPUFLAGS = $(SAFEFLAGS)
 $(OBJDIR)/cpucheck.o: lang.h
 
-$(OBJDIR)/%.o: %.c wp.h
+# everything is rebuilt when the options change (EDLOG=1 or not, LITE...):
+# a log build's objects call edlog, which only a log build's gem.o has
+$(OBJDIR)/flags.stamp: FORCE
+	@mkdir -p $(OBJDIR)
+	@echo '$(CFLAGS) $(CPUFLAGS)' | cmp -s - $@ || echo '$(CFLAGS) $(CPUFLAGS)' > $@
+
+$(OBJDIR)/%.o: %.c wp.h $(OBJDIR)/flags.stamp
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -172,7 +178,7 @@ mkdic: tools/mkdic.c charset.c wp.h
 #   python3 tools/mkthes.py english-wordnet/src/yaml words.txt dict/EDWORD.THS
 
 clean:
-	rm -f *.o EDWORD.PRG MKDIC.TTP hosttest mkdic
+	rm -f *.o flags.stamp EDWORD.PRG MKDIC.TTP hosttest mkdic
 	rm -rf build EDW030.PRG EDW030F.PRG EDW040.PRG EDWCF.PRG EDWTEST.PRG EDWLITE.PRG DIST EDWORD-*.zip
 
 dist: EDWORD.PRG $(RSCS)

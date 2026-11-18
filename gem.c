@@ -522,6 +522,9 @@ void update_winmenu(void)
     }
 }
 
+/* the menu bar drawn again (new system colours in high or true colour) */
+void menu_bar_redraw(void) { menu_bar(mtree, 1); }
+
 void rebuild_menu(void)
 {
     menu_bar(mtree, 0);
@@ -617,6 +620,24 @@ DOC *active_doc(void)
     if (last_doc && last_doc->used) return last_doc;
     for (i = 0; i < MAX_DOCS; i++) if (DOC_USED(i)) return docs[i];
     return NULL;
+}
+
+/* is EdWord the program in front? Where several run at once (AES 4 with
+ * MultiTOS, MagiC): the top window is one of ours. A single-tasking AES
+ * (TOS 1 to 3, PC GEM): always. */
+int we_are_on_top(void)
+{
+#ifdef PCGEM
+    return 1;
+#else
+    short h = 0, o = -1, d1, d2;
+    if (aes_global[1] == 1) return 1;            /* one application at a time */
+    wind_get(0, WF_TOP, &h, &d1, &d2, &d2);
+    if (h <= 0) return 1;                        /* no window: nothing to go by */
+    if (doc_of(h) || tool_owns(h)) return 1;
+    if (!wind_get(h, WF_OWNER, &o, &d1, &d2, &d2)) return 1;
+    return o == ap_id;
+#endif
 }
 
 DOC *top_doc(void)
@@ -2307,6 +2328,7 @@ int main(int argc, char *argv[])
         if (demo_on) need = timer = 1;
         if (bl >= 0) { timer = 1; if (bl < tmo) tmo = bl; }
         if (bgprint_active()) { timer = 1; tmo = 10; }       /* printing in the background */
+        if (pictures_busy()) { timer = 1; tmo = 0; }         /* a colour picture being fitted */
         /* (0x102, 3, 0: either button pressed, with double clicks) */
         ev = evnt_multi(MU_MESAG | MU_KEYBD | MU_BUTTON | (timer ? MU_TIMER : 0), 0x102, 3, 0,
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -2314,6 +2336,13 @@ int main(int argc, char *argv[])
         if (ev & (MU_MESAG | MU_KEYBD | MU_BUTTON)) { blink_wake(); last_input = clock(); }
         if (ev & MU_MESAG) handle_msg(msg);
         if (ev & MU_KEYBD) handle_key(ks, key);
+        pictures_work();                        /* colour pictures fitted outside a redraw */
+        {   /* a palette screen: the top document's colour theme in the pens */
+            DOC *t = top_doc();
+            theme_active(we_are_on_top());
+            if (t && theme_top(t->slot))
+                form_dial(FMD_FINISH, 0, 0, 0, 0, desk.g_x, desk.g_y, desk.g_w, desk.g_h);
+        }
         if (ev & MU_BUTTON) {
             edlog("button event: buttons %d, clicks %d at %d,%d", mb, br, mx, my);
             if (mb & 2) handle_rclick(mx, my);
